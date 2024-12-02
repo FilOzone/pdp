@@ -295,4 +295,128 @@ contract SimplePDPServiceFaultsTest is Test {
         // Works right on the deadline
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId)+pdpService.challengeWindow(), leafCount);
     }
+
+    function testNextChallengeWindowStart() public {
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0));
+    }
+}
+
+contract challengeWindowStartTest is Test {
+    SimplePDPService public service;
+    uint256 constant PROOF_SET_ID = 0;
+
+    function setUp() public {
+        address pdpVerifierAddress = address(this);
+        SimplePDPService pdpServiceImpl = new SimplePDPService();
+        bytes memory initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifierAddress));
+        MyERC1967Proxy pdpServiceProxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
+        service = SimplePDPService(address(pdpServiceProxy));
+
+        service.rootsAdded(PROOF_SET_ID, 0, new PDPVerifier.RootData[](0));
+
+    }
+
+    function testRevertWhenProvingPeriodNotOpen() public {
+        vm.expectRevert("Proving not yet started");
+        service.nextChallengeWindowStart(1); // unused proof set ID
+
+        vm.expectRevert("Proving not yet started");
+        service.thisChallengeWindowStart(1); // unused proof set ID
+    }
+
+    function testCurrentPeriodNotExpired() public {
+        // Get initial deadline
+        uint256 deadline = service.provingDeadlines(PROOF_SET_ID);
+        
+        // Set block to middle of period
+        vm.roll(deadline - 1000);
+        
+        uint256 expectedStart = deadline - service.challengeWindow();
+        assertEq(
+            service.thisChallengeWindowStart(PROOF_SET_ID),
+            expectedStart,
+            "Challenge window should start before current deadline"
+        );
+
+        uint256 expectedNextStart = expectedStart + service.getMaxProvingPeriod();
+        assertEq(
+            service.nextChallengeWindowStart(PROOF_SET_ID),
+            expectedNextStart,
+            "Next challenge window should start after current deadline"
+        );
+    }
+
+    function testOnePeriodSkipped() public {
+        uint256 deadline = service.provingDeadlines(PROOF_SET_ID);
+        
+        // Set block to just after current period
+        vm.roll(deadline + 1);
+        
+        uint256 expectedStart = deadline + 
+            service.getMaxProvingPeriod() - 
+            service.challengeWindow();
+            
+        assertEq(
+            service.thisChallengeWindowStart(PROOF_SET_ID),
+            expectedStart,
+            "Challenge window should start in next period"
+        );
+
+        assertEq(
+            service.nextChallengeWindowStart(PROOF_SET_ID),
+            expectedStart,
+            "Next challenge window should start in the current period"
+        );
+    }
+
+    function testMultiplePeriodsSkipped() public {
+        uint256 deadline = service.provingDeadlines(PROOF_SET_ID);
+        uint256 periodsToSkip = 40;
+        
+        // Skip several periods
+        vm.roll(deadline + (service.getMaxProvingPeriod() * periodsToSkip) + 1);
+        
+        uint256 expectedStart = deadline + 
+            (service.getMaxProvingPeriod() * (periodsToSkip + 1)) - 
+            service.challengeWindow();
+            
+        assertEq(
+            service.thisChallengeWindowStart(PROOF_SET_ID),
+            expectedStart,
+            "Challenge window should start after skipped periods"
+        );
+
+        assertEq(
+            service.nextChallengeWindowStart(PROOF_SET_ID),
+            expectedStart,
+            "Next challenge window should start in the current period"
+        );
+    }
+
+    function testExactlyAtPeriodBoundary() public {
+        uint256 deadline = service.provingDeadlines(PROOF_SET_ID);
+        
+        // Set block exactly at deadline
+        vm.roll(deadline);
+        
+        uint256 expectedStart = deadline - service.challengeWindow();
+        assertEq(
+            service.thisChallengeWindowStart(PROOF_SET_ID),
+            expectedStart,
+            "Challenge window should be in current period at boundary"
+        );
+
+        assertEq(
+            service.nextChallengeWindowStart(PROOF_SET_ID),
+            expectedStart + service.getMaxProvingPeriod(),
+            "Next challenge window should start in the next period"
+        );
+    }
+
+    function testWithinChallengeWindow() public {
+        uint256 deadline = service.provingDeadlines(PROOF_SET_ID);
+        vm.roll(deadline - service.challengeWindow() + 1);
+        assertEq(service.thisChallengeWindowStart(PROOF_SET_ID), deadline - service.challengeWindow(), "Challenge window should start before current deadline");
+        assertEq(service.nextChallengeWindowStart(PROOF_SET_ID), deadline - service.challengeWindow() + service.getMaxProvingPeriod(), "Next challenge window should start in the next period");
+    }
 }

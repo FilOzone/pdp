@@ -105,26 +105,40 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
         return 2880;
     }
 
-    // Number of epochs at the end of a provoing period during which a 
+    // Number of epochs at the end of a proving period during which a 
     // proof of possession can be submitted
     function challengeWindow() public pure returns (uint256) {
         return 60;
     }
 
-    // The start of the next challenge window
-    // Useful for querying before nextProvingPeriod to determine challengeEpoch
-    function nextChallengeWindowStart(uint256 setId) public view returns (uint256) {
+    // The start of the challenge window for the current proving period
+    function thisChallengeWindowStart(uint256 setId) public view returns (uint256) {
         if (provingDeadlines[setId] == 0) {
-            revert("Proving period not yet open");
+            revert("Proving not yet started");
         }
+
         uint256 periodsSkipped;
         // Proving period is open 0 skipped periods
         if (block.number <= provingDeadlines[setId]) {
             periodsSkipped = 0;
         } else { // Proving period has closed possibly some skipped periods
-            periodsSkipped = (block.number - (provingDeadlines[setId] + 1)) / getMaxProvingPeriod();
+            periodsSkipped = 1 + (block.number - (provingDeadlines[setId] + 1)) / getMaxProvingPeriod();
         }
-        return provingDeadlines[setId] + getMaxProvingPeriod()*(periodsSkipped+1) - challengeWindow();
+        return provingDeadlines[setId] + periodsSkipped*getMaxProvingPeriod() - challengeWindow();
+    }
+
+    // The start of the NEXT OPEN proving period's challenge window
+    // Useful for querying before nextProvingPeriod to determine challengeEpoch to submit for nextProvingPeriod
+    function nextChallengeWindowStart(uint256 setId) public view returns (uint256) {
+        if (provingDeadlines[setId] == 0) {
+            revert("Proving not yet started");
+        }
+        // If the current period is open this is the next period's challenge window
+        if (block.number <= provingDeadlines[setId]) {
+            return thisChallengeWindowStart(setId) + getMaxProvingPeriod();
+        }
+        // If the current period is not yet open this is the current period's challenge window
+        return thisChallengeWindowStart(setId);
     }
 
     // Challenges / merkle inclusion proofs provided per proof set
