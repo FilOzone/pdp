@@ -354,41 +354,74 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bytes32[] proof;
     }
 
-    // Verifies and records that the provider proved possession of the
+    //Verifies and records that the provider proved possession of the
     // proof set Merkle roots at some epoch. The challenge seed is determined
     // by the epoch of the previous proof of possession.
     // Note that this method is not restricted to the proof set owner.
-    function provePossession(uint256 setId, Proof[] calldata proofs) public payable{
+    function provePossession(
+        uint256 setId,
+        Proof[] calldata proofs
+    ) public payable {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
 
+        uint256 initialGas = gasleft();
+        uint256 callDataSize = 0;
+
+        uint256 seed = drawChallengeSeed(setId);
+        uint256 leafCount = challengeRange[setId];
+        uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
+        for (uint64 i = 0; i < proofs.length; i++) {
+            // Calculate call data size
+            // 32 for the leaf + each element in the proof is 32 bytes
+            callDataSize += 32 + (proofs[i].proof.length * 32);
+
+            // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
+            bytes memory payload = abi.encodePacked(seed, setId, i);
+            uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
+
+            // Find the root that has this leaf, and the offset of the leaf within that root.
+            RootIdAndOffset memory root = findOneRootId(
+                setId,
+                challengeIdx,
+                sumTreeTop
+            );
+            bytes32 rootHash = Cids.digestFromCid(
+                getRootCid(setId, root.rootId)
+            );
+            bool ok = MerkleVerify.verify(
+                proofs[i].proof,
+                rootHash,
+                proofs[i].leaf,
+                root.offset
+            );
+            require(ok, "proof did not verify");
+        }
+
+        uint256 gasUsed = (initialGas - gasleft()) + (callDataSize * 1300);
+        uint256 estimatedGasFee = gasUsed * block.basefee;
+
         // Calculate and burn the proof fee
-        uint256 proofFee = PDPFees.proofFee(proofs.length);
+        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(
+            estimatedGasFee,
+            proofs.length,
+            challengeRange[setId]
+        );
         burnFee(proofFee);
         if (msg.value > proofFee) {
             // Return the overpayment
             payable(msg.sender).transfer(msg.value - proofFee);
         }
 
-        uint256 seed = drawChallengeSeed(setId);
-        uint256 leafCount = challengeRange[setId];
-        uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
-        for (uint64 i = 0; i < proofs.length; i++) {
-            // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
-            bytes memory payload = abi.encodePacked(seed, setId, i);
-            uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
-
-            // Find the root that has this leaf, and the offset of the leaf within that root.
-            RootIdAndOffset memory root = findOneRootId(setId, challengeIdx, sumTreeTop);
-            bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, root.rootId));
-            bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, root.offset);
-            require(ok, "proof did not verify");
-        }
-
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).posessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
+            PDPListener(listenerAddr).posessionProven(
+                setId,
+                proofSetLeafCount[setId],
+                seed,
+                proofs.length
+            );
         }
     }
 

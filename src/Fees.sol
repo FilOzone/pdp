@@ -1,58 +1,66 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
+import {Log2} from "./Log2.sol";
+
 library PDPFees {
+    uint256 constant ATTO_FIL = 1;
+    uint256 constant ONE_FIL = 1e18 * ATTO_FIL;
 
-    // Estimate of USD price in FIL
-    uint256 constant FIL_USD_NUM = 10;
-    uint256 constant FIL_USD_DENOM = 35;
-           
-    uint256 constant ONE_PERCENT_DENOM = 100;
+    // 0.1 FIL
+    uint256 constant SYBIL_FEE = ONE_FIL / 10;
 
-    uint256 constant LEAVES_PER_TIB = 2^35;
+    // assume 1FIL = $5 for now -> we can change this to use an oracle in PDP V1
+    uint256 constant FIL_USD_PRICE = 5;
 
-    uint256 constant EPOCHS_PER_MONTH = 86_400;
-    // Revenue in usd per TiB per month
-    uint256 constant MONTHLY_TIB_REVENUE_USD_NUM = 35;
-    uint256 constant MONTHLY_TIB_REVENUE_USD_DENOM = 10;
+    // 2 USD/Tib/month is the current reward earned by Storage Providers
+    uint256 constant MONTHLY_TIB_STORAGE_REWARD_USD = 2;
 
-    uint256 constant PROOF_GAS_FLOOR = 2_000_000;
-    uint256 constant ONE_NANO_FIL = 10^9;
-    uint256 constant ONE_FIL = 10^18;
+    uint256 constant DAILY_TIB_STORAGE_REWARD_ATTO_FIL =
+        (MONTHLY_TIB_STORAGE_REWARD_USD * 1e18 * ATTO_FIL) /
+            (30 * FIL_USD_PRICE);
 
-    uint256 constant SYBIL_FEE = 10^17;
+    // PROOF_PRICE is currently set to 1% of the daily reward
+    uint256 constant PROOF_PRICE_ATTO_FIL =
+        (1 * DAILY_TIB_STORAGE_REWARD_ATTO_FIL) / 100;
 
-    // Currently unused
-    //
-    // Returns the service fee for a given proofset duration, and size
-    // Size measured in leaves (32 byte chunks), duration measured in epochs
-    function serviceFee(uint256 duration, uint256 size) internal pure returns (uint256) {
-        // 1 FIL / TiB / month ~ revenue 
-        // 86,400 epochs / month
-        // 2^35 leafs / TiB
-        // fee is 1% of revenue
+    // 5% of daily reward
+    uint256 constant FIVE_PERCENT_DAILY_REWARD_ATTO_FIL =
+        (DAILY_TIB_STORAGE_REWARD_ATTO_FIL * 5) / 100;
 
-        // [(Monthly revenue in USD) * (FIL / USD) * size * duration] / 
-        // [Leaves per TiB * Epochs per month * 1%]
-        uint256 numerator = ONE_FIL * MONTHLY_TIB_REVENUE_USD_NUM * FIL_USD_NUM * size * duration;
-        uint256 denominator = MONTHLY_TIB_REVENUE_USD_DENOM * FIL_USD_DENOM * LEAVES_PER_TIB * EPOCHS_PER_MONTH * ONE_PERCENT_DENOM;
-        return numerator / denominator;
-    }
+    // 4% of daily reward
+    uint256 constant FOUR_PERCENT_DAILY_REWARD_ATTO_FIL =
+        (DAILY_TIB_STORAGE_REWARD_ATTO_FIL * 4) / 100;
 
-    // Returns the proof fee for a given challenge count
-    function proofFee(uint256 challengeCount) internal view returns (uint256) {
-        uint256 gasPrice;
-        if (block.basefee > ONE_NANO_FIL) {
-            gasPrice = block.basefee;
+    /// @return proof fee in AttoFIL
+    function proofFeeWithGasFeeBound(
+        uint256 estimatedGasFee,
+        uint256 challengeCount,
+        uint256 proofSetLeafCount
+    ) internal pure returns (uint256) {
+        require(
+            estimatedGasFee > 0,
+            "Estimated gas fee must be greater than 0"
+        );
+        require(challengeCount > 0, "Challenge count must be greater than 0");
+        require(
+            proofSetLeafCount > 0,
+            "Proof set leaf count must be greater than 0"
+        );
+
+        if (estimatedGasFee >= FIVE_PERCENT_DAILY_REWARD_ATTO_FIL) {
+            return 0; // No proof fee if gas fee is above 5% of the estimated reward
+        } else if (estimatedGasFee >= FOUR_PERCENT_DAILY_REWARD_ATTO_FIL) {
+            return FIVE_PERCENT_DAILY_REWARD_ATTO_FIL - estimatedGasFee; // Partial discount on proof fee
         } else {
-            gasPrice = ONE_NANO_FIL;
+            uint256 calculatedProofFee = (PROOF_PRICE_ATTO_FIL *
+                challengeCount *
+                Log2.log2(proofSetLeafCount));
+            return calculatedProofFee;
         }
-        uint256 numerator = PROOF_GAS_FLOOR * challengeCount * gasPrice;
-        uint256 denominator = ONE_PERCENT_DENOM;
-        return numerator / denominator;
     }
 
-    // sybil fee adds cost to adding state to the pdp verifier contract to prevent 
+    // sybil fee adds cost to adding state to the pdp verifier contract to prevent
     // wasteful state growth. 0.1 FIL
     function sybilFee() internal pure returns (uint256) {
         return SYBIL_FEE;
