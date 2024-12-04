@@ -18,7 +18,7 @@ build:
 # Test target
 .PHONY: test
 test:
-	forge test -vv
+	forge test -vv --via-ir
 
 # Deployment targets
 .PHONY: deploy-calibnet
