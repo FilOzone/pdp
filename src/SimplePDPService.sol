@@ -169,7 +169,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
 
     // possession proven checks for correct challenge count and reverts if too low
     // it also checks that proofs are not late and emits a fault record if so
-    function posessionProven(uint256 proofSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external onlyPDPVerifier {
+    function possessionProven(uint256 proofSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external onlyPDPVerifier {
         receiveProofSetEvent(proofSetId, OperationType.PROVE_POSSESSION, abi.encode(challengedLeafCount, seed, challengeCount));
         if (provenThisPeriod[proofSetId]) {
             revert("Only one proof of possession allowed per proving period. Open a new proving period.");
