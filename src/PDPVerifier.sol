@@ -373,7 +373,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 leafCount = challengeRange[setId];
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
         for (uint64 i = 0; i < proofs.length; i++) {
-            // Calculate call data size
             // 32 for the leaf + each element in the proof is 32 bytes
             callDataSize += 32 + (proofs[i].proof.length * 32);
 
