@@ -1348,10 +1348,8 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofsPP1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
 
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)));
-        console.log("hello");
 
         pdpVerifier.provePossession{value: 1e18}(setId, proofsPP1);
-        console.log("hello");
 
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
         // CHECK: leaf counts
