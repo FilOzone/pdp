@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
-
-import {Log2} from "./Log2.sol";
+import {BitOps} from "./BitOps.sol";
 
 library PDPFees {
     uint256 constant ATTO_FIL = 1;
@@ -55,7 +54,7 @@ library PDPFees {
         } else {
             uint256 calculatedProofFee = (PROOF_PRICE_ATTO_FIL *
                 challengeCount *
-                Log2.log2(proofSetLeafCount));
+                BitOps.log2(proofSetLeafCount));
             return calculatedProofFee;
         }
     }

@@ -19,6 +19,11 @@ library BitOps {
         return n - x;
     }
 
+    function log2(uint256 x) internal pure returns (uint256) {
+        require(x > 0, "log2(0) is undefined");
+        return 255 - clz(x);
+    }
+
     int256 constant MASK128 = 0x00000000000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
     int256 constant MASK64 = 0x0000000000000000FFFFFFFFFFFFFFFF0000000000000000FFFFFFFFFFFFFFFF;
     int256 constant MASK32 = 0x00000000FFFFFFFF00000000FFFFFFFF00000000FFFFFFFF00000000FFFFFFFF;
@@ -28,10 +33,10 @@ library BitOps {
     int256 constant MASK2 = 0x3333333333333333333333333333333333333333333333333333333333333333;
     int256 constant MASK1 = 0x5555555555555555555555555555555555555555555555555555555555555555;
 
-    // Calculates the number of trailing zeros in binary representation. 
+    // Calculates the number of trailing zeros in binary representation.
     function ctz(uint256 x) internal pure returns (uint256) {
         require(x <= uint256(type(int256).max), "Input exceeds maximum int256 value");
-        uint256 c = 256; 
+        uint256 c = 256;
 
         int256 v = -int256(x);
         v = v & int256(x);
