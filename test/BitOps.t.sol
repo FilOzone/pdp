@@ -5,6 +5,33 @@ import {Test, console} from "forge-std/Test.sol";
 import {BitOps} from "../src/BitOps.sol";
 
 contract BitOpsTest is Test {
+    function testLog2() public {
+        // Test basic cases
+        // Test basic cases
+        vm.expectRevert("log2(0) is undefined");
+        BitOps.log2(0);
+        assertEq(BitOps.log2(1), 0);
+
+        assertEq(BitOps.log2(2), 1);
+        assertEq(BitOps.log2(4), 2);
+        assertEq(BitOps.log2(8), 3);
+        assertEq(BitOps.log2(16), 4);
+        assertEq(BitOps.log2(32), 5);
+        assertEq(BitOps.log2(256), 8);
+
+        // Test large numbers
+        assertEq(BitOps.log2(2 ** 100), 100);
+
+        // Test non-power-of-two numbers
+        assertEq(BitOps.log2(3), 1);
+        assertEq(BitOps.log2(7), 2);
+        assertEq(BitOps.log2(10), 3);
+        assertEq(BitOps.log2(1000), 9);
+
+        // Test max uint256
+        assertEq(BitOps.log2(type(uint256).max), 255);
+    }
+
     function testClzZero() pure public {
         uint256 result = BitOps.clz(0);
         assertEq(result, 256, "CLZ of 0 should be 256");
@@ -56,7 +83,7 @@ contract BitOpsTest is Test {
 
         // Expect the call to revert
         vm.expectRevert("Input exceeds maximum int256 value");
-        
+
         // Call ctz with a value exceeding max int256
         BitOps.ctz(exceedingValue);
     }

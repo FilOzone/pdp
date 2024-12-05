@@ -9,6 +9,7 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initiali
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
+import "forge-std/console.sol";
 
 interface PDPListener {
     function proofSetCreated(uint256 proofSetId, address creator, bytes calldata extraData) external;
@@ -355,36 +356,67 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bytes32[] proof;
     }
 
-    // Verifies and records that the provider proved possession of the
+    //Verifies and records that the provider proved possession of the
     // proof set Merkle roots at some epoch. The challenge seed is determined
     // by the epoch of the previous proof of possession.
     // Note that this method is not restricted to the proof set owner.
-    function provePossession(uint256 setId, Proof[] calldata proofs) public payable{
+    function provePossession(
+        uint256 setId,
+        Proof[] calldata proofs
+    ) public payable {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
 
-        // Calculate and burn the proof fee
-        uint256 proofFee = PDPFees.proofFee(proofs.length);
-        burnFee(proofFee);
-        if (msg.value > proofFee) {
-            // Return the overpayment
-            payable(msg.sender).transfer(msg.value - proofFee);
-        }
+        uint256 initialGas = gasleft();
+        uint256 callDataSize = 0;
 
         uint256 seed = drawChallengeSeed(setId);
         uint256 leafCount = challengeRange[setId];
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
         for (uint64 i = 0; i < proofs.length; i++) {
+            // 32 for the leaf + each element in the proof is 32 bytes
+            callDataSize += 32 + (proofs[i].proof.length * 32);
+
             // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
             bytes memory payload = abi.encodePacked(seed, setId, i);
             uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
 
             // Find the root that has this leaf, and the offset of the leaf within that root.
-            RootIdAndOffset memory root = findOneRootId(setId, challengeIdx, sumTreeTop);
-            bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, root.rootId));
-            bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, root.offset);
+            RootIdAndOffset memory root = findOneRootId(
+                setId,
+                challengeIdx,
+                sumTreeTop
+            );
+            bytes32 rootHash = Cids.digestFromCid(
+                getRootCid(setId, root.rootId)
+            );
+            bool ok = MerkleVerify.verify(
+                proofs[i].proof,
+                rootHash,
+                proofs[i].leaf,
+                root.offset
+            );
             require(ok, "proof did not verify");
+        }
+
+        // Note: We don't want to include gas spent on the listener call in the fee calculation
+        // to only account for proof verification fees and avoid gamability by getting the listener
+        // to do extraneous work just to inflate the gas fee.
+        //
+        // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
+        uint256 gasUsed = (initialGas - gasleft()) + ((callDataSize + 32) * 1300);
+        uint256 estimatedGasFee = gasUsed * block.basefee;
+
+        console.log("base fee");
+        console.log(estimatedGasFee);
+
+        // Calculate and burn the proof fee
+        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, proofs.length, challengeRange[setId]);
+        burnFee(proofFee);
+        if (msg.value > proofFee) {
+            // Return the overpayment
+            payable(msg.sender).transfer(msg.value - proofFee);
         }
 
         address listenerAddr = proofSetListener[setId];
