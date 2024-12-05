@@ -609,14 +609,14 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Test 1: Sending less than the required fee
+
+        uint256 correctFee = 724312;
         vm.expectRevert("Incorrect fee amount");
-        pdpVerifier.provePossession{value: 1}(setId, proofs);
+        pdpVerifier.provePossession{value: correctFee-1}(setId, proofs);
 
         // Test 2: Sending more than the required fee
-        uint256 excessFee = 1e18;
-
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
-        pdpVerifier.provePossession{value: excessFee}(setId, proofs);
+        pdpVerifier.provePossession{value: correctFee + 1 ether}(setId, proofs);
 
         // Verify that the proof was accepted
         listenerAssert.expectEvent(PDPRecordKeeper.OperationType.PROVE_POSSESSION, setId);

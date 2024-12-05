@@ -9,6 +9,7 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initiali
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
+import "forge-std/console.sol";
 
 interface PDPListener {
     function proofSetCreated(uint256 proofSetId, address creator, bytes calldata extraData) external;
@@ -398,15 +399,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             require(ok, "proof did not verify");
         }
 
-        uint256 gasUsed = (initialGas - gasleft()) + (callDataSize * 1300);
+        // Note: We don't want to include gas spent on the listener call in the fee calculation
+        // to only account for proof verification fees and avoid gamability by getting the listener
+        // to do extraneous work just to inflate the gas fee.
+        //
+        // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
+        uint256 gasUsed = (initialGas - gasleft()) + ((callDataSize + 32) * 1300);
         uint256 estimatedGasFee = gasUsed * block.basefee;
 
+        console.log("base fee");
+        console.log(estimatedGasFee);
+
         // Calculate and burn the proof fee
-        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee,
-            proofs.length,
-            challengeRange[setId]
-        );
+        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, proofs.length, challengeRange[setId]);
         burnFee(proofFee);
         if (msg.value > proofFee) {
             // Return the overpayment
