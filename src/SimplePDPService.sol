@@ -17,7 +17,7 @@ contract PDPRecordKeeper {
         REMOVE_SCHEDULED,
         PROVE_POSSESSION,
         NEXT_PROVING_PERIOD
-    }    
+    }
 
     // Struct to store event details
     struct EventRecord {
@@ -72,7 +72,7 @@ contract PDPRecordKeeper {
 // and provides a way to query these events.
 // This contract only supports one PDP service caller, set in the constructor.
 contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUpgradeable, OwnableUpgradeable {
-    event FaultRecord(uint256 periodsFaulted);
+    event FaultRecord(uint256 indexed proofSetId, uint256 periodsFaulted, uint256[] faultedPeriods);
 
     // The address of the PDP verifier contract that is allowed to call this contract
     address public pdpVerifierAddress;
@@ -171,8 +171,8 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
     // it also checks that proofs are not late and emits a fault record if so
     function posessionProven(uint256 proofSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external onlyPDPVerifier {
         receiveProofSetEvent(proofSetId, OperationType.PROVE_POSSESSION, abi.encode(challengedLeafCount, seed, challengeCount));
-        if (provenThisPeriod[proofSetId]) { 
-            revert("Only one proof of possession allowed per proving period. Open a new proving period."); 
+        if (provenThisPeriod[proofSetId]) {
+            revert("Only one proof of possession allowed per proving period. Open a new proving period.");
         }
         if (challengeCount < getChallengesPerProof()) {
             revert("Invalid challenge count < 5");
@@ -180,7 +180,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
         // check for proof outside of proving period
         if (provingDeadlines[proofSetId] < block.number) {
             revert("Current proving period passed. Open a new proving period.");
-        } 
+        }
         if (provingDeadlines[proofSetId] - getMaxProvingPeriod() >= block.number) {
             revert("Too early. Wait for proving period to open");
         }
@@ -211,12 +211,16 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
             revert("Next challenge epoch must fall within the next challenge window");
         }
         uint256 faultPeriods = periodsSkipped;
-        if (!provenThisPeriod[proofSetId]) { 
-            // include previous unproven period 
+        if (!provenThisPeriod[proofSetId]) {
+            // include previous unproven period
             faultPeriods += 1;
         }
         if (faultPeriods > 0) {
-            emit FaultRecord(faultPeriods);
+            uint256[] memory faultedPeriodsList = new uint256[](faultPeriods);
+            for (uint256 i = 0; i < faultPeriods; i++) {
+                faultedPeriodsList[i] = provingDeadlines[proofSetId] + i * getMaxProvingPeriod();
+            }
+            emit FaultRecord(proofSetId, faultPeriods, faultedPeriodsList);
         }
         provingDeadlines[proofSetId] = nextDeadline;
         provenThisPeriod[proofSetId] = false;
