@@ -174,6 +174,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return nextChallengeEpoch[setId];
     }
 
+    // Returns the listener address for a proof set
+    function getProofSetListener(uint256 setId) public view returns (address) {
+        require(proofSetLive(setId), "Proof set not live");
+        return proofSetListener[setId];
+    }
+
     // Returns the owner of a proof set and the proposed owner if any
     function getProofSetOwner(uint256 setId) public view returns (address, address) {
         require(proofSetLive(setId), "Proof set not live");
