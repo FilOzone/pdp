@@ -13,12 +13,12 @@ all: build test
 # Build target
 .PHONY: build
 build:
-	forge build
+	forge build --via-ir
 
 # Test target
 .PHONY: test
 test:
-	forge test -vv
+	forge test -vv --via-ir
 
 # Deployment targets
 .PHONY: deploy-calibnet
