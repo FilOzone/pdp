@@ -564,6 +564,20 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     }
 
     function testProveSingleRoot() public {
+        // Mock Pyth oracle call to return $5 USD/FIL
+        bytes memory pythCallData = abi.encodeWithSelector(
+            IPyth.getPriceNoOlderThan.selector,
+            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
+            86400
+        );
+        PythStructs.Price memory price = PythStructs.Price({
+            price: 5,
+            conf: 0,
+            expo: 0,
+            publishTime: 0
+        });
+        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
+
         uint leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
 
@@ -595,6 +609,20 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     receive() external payable {}
 
     function testProveWithDifferentFeeAmounts() public {
+        // Mock Pyth oracle call to return $5 USD/FIL
+        bytes memory pythCallData = abi.encodeWithSelector(
+            IPyth.getPriceNoOlderThan.selector,
+            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
+            86400
+        );
+        PythStructs.Price memory price = PythStructs.Price({
+            price: 5,
+            conf: 0,
+            expo: -10,
+            publishTime: 0
+        });
+        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
+
         uint leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
 
@@ -608,9 +636,12 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         uint challengeCount = 3;
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
+        // Mock block.number to 2880
+        vm.roll(2880);
+
         // Test 1: Sending less than the required fee
 
-        uint256 correctFee = 724312;
+        uint256 correctFee = 388051072754688;
         vm.expectRevert("Incorrect fee amount");
         pdpVerifier.provePossession{value: correctFee-1}(setId, proofs);
 
@@ -626,6 +657,19 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     }
 
     function testLateProofAccepted() public {
+        // Mock Pyth oracle call to return $5 USD/FIL
+        bytes memory pythCallData = abi.encodeWithSelector(
+            IPyth.getPriceNoOlderThan.selector,
+            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
+            86400
+        );
+        PythStructs.Price memory price = PythStructs.Price({
+            price: 5,
+            conf: 0,
+            expo: 0,
+            publishTime: 0
+        });
+        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
         uint leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
 
@@ -688,6 +732,20 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Submit proof successfully, advancing the proof set to a new challenge epoch.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        // Mock Pyth oracle call to return $5 USD/FIL
+        bytes memory pythCallData = abi.encodeWithSelector(
+            IPyth.getPriceNoOlderThan.selector,
+            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
+            86400
+        );
+        PythStructs.Price memory price = PythStructs.Price({
+            price: 5,
+            conf: 0,
+            expo: 0,
+            publishTime: 0
+        });
+        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
+
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
         listenerAssert.expectEvent(PDPRecordKeeper.OperationType.PROVE_POSSESSION, setId);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // resample
@@ -704,6 +762,20 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     }
 
     function testBadRootsRejected() public {
+        // Mock Pyth oracle call to return $5 USD/FIL
+        bytes memory pythCallData = abi.encodeWithSelector(
+            IPyth.getPriceNoOlderThan.selector,
+            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
+            86400
+        );
+        PythStructs.Price memory price = PythStructs.Price({
+            price: 5,
+            conf: 0,
+            expo: 0,
+            publishTime: 0
+        });
+        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
+
         uint[] memory leafCounts = new uint[](2);
         // Note: either co-prime leaf counts or a challenge count > 1 are required for this test to demonstrate the failing proof.
         // With a challenge count == 1 and leaf counts e.g. 10 and 20 it just so happens that the first computed challenge index is the same
@@ -759,6 +831,20 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     }
 
     function testProveManyRoots() public {
+        // Mock Pyth oracle call to return $5 USD/FIL
+        bytes memory pythCallData = abi.encodeWithSelector(
+            IPyth.getPriceNoOlderThan.selector,
+            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
+            86400
+        );
+        PythStructs.Price memory price = PythStructs.Price({
+            price: 5,
+            conf: 0,
+            expo: 0,
+            publishTime: 0
+        });
+        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
+
         uint[] memory leafCounts = new uint[](3);
         // Pick a distinct size for each tree (up to some small maximum size).
         for (uint i = 0; i < leafCounts.length; i++) {
@@ -1372,6 +1458,20 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
     receive() external payable {}
 
     function testCompleteProvingPeriodE2E() public {
+        // Mock Pyth oracle call to return $5 USD/FIL
+        bytes memory pythCallData = abi.encodeWithSelector(
+            IPyth.getPriceNoOlderThan.selector,
+            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
+            86400
+        );
+        PythStructs.Price memory price = PythStructs.Price({
+            price: 5,
+            conf: 0,
+            expo: 0,
+            publishTime: 0
+        });
+        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
+
         // Step 1: Create a proof set
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
 

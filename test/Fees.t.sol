@@ -5,91 +5,138 @@ import {Test, console2} from "forge-std/Test.sol";
 import {PDPFees} from "../src/Fees.sol";
 
 contract PDPFeesTest is Test {
+    uint256 constant epochs_per_day = 2880;
+
+    function computeRewardPerPeriod(uint64 filUsdPrice, int32 filUsdPriceExpo, uint256 rawSize) internal pure returns (uint256) {
+        uint256 rewardPerEpochPerByte;
+        if (filUsdPriceExpo >= 0) {
+            rewardPerEpochPerByte = (PDPFees.MONTHLY_TIB_STORAGE_REWARD_USD * PDPFees.FIL_TO_ATTO_FIL) /
+                (PDPFees.TIB_IN_BYTES * PDPFees.EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
+        } else {
+            rewardPerEpochPerByte = (PDPFees.MONTHLY_TIB_STORAGE_REWARD_USD * PDPFees.FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
+                (PDPFees.TIB_IN_BYTES * PDPFees.EPOCHS_PER_MONTH * filUsdPrice);
+        }
+        uint256 rewardPerPeriod = rewardPerEpochPerByte * epochs_per_day * rawSize;
+        return rewardPerPeriod;
+    }
+
     function testProofFeeWithGasFeeBoundZeroGasFee() public {
-        vm.expectRevert("Estimated gas fee must be greater than 0");
-        PDPFees.proofFeeWithGasFeeBound(0, 1, 1);
+        vm.expectRevert("failed to validate: estimated gas fee must be greater than 0");
+        PDPFees.proofFeeWithGasFeeBound(0, 5, 0, 1e18, epochs_per_day);
     }
 
-    function testProofFeeWithGasFeeBoundZeroChallengeCount() public {
-        vm.expectRevert("Challenge count must be greater than 0");
-        PDPFees.proofFeeWithGasFeeBound(1, 0, 1);
+    function testProofFeeWithGasFeeBoundZeroAttoFilUsdPrice() public {
+        vm.expectRevert("failed to validate: AttoFIL price must be greater than 0");
+        PDPFees.proofFeeWithGasFeeBound(1, 0, 0, 1e18, epochs_per_day);
     }
 
-    function testProofFeeWithGasFeeBoundZeroProofSetLeafCount() public {
-        vm.expectRevert("Proof set leaf count must be greater than 0");
-        PDPFees.proofFeeWithGasFeeBound(1, 1, 0);
+    function testProofFeeWithGasFeeBoundZeroRawSize() public {
+        vm.expectRevert("failed to validate: raw size must be greater than 0");
+        PDPFees.proofFeeWithGasFeeBound(1, 5, 0, 0, epochs_per_day);
     }
 
     function testProofFeeWithGasFeeBoundHighGasFee() public pure {
-        uint256 highGasFee = PDPFees.FIVE_PERCENT_DAILY_REWARD_ATTO_FIL;
-        uint256 fee = PDPFees.proofFeeWithGasFeeBound(highGasFee, 1, 1);
+        uint64 filUsdPrice = 5;
+        int32 filUsdPriceExpo = 0;
+        uint256 rawSize = 1e18;
+
+        uint256 rewardPerPeriod = computeRewardPerPeriod(filUsdPrice, filUsdPriceExpo, rawSize);
+
+        uint256 gasLimitRight = (rewardPerPeriod * PDPFees.GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
+
+        uint256 estimatedGasFee = gasLimitRight;
+
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+
         assertEq(fee, 0, "Fee should be 0 when gas fee is high");
     }
 
     function testProofFeeWithGasFeeBoundMediumGasFee() public pure {
-        uint256 mediumGasFee = PDPFees.FOUR_PERCENT_DAILY_REWARD_ATTO_FIL + 1;
-        uint256 fee = PDPFees.proofFeeWithGasFeeBound(mediumGasFee, 1, 1);
-        assertEq(
-            fee,
-            PDPFees.FIVE_PERCENT_DAILY_REWARD_ATTO_FIL - mediumGasFee,
-            "Fee should be partially discounted"
-        );
+        uint64 filUsdPrice = 5;
+        int32 filUsdPriceExpo = 0;
+        uint256 rawSize = 1e18;
+
+        uint256 rewardPerPeriod = computeRewardPerPeriod(filUsdPrice, filUsdPriceExpo, rawSize);
+
+        uint256 gasLimitLeft = (rewardPerPeriod * PDPFees.GAS_LIMIT_LEFT_PERCENTAGE) / 100;
+        uint256 gasLimitRight = (rewardPerPeriod * PDPFees.GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
+
+        uint256 estimatedGasFee = (gasLimitLeft + gasLimitRight) / 2;
+
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+
+        uint256 expectedFee = gasLimitRight - estimatedGasFee;
+
+        assertEq(fee, expectedFee, "Fee should be partially discounted");
     }
 
     function testProofFeeWithGasFeeBoundLowGasFee() public pure {
-        uint256 lowGasFee = PDPFees.FOUR_PERCENT_DAILY_REWARD_ATTO_FIL - 1;
-        uint256 challengeCount = 2;
-        uint256 proofSetLeafCount = 4;
-        uint256 fee = PDPFees.proofFeeWithGasFeeBound(
-            lowGasFee,
-            challengeCount,
-            proofSetLeafCount
-        );
-        uint256 expectedFee = PDPFees.PROOF_PRICE_ATTO_FIL * challengeCount * 2; // log2(4) = 2
-        assertEq(
-            fee,
-            expectedFee,
-            "Fee should be calculated based on challenge count and proof set leaf count"
-        );
+        uint64 filUsdPrice = 5;
+        int32 filUsdPriceExpo = 0;
+        uint256 rawSize = 1e18;
+
+        uint256 rewardPerPeriod = computeRewardPerPeriod(filUsdPrice, filUsdPriceExpo, rawSize);
+
+        uint256 gasLimitLeft = (rewardPerPeriod * PDPFees.GAS_LIMIT_LEFT_PERCENTAGE) / 100;
+
+        uint256 estimatedGasFee = gasLimitLeft / 2;
+
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+
+        uint256 expectedFee = (rewardPerPeriod * PDPFees.PROOF_FEE_PERCENTAGE) / 100;
+
+        assertEq(fee, expectedFee, "Fee should be full proof fee when gas fee is low");
     }
 
-    function testProofFeeWithGasFeeBoundVaryingInputs() public pure {
-        uint256[] memory gasFees = new uint256[](3);
-        gasFees[0] = PDPFees.FOUR_PERCENT_DAILY_REWARD_ATTO_FIL / 2;
-        gasFees[1] = PDPFees.FOUR_PERCENT_DAILY_REWARD_ATTO_FIL;
-        gasFees[2] = PDPFees.FIVE_PERCENT_DAILY_REWARD_ATTO_FIL;
+    function testProofFeeWithGasFeeBoundNegativeExponent() public pure {
+        uint64 filUsdPrice = 5000;
+        int32 filUsdPriceExpo = -3;
+        uint256 rawSize = 1e18;
+        uint256 estimatedGasFee = 1e15;
 
-        uint256[] memory challengeCounts = new uint256[](3);
-        challengeCounts[0] = 1;
-        challengeCounts[1] = 5;
-        challengeCounts[2] = 10;
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+        assertTrue(fee > 0, "Fee should be positive with negative exponent");
+    }
 
-        uint256[] memory proofSetLeafCounts = new uint256[](3);
-        proofSetLeafCounts[0] = 2;
-        proofSetLeafCounts[1] = 8;
-        proofSetLeafCounts[2] = 16;
+    function testProofFeeWithGasFeeBoundLargeRawSize() public pure {
+        uint64 filUsdPrice = 5;
+        int32 filUsdPriceExpo = 0;
+        uint256 rawSize = 1e30;
+        uint256 estimatedGasFee = 1e15;
 
-        for (uint256 i = 0; i < 3; i++) {
-            for (uint256 j = 0; j < 3; j++) {
-                for (uint256 k = 0; k < 3; k++) {
-                    uint256 fee = PDPFees.proofFeeWithGasFeeBound(
-                        gasFees[i],
-                        challengeCounts[j],
-                        proofSetLeafCounts[k]
-                    );
-                    assertTrue(fee >= 0, "Fee should always be non-negative");
-                    if (
-                        gasFees[i] >= PDPFees.FIVE_PERCENT_DAILY_REWARD_ATTO_FIL
-                    ) {
-                        assertEq(
-                            fee,
-                            0,
-                            "Fee should be 0 when gas fee is high"
-                        );
-                    }
-                }
-            }
-        }
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+        assertTrue(fee > 0, "Fee should be positive for large raw size");
+    }
+
+    function testProofFeeWithGasFeeBoundSmallRawSize() public pure {
+        uint64 filUsdPrice = 5;
+        int32 filUsdPriceExpo = 0;
+        uint256 rawSize = 1;
+
+        uint256 rewardPerPeriod = computeRewardPerPeriod(filUsdPrice, filUsdPriceExpo, rawSize);
+        uint256 gasLimitLeft = (rewardPerPeriod * PDPFees.GAS_LIMIT_LEFT_PERCENTAGE) / 100;
+
+        uint256 estimatedGasFee = gasLimitLeft / 2;
+
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+
+        uint256 expectedFee = (rewardPerPeriod * PDPFees.PROOF_FEE_PERCENTAGE) / 100;
+
+        assertEq(fee, expectedFee, "Fee should be full proof fee when gas fee is low");
+    }
+
+    function testProofFeeWithGasFeeBoundHalfDollarFil() public pure {
+        uint64 filUsdPrice = 5;
+        int32 filUsdPriceExpo = -1; // 0.5 USD per FIL
+        uint256 rawSize = 1e18;
+        uint256 estimatedGasFee = 1e15;
+
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize,epochs_per_day);
+        assertTrue(fee > 0, "Fee should be positive with FIL price at $0.50");
+
+        // With lower FIL price, fee should be higher than when price is $5
+        uint256 feeAt5Dollars = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, 0, rawSize, epochs_per_day);
+        assertTrue(fee > feeAt5Dollars, "Fee should be higher with lower FIL price");
     }
 
     function testSybilFee() public pure {

@@ -1,61 +1,66 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
+
 import {BitOps} from "./BitOps.sol";
+import "forge-std/console.sol";
 
 library PDPFees {
     uint256 constant ATTO_FIL = 1;
-    uint256 constant ONE_FIL = 1e18 * ATTO_FIL;
+    uint256 constant FIL_TO_ATTO_FIL = 1e18 * ATTO_FIL;
 
     // 0.1 FIL
-    uint256 constant SYBIL_FEE = ONE_FIL / 10;
-
-    // assume 1FIL = $5 for now -> we can change this to use an oracle in PDP V1
-    uint256 constant FIL_USD_PRICE = 5;
+    uint256 constant SYBIL_FEE = FIL_TO_ATTO_FIL / 10;
 
     // 2 USD/Tib/month is the current reward earned by Storage Providers
     uint256 constant MONTHLY_TIB_STORAGE_REWARD_USD = 2;
+    // 1% of reward per period
+    uint256 constant PROOF_FEE_PERCENTAGE = 1;
+    // 4% of reward per period for gas limit left bound
+    uint256 constant GAS_LIMIT_LEFT_PERCENTAGE = 4;
+    // 5% of reward per period for gas limit right bound
+    uint256 constant GAS_LIMIT_RIGHT_PERCENTAGE = 5;
+    uint256 constant USD_DECIMALS = 1e18;
 
-    uint256 constant DAILY_TIB_STORAGE_REWARD_ATTO_FIL =
-        (MONTHLY_TIB_STORAGE_REWARD_USD * 1e18 * ATTO_FIL) /
-            (30 * FIL_USD_PRICE);
-
-    // PROOF_PRICE is currently set to 1% of the daily reward
-    uint256 constant PROOF_PRICE_ATTO_FIL =
-        (1 * DAILY_TIB_STORAGE_REWARD_ATTO_FIL) / 100;
-
-    // 5% of daily reward
-    uint256 constant FIVE_PERCENT_DAILY_REWARD_ATTO_FIL =
-        (DAILY_TIB_STORAGE_REWARD_ATTO_FIL * 5) / 100;
-
-    // 4% of daily reward
-    uint256 constant FOUR_PERCENT_DAILY_REWARD_ATTO_FIL =
-        (DAILY_TIB_STORAGE_REWARD_ATTO_FIL * 4) / 100;
+    // 1 TiB in bytes (2^40)
+    uint256 constant TIB_IN_BYTES = 2 ** 40;
+    // Number of epochs per month (30 days * 2880 epochs per day)
+    uint256 constant EPOCHS_PER_MONTH = 86400;
 
     /// @return proof fee in AttoFIL
     function proofFeeWithGasFeeBound(
-        uint256 estimatedGasFee,
-        uint256 challengeCount,
-        uint256 proofSetLeafCount
+        uint256 estimatedGasFee, // in AttoFIL
+        uint64 filUsdPrice,
+        int32 filUsdPriceExpo,
+        uint256 rawSize,
+        uint256 nProofEpochs
     ) internal pure returns (uint256) {
-        require(
-            estimatedGasFee > 0,
-            "Estimated gas fee must be greater than 0"
-        );
-        require(challengeCount > 0, "Challenge count must be greater than 0");
-        require(
-            proofSetLeafCount > 0,
-            "Proof set leaf count must be greater than 0"
-        );
+        require(estimatedGasFee > 0, "failed to validate: estimated gas fee must be greater than 0");
+        require(filUsdPrice > 0, "failed to validate: AttoFIL price must be greater than 0");
+        require(rawSize > 0, "failed to validate: raw size must be greater than 0");
 
-        if (estimatedGasFee >= FIVE_PERCENT_DAILY_REWARD_ATTO_FIL) {
-            return 0; // No proof fee if gas fee is above 5% of the estimated reward
-        } else if (estimatedGasFee >= FOUR_PERCENT_DAILY_REWARD_ATTO_FIL) {
-            return FIVE_PERCENT_DAILY_REWARD_ATTO_FIL - estimatedGasFee; // Partial discount on proof fee
+        // Calculate reward per epoch per byte (in AttoFIL)
+        uint256 rewardPerEpochPerByte;
+        if (filUsdPriceExpo >= 0) {
+            rewardPerEpochPerByte = (MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL) / (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
         } else {
-            uint256 calculatedProofFee = (PROOF_PRICE_ATTO_FIL *
-                challengeCount *
-                BitOps.log2(proofSetLeafCount));
-            return calculatedProofFee;
+            rewardPerEpochPerByte = (MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
+            (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice);
+        }
+
+        // Calculate total reward for the proving period
+        uint256 rewardPerPeriod = rewardPerEpochPerByte * nProofEpochs * rawSize;
+
+        // Calculate gas limits
+        uint256 gasLimitRight = (rewardPerPeriod * GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
+        uint256 gasLimitLeft = (rewardPerPeriod * GAS_LIMIT_LEFT_PERCENTAGE) / 100;
+
+        if (estimatedGasFee >= gasLimitRight) {
+            return 0; // No proof fee if gas fee is above right limit
+        } else if (estimatedGasFee >= gasLimitLeft) {
+            return gasLimitRight - estimatedGasFee; // Partial discount on proof fee
+        } else {
+            // Full proof fee is PROOF_FEE_PERCENTAGE% of reward
+            return (rewardPerPeriod * PROOF_FEE_PERCENTAGE) / 100;
         }
     }
 

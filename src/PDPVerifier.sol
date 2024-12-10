@@ -8,37 +8,76 @@ import {PDPFees} from "./Fees.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-
+import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "forge-std/console.sol";
 
 interface PDPListener {
-    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata extraData) external;
-    function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount, bytes calldata extraData) external;
-    function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] memory rootData, bytes calldata extraData) external;
-    function rootsScheduledRemove(uint256 proofSetId, uint256[] memory rootIds, bytes calldata extraData) external;
-    // Note: extraData not included as proving messages conceptually always originate from the SP 
-    function possessionProven(uint256 proofSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external;
-    function nextProvingPeriod(uint256 proofSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata extraData) external;
+    function proofSetCreated(
+        uint256 proofSetId,
+        address creator,
+        bytes calldata extraData
+    ) external;
+    function proofSetDeleted(
+        uint256 proofSetId,
+        uint256 deletedLeafCount,
+        bytes calldata extraData
+    ) external;
+    function rootsAdded(
+        uint256 proofSetId,
+        uint256 firstAdded,
+        PDPVerifier.RootData[] memory rootData,
+        bytes calldata extraData
+    ) external;
+    function rootsScheduledRemove(
+        uint256 proofSetId,
+        uint256[] memory rootIds,
+        bytes calldata extraData
+    ) external;
+    // Note: extraData not included as proving messages conceptually always originate from the SP
+    function possessionProven(
+        uint256 proofSetId,
+        uint256 challengedLeafCount,
+        uint256 seed,
+        uint256 challengeCount
+    ) external;
+    function nextProvingPeriod(
+        uint256 proofSetId,
+        uint256 challengeEpoch,
+        uint256 leafCount,
+        bytes calldata extraData
+    ) external;
 }
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
-    address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
+    address public constant BURN_ACTOR =
+        0xff00000000000000000000000000000000000063;
     uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_ROOT_SIZE = 1 << 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
-    address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
+    address public constant RANDOMNESS_PRECOMPILE =
+        0xfE00000000000000000000000000000000000006;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
+
+    IPyth public constant PYTH =
+        IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
+
+    // FIL/USD price feed query ID on the Pyth network
+    bytes32 public constant FIL_USD_PRICE_FEED_ID =
+        0x150ac9b959aee0051e4091f0ef5216d941f590e1c5e7f91cf7635b5c11628c0e;
 
     // Events
     event ProofSetCreated(uint256 indexed setId);
     event ProofSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event RootsAdded(uint256 indexed firstAdded);
     event RootsRemoved(uint256[] indexed rootIds);
+    event ProofFeePaid(uint256 indexed setId, uint256 fee);
+    event FILUSDPrice(int64 price, int32 expo);
 
     // Types
     // State fields
-     event Debug(string message, uint256 value);
+    event Debug(string message, uint256 value);
 
     /*
     A proof set is the metadata required for tracking data for proof of possession.
@@ -107,12 +146,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
     mapping(uint256 => address) proofSetProposedOwner;
+    mapping(uint256 => uint256) proofSetLastProvenEpoch;
 
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
-     _disableInitializers();
+        _disableInitializers();
     }
 
     function initialize(uint256 _challengeFinality) public initializer {
@@ -121,7 +161,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         challengeFinality = _challengeFinality;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyOwner {}
 
     function burnFee(uint256 amount) internal {
         require(msg.value >= amount, "Incorrect fee amount");
@@ -145,15 +187,31 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Returns false if the proof set is not live or if the root id is 1) not yet created 2) deleted
-    function rootLive(uint256 setId, uint256 rootId) public view returns (bool) {
-        return proofSetLive(setId) && rootId < nextRootId[setId] && rootLeafCounts[setId][rootId] > 0;
+    function rootLive(
+        uint256 setId,
+        uint256 rootId
+    ) public view returns (bool) {
+        return
+            proofSetLive(setId) &&
+            rootId < nextRootId[setId] &&
+            rootLeafCounts[setId][rootId] > 0;
     }
 
     // Returns false if the root is not live or if the root id is not yet in challenge range
-    function rootChallengable(uint256 setId, uint256 rootId) public view returns (bool) {
+    function rootChallengable(
+        uint256 setId,
+        uint256 rootId
+    ) public view returns (bool) {
         uint256 top = 256 - BitOps.clz(nextRootId[setId]);
-        RootIdAndOffset memory ret = findOneRootId(setId, challengeRange[setId]-1, top);
-        require(ret.offset == rootLeafCounts[setId][ret.rootId] - 1, "challengeRange -1 should align with the very last leaf of a root");
+        RootIdAndOffset memory ret = findOneRootId(
+            setId,
+            challengeRange[setId] - 1,
+            top
+        );
+        require(
+            ret.offset == rootLeafCounts[setId][ret.rootId] - 1,
+            "challengeRange -1 should align with the very last leaf of a root"
+        );
         return rootLive(setId, rootId) && rootId <= ret.rootId;
     }
 
@@ -170,25 +228,35 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Returns the next challenge epoch for a proof set
-    function getNextChallengeEpoch(uint256 setId) public view returns (uint256) {
+    function getNextChallengeEpoch(
+        uint256 setId
+    ) public view returns (uint256) {
         require(proofSetLive(setId), "Proof set not live");
         return nextChallengeEpoch[setId];
     }
 
     // Returns the owner of a proof set and the proposed owner if any
-    function getProofSetOwner(uint256 setId) public view returns (address, address) {
+    function getProofSetOwner(
+        uint256 setId
+    ) public view returns (address, address) {
         require(proofSetLive(setId), "Proof set not live");
         return (proofSetOwner[setId], proofSetProposedOwner[setId]);
     }
 
     // Returns the root CID for a given proof set and root ID
-    function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
+    function getRootCid(
+        uint256 setId,
+        uint256 rootId
+    ) public view returns (Cids.Cid memory) {
         require(proofSetLive(setId), "Proof set not live");
         return rootCids[setId][rootId];
     }
 
     // Returns the root leaf count for a given proof set and root ID
-    function getRootLeafCount(uint256 setId, uint256 rootId) public view returns (uint256) {
+    function getRootLeafCount(
+        uint256 setId,
+        uint256 rootId
+    ) public view returns (uint256) {
         require(proofSetLive(setId), "Proof set not live");
         return rootLeafCounts[setId][rootId];
     }
@@ -200,7 +268,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Returns the root ids of the roots scheduled for removal at the start of the next proving period
-    function getScheduledRemovals(uint256 setId) public view returns (uint256[] memory) {
+    function getScheduledRemovals(
+        uint256 setId
+    ) public view returns (uint256[] memory) {
         require(proofSetLive(setId), "Proof set not live");
         uint256[] storage removals = scheduledRemovals[setId];
         uint256[] memory result = new uint256[](removals.length);
@@ -214,7 +284,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function proposeProofSetOwner(uint256 setId, address newOwner) public {
         require(proofSetLive(setId), "Proof set not live");
         address owner = proofSetOwner[setId];
-        require(owner == msg.sender, "Only the current owner can propose a new owner");
+        require(
+            owner == msg.sender,
+            "Only the current owner can propose a new owner"
+        );
         if (owner == newOwner) {
             // If the owner proposes themself delete any outstanding proposed owner
             delete proofSetProposedOwner[setId];
@@ -225,7 +298,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function claimProofSetOwnership(uint256 setId) public {
         require(proofSetLive(setId), "Proof set not live");
-        require(proofSetProposedOwner[setId] == msg.sender, "Only the proposed owner can claim ownership");
+        require(
+            proofSetProposedOwner[setId] == msg.sender,
+            "Only the proposed owner can claim ownership"
+        );
         proofSetOwner[setId] = msg.sender;
         delete proofSetProposedOwner[setId];
     }
@@ -233,8 +309,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // A proof set is created empty, with no roots. Creation yields a proof set ID
     // for referring to the proof set later.
     // Sender of create message is proof set owner.
-    function createProofSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
+    function createProofSet(
+        address listenerAddr,
+        bytes calldata extraData
+    ) public payable returns (uint256) {
+        require(
+            extraData.length <= EXTRA_DATA_MAX_SIZE,
+            "Extra data too large"
+        );
         uint256 sybilFee = PDPFees.sybilFee();
         require(msg.value >= sybilFee, "sybil fee not met");
         burnFee(sybilFee);
@@ -245,12 +327,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
-        nextChallengeEpoch[setId] = 0;  // Re-initialized when the first root is added.
+        nextChallengeEpoch[setId] = 0; // Re-initialized when the first root is added.
         proofSetOwner[setId] = msg.sender;
         proofSetListener[setId] = listenerAddr;
 
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).proofSetCreated(setId, msg.sender, extraData);
+            PDPListener(listenerAddr).proofSetCreated(
+                setId,
+                msg.sender,
+                extraData
+            );
         }
         emit ProofSetCreated(setId);
         return setId;
@@ -258,12 +344,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Removes a proof set. Must be called by the contract owner.
     function deleteProofSet(uint256 setId, bytes calldata extraData) public {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
+        require(
+            extraData.length <= EXTRA_DATA_MAX_SIZE,
+            "Extra data too large"
+        );
         if (setId >= nextProofSetId) {
             revert("proof set id out of bounds");
         }
 
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can delete proof sets");
+        require(
+            proofSetOwner[setId] == msg.sender,
+            "Only the owner can delete proof sets"
+        );
         uint256 deletedLeafCount = proofSetLeafCount[setId];
         proofSetLeafCount[setId] = 0;
         proofSetOwner[setId] = address(0);
@@ -271,7 +363,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).proofSetDeleted(setId, deletedLeafCount, extraData);
+            PDPListener(listenerAddr).proofSetDeleted(
+                setId,
+                deletedLeafCount,
+                extraData
+            );
         }
         emit ProofSetDeleted(setId, deletedLeafCount);
     }
@@ -284,11 +380,21 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Appends new roots to the collection managed by a proof set.
     // These roots won't be challenged until the next proving period.
-    function addRoots(uint256 setId, RootData[] calldata rootData, bytes calldata extraData) public returns (uint256) {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
+    function addRoots(
+        uint256 setId,
+        RootData[] calldata rootData,
+        bytes calldata extraData
+    ) public returns (uint256) {
+        require(
+            extraData.length <= EXTRA_DATA_MAX_SIZE,
+            "Extra data too large"
+        );
         require(proofSetLive(setId), "Proof set not live");
         require(rootData.length > 0, "Must add at least one root");
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
+        require(
+            proofSetOwner[setId] == msg.sender,
+            "Only the owner can add roots"
+        );
         bool needsChallengeEpoch = nextChallengeEpoch[setId] == 0;
         uint256 firstAdded = nextRootId[setId];
 
@@ -303,7 +409,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).rootsAdded(setId, firstAdded, rootData, extraData);
+            PDPListener(listenerAddr).rootsAdded(
+                setId,
+                firstAdded,
+                rootData,
+                extraData
+            );
         }
         emit RootsAdded(firstAdded);
 
@@ -312,7 +423,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     error IndexedError(uint256 idx, string msg);
 
-    function addOneRoot(uint256 setId, uint256 callIdx, Cids.Cid calldata root, uint256 rawSize) internal returns (uint256) {
+    function addOneRoot(
+        uint256 setId,
+        uint256 callIdx,
+        Cids.Cid calldata root,
+        uint256 rawSize
+    ) internal returns (uint256) {
         if (rawSize % LEAF_SIZE != 0) {
             revert IndexedError(callIdx, "Size must be a multiple of 32");
         }
@@ -334,20 +450,41 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // scheduleRemovals scheduels removal of a batch of roots from a proof set for the start of the next
     // proving period. It must be called by the proof set owner.
-    function scheduleRemovals(uint256 setId, uint256[] calldata rootIds, bytes calldata extraData) public {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
+    function scheduleRemovals(
+        uint256 setId,
+        uint256[] calldata rootIds,
+        bytes calldata extraData
+    ) public {
+        require(
+            extraData.length <= EXTRA_DATA_MAX_SIZE,
+            "Extra data too large"
+        );
         require(proofSetLive(setId), "Proof set not live");
-        require(proofSetOwner[setId] == msg.sender, "Only the owner can schedule removal of roots");
-        require(rootIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS, "Too many removals wait for next proving period to schedule");
+        require(
+            proofSetOwner[setId] == msg.sender,
+            "Only the owner can schedule removal of roots"
+        );
+        require(
+            rootIds.length + scheduledRemovals[setId].length <=
+                MAX_ENQUEUED_REMOVALS,
+            "Too many removals wait for next proving period to schedule"
+        );
 
-        for (uint256 i = 0; i < rootIds.length; i++){
-            require(rootIds[i] < nextRootId[setId], "Can only schedule removal of existing roots");
+        for (uint256 i = 0; i < rootIds.length; i++) {
+            require(
+                rootIds[i] < nextRootId[setId],
+                "Can only schedule removal of existing roots"
+            );
             scheduledRemovals[setId].push(rootIds[i]);
         }
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).rootsScheduledRemove(setId, rootIds, extraData);
+            PDPListener(listenerAddr).rootsScheduledRemove(
+                setId,
+                rootIds,
+                extraData
+            );
         }
     }
 
@@ -364,20 +501,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 setId,
         Proof[] calldata proofs
     ) public payable {
+        require(
+            msg.sender == proofSetOwner[setId],
+            "only the owner can move to next proving period"
+        );
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
-
         uint256 initialGas = gasleft();
-        uint256 callDataSize = 0;
 
         uint256 seed = drawChallengeSeed(setId);
         uint256 leafCount = challengeRange[setId];
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
         for (uint64 i = 0; i < proofs.length; i++) {
-            // 32 for the leaf + each element in the proof is 32 bytes
-            callDataSize += 32 + (proofs[i].proof.length * 32);
-
             // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
             bytes memory payload = abi.encodePacked(seed, setId, i);
             uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
@@ -405,29 +541,60 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // to do extraneous work just to inflate the gas fee.
         //
         // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
-        uint256 gasUsed = (initialGas - gasleft()) + ((callDataSize + 32) * 1300);
+        uint256 gasUsed = (initialGas - gasleft()) +
+            ((calculateCallDataSize(proofs) + 32) * 1300);
+        calculateAndBurnProofFee(setId, gasUsed);
+
+        address listenerAddr = proofSetListener[setId];
+        if (listenerAddr != address(0)) {
+            PDPListener(listenerAddr).possessionProven(
+                setId,
+                proofSetLeafCount[setId],
+                seed,
+                proofs.length
+            );
+        }
+        proofSetLastProvenEpoch[setId] = block.number;
+    }
+
+    function calculateAndBurnProofFee(
+        uint256 setId,
+        uint256 gasUsed
+    ) internal {
+        uint256 rawSize = 32 * challengeRange[setId];
         uint256 estimatedGasFee = gasUsed * block.basefee;
+        (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
 
-        console.log("base fee");
-        console.log(estimatedGasFee);
+        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(
+            estimatedGasFee,
+            filUsdPrice,
+            filUsdPriceExpo,
+            rawSize,
+            block.number - proofSetLastProvenEpoch[setId]
+        );
 
-        // Calculate and burn the proof fee
-        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, proofs.length, challengeRange[setId]);
         burnFee(proofFee);
         if (msg.value > proofFee) {
             // Return the overpayment
             payable(msg.sender).transfer(msg.value - proofFee);
         }
+        emit ProofFeePaid(setId, proofFee);
+    }
 
-        address listenerAddr = proofSetListener[setId];
-        if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).possessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
+    function calculateCallDataSize(Proof[] calldata proofs) internal pure returns (uint256) {
+        uint256 callDataSize = 0;
+        for (uint256 i = 0; i < proofs.length; i++) {
+            // 32 for the leaf + each element in the proof is 32 bytes
+            callDataSize += 32 + (proofs[i].proof.length * 32);
         }
+        return callDataSize;
     }
 
     function getRandomness(uint256 epoch) public view returns (uint256) {
         // Call the precompile
-        (bool success, bytes memory result) = RANDOMNESS_PRECOMPILE.staticcall(abi.encodePacked(epoch));
+        (bool success, bytes memory result) = RANDOMNESS_PRECOMPILE.staticcall(
+            abi.encodePacked(epoch)
+        );
 
         // Check if the call was successful
         require(success, "Randomness precompile call failed");
@@ -435,7 +602,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Decode and return the result
         return abi.decode(result, (uint256));
     }
-
 
     function drawChallengeSeed(uint256 setId) internal view returns (uint256) {
         return getRandomness(nextChallengeEpoch[setId]);
@@ -454,9 +620,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     //
     // Note that this method can be called at any time but the pdpListener will likely consider it
     // a "fault" or other penalizeable behavior to call this method before calling provePossesion.
-    function nextProvingPeriod(uint256 setId, uint256 challengeEpoch, bytes calldata extraData) public {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
-        require(msg.sender == proofSetOwner[setId], "only the owner can move to next proving period");
+    function nextProvingPeriod(
+        uint256 setId,
+        uint256 challengeEpoch,
+        bytes calldata extraData
+    ) public {
+        require(
+            extraData.length <= EXTRA_DATA_MAX_SIZE,
+            "Extra data too large"
+        );
+        require(
+            msg.sender == proofSetOwner[setId],
+            "only the owner can move to next proving period"
+        );
         // Take removed roots out of proving set
         uint256[] storage removals = scheduledRemovals[setId];
         uint256[] memory removalsToProcess = new uint256[](removals.length);
@@ -470,7 +646,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Bring added roots into proving set
         challengeRange[setId] = proofSetLeafCount[setId];
         if (challengeEpoch - block.number < challengeFinality) {
-            revert("challenge epoch must be at least challengeFinality epochs in the future");
+            revert(
+                "challenge epoch must be at least challengeFinality epochs in the future"
+            );
         }
         nextChallengeEpoch[setId] = challengeEpoch;
 
@@ -482,7 +660,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).nextProvingPeriod(setId, challengeEpoch,proofSetLeafCount[setId], extraData);
+            PDPListener(listenerAddr).nextProvingPeriod(
+                setId,
+                challengeEpoch,
+                proofSetLeafCount[setId],
+                extraData
+            );
         }
     }
 
@@ -490,7 +673,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function removeRoots(uint256 setId, uint256[] memory rootIds) internal {
         require(proofSetLive(setId), "Proof set not live");
         uint256 totalDelta = 0;
-        for (uint256 i = 0; i < rootIds.length; i++){
+        for (uint256 i = 0; i < rootIds.length; i++) {
             totalDelta += removeOneRoot(setId, rootIds[i]);
         }
         proofSetLeafCount[setId] -= totalDelta;
@@ -498,7 +681,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // removeOneRoot removes a root's array entries from the proof sets state and returns
     // the number of leafs by which to reduce the total proof set leaf count.
-    function removeOneRoot(uint256 setId, uint256 rootId) internal returns (uint256) {
+    function removeOneRoot(
+        uint256 setId,
+        uint256 rootId
+    ) internal returns (uint256) {
         uint256 delta = rootLeafCounts[setId][rootId];
         sumTreeRemove(setId, rootId, delta);
         delete rootLeafCounts[setId][rootId];
@@ -547,7 +733,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Perform sumtree removal
     //
-    function sumTreeRemove(uint256 setId, uint256 index, uint256 delta) internal {
+    function sumTreeRemove(
+        uint256 setId,
+        uint256 index,
+        uint256 delta
+    ) internal {
         uint256 top = uint256(256 - BitOps.clz(nextRootId[setId]));
         uint256 h = uint256(heightFromIndex(index));
 
@@ -567,8 +757,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Perform sumtree find
-    function findOneRootId(uint256 setId, uint256 leafIndex, uint256 top) internal view returns (RootIdAndOffset memory) {
-        require(leafIndex < proofSetLeafCount[setId], "Leaf index out of bounds");
+    function findOneRootId(
+        uint256 setId,
+        uint256 leafIndex,
+        uint256 top
+    ) internal view returns (RootIdAndOffset memory) {
+        require(
+            leafIndex < proofSetLeafCount[setId],
+            "Leaf index out of bounds"
+        );
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
 
@@ -601,10 +798,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // findRootIds is a batched version of findOneRootId
-    function findRootIds(uint256 setId, uint256[] calldata leafIndexs) public view returns (RootIdAndOffset[] memory) {
+    function findRootIds(
+        uint256 setId,
+        uint256[] calldata leafIndexs
+    ) public view returns (RootIdAndOffset[] memory) {
         // The top of the sumtree is the largest power of 2 less than the number of roots
         uint256 top = 256 - BitOps.clz(nextRootId[setId]);
-        RootIdAndOffset[] memory result = new RootIdAndOffset[](leafIndexs.length);
+        RootIdAndOffset[] memory result = new RootIdAndOffset[](
+            leafIndexs.length
+        );
         for (uint256 i = 0; i < leafIndexs.length; i++) {
             result[i] = findOneRootId(setId, leafIndexs[i], top);
         }
@@ -615,5 +817,21 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Calculated by taking the trailing zeros of 1 plus the index
     function heightFromIndex(uint256 index) internal pure returns (uint256) {
         return BitOps.ctz(index + 1);
+    }
+
+    // Add function to get FIL/USD price
+    function getFILUSDPrice() public returns (uint64, int32) {
+        // Get FIL/USD price no older than 1 day
+        PythStructs.Price memory priceData = PYTH.getPriceNoOlderThan(
+            FIL_USD_PRICE_FEED_ID,
+            86400
+        );
+        require(priceData.price > 0, "failed to validate: price must be greater than 0");
+
+        // The Pyth price data represents USD per FIL as priceData.price * 10^(priceData.expo)
+        emit FILUSDPrice(priceData.price, priceData.expo);
+
+        // Return the price and exponent representing USD per FIL
+        return (uint64(priceData.price), priceData.expo);
     }
 }
