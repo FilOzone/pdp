@@ -8,7 +8,13 @@ CHALLENGE_FINALITY ?=
 
 # Default target
 .PHONY: all
-all: build test
+all: install build test
+
+# Install dependencies
+.PHONY: install
+install:
+	forge install
+	npm install
 
 # Build target
 .PHONY: build

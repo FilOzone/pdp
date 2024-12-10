@@ -16,6 +16,11 @@ jobs:
       - name: configure
         run: ./configure
 
+      - name: Install Dependencies
+        run: |
+          forge install
+          npm install
+
       - name: Run build
         run: |
           export PATH="/home/runner/.config/.foundry/bin:$PATH";
