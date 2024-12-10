@@ -16,6 +16,11 @@ jobs:
       - name: configure
         run: ./configure
 
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
       - name: Install Dependencies
         run: |
           forge install
