@@ -10,3 +10,4 @@ out/
 
 # Configuration backups
 configure.backup
+node_modules/

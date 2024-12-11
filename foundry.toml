@@ -12,4 +12,5 @@ remappings = [
     '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/',
     '@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/',
     'forge-std/=lib/forge-std/src/',
+    '@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity',
 ]

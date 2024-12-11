@@ -1,58 +1,69 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
+import {BitOps} from "./BitOps.sol";
+import "forge-std/console.sol";
+
 library PDPFees {
+    uint256 constant ATTO_FIL = 1;
+    uint256 constant FIL_TO_ATTO_FIL = 1e18 * ATTO_FIL;
 
-    // Estimate of USD price in FIL
-    uint256 constant FIL_USD_NUM = 10;
-    uint256 constant FIL_USD_DENOM = 35;
-           
-    uint256 constant ONE_PERCENT_DENOM = 100;
+    // 0.1 FIL
+    uint256 constant SYBIL_FEE = FIL_TO_ATTO_FIL / 10;
 
-    uint256 constant LEAVES_PER_TIB = 2^35;
+    // 2 USD/Tib/month is the current reward earned by Storage Providers
+    uint256 constant MONTHLY_TIB_STORAGE_REWARD_USD = 2;
+    // 1% of reward per period
+    uint256 constant PROOF_FEE_PERCENTAGE = 1;
+    // 4% of reward per period for gas limit left bound
+    uint256 constant GAS_LIMIT_LEFT_PERCENTAGE = 4;
+    // 5% of reward per period for gas limit right bound
+    uint256 constant GAS_LIMIT_RIGHT_PERCENTAGE = 5;
+    uint256 constant USD_DECIMALS = 1e18;
 
-    uint256 constant EPOCHS_PER_MONTH = 86_400;
-    // Revenue in usd per TiB per month
-    uint256 constant MONTHLY_TIB_REVENUE_USD_NUM = 35;
-    uint256 constant MONTHLY_TIB_REVENUE_USD_DENOM = 10;
+    // 1 TiB in bytes (2^40)
+    uint256 constant TIB_IN_BYTES = 2 ** 40;
+    // Number of epochs per month (30 days * 2880 epochs per day)
+    uint256 constant EPOCHS_PER_MONTH = 86400;
 
-    uint256 constant PROOF_GAS_FLOOR = 2_000_000;
-    uint256 constant ONE_NANO_FIL = 10^9;
-    uint256 constant ONE_FIL = 10^18;
+    /// @return proof fee in AttoFIL
+    function proofFeeWithGasFeeBound(
+        uint256 estimatedGasFee, // in AttoFIL
+        uint64 filUsdPrice,
+        int32 filUsdPriceExpo,
+        uint256 rawSize,
+        uint256 nProofEpochs
+    ) internal pure returns (uint256) {
+        require(estimatedGasFee > 0, "failed to validate: estimated gas fee must be greater than 0");
+        require(filUsdPrice > 0, "failed to validate: AttoFIL price must be greater than 0");
+        require(rawSize > 0, "failed to validate: raw size must be greater than 0");
 
-    uint256 constant SYBIL_FEE = 10^17;
-
-    // Currently unused
-    //
-    // Returns the service fee for a given proofset duration, and size
-    // Size measured in leaves (32 byte chunks), duration measured in epochs
-    function serviceFee(uint256 duration, uint256 size) internal pure returns (uint256) {
-        // 1 FIL / TiB / month ~ revenue 
-        // 86,400 epochs / month
-        // 2^35 leafs / TiB
-        // fee is 1% of revenue
-
-        // [(Monthly revenue in USD) * (FIL / USD) * size * duration] / 
-        // [Leaves per TiB * Epochs per month * 1%]
-        uint256 numerator = ONE_FIL * MONTHLY_TIB_REVENUE_USD_NUM * FIL_USD_NUM * size * duration;
-        uint256 denominator = MONTHLY_TIB_REVENUE_USD_DENOM * FIL_USD_DENOM * LEAVES_PER_TIB * EPOCHS_PER_MONTH * ONE_PERCENT_DENOM;
-        return numerator / denominator;
-    }
-
-    // Returns the proof fee for a given challenge count
-    function proofFee(uint256 challengeCount) internal view returns (uint256) {
-        uint256 gasPrice;
-        if (block.basefee > ONE_NANO_FIL) {
-            gasPrice = block.basefee;
+        // Calculate reward per epoch per byte (in AttoFIL)
+        uint256 rewardPerEpochPerByte;
+        if (filUsdPriceExpo >= 0) {
+            rewardPerEpochPerByte = (MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL) / (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
         } else {
-            gasPrice = ONE_NANO_FIL;
+            rewardPerEpochPerByte = (MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
+            (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice);
         }
-        uint256 numerator = PROOF_GAS_FLOOR * challengeCount * gasPrice;
-        uint256 denominator = ONE_PERCENT_DENOM;
-        return numerator / denominator;
+
+        // Calculate total reward for the proving period
+        uint256 rewardPerPeriod = rewardPerEpochPerByte * nProofEpochs * rawSize;
+
+        // Calculate gas limits
+        uint256 gasLimitRight = (rewardPerPeriod * GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
+        uint256 gasLimitLeft = (rewardPerPeriod * GAS_LIMIT_LEFT_PERCENTAGE) / 100;
+
+        if (estimatedGasFee >= gasLimitRight) {
+            return 0; // No proof fee if gas fee is above right limit
+        } else if (estimatedGasFee >= gasLimitLeft) {
+            return gasLimitRight - estimatedGasFee; // Partial discount on proof fee
+        } else {
+            return (rewardPerPeriod * PROOF_FEE_PERCENTAGE) / 100;
+        }
     }
 
-    // sybil fee adds cost to adding state to the pdp verifier contract to prevent 
+    // sybil fee adds cost to adding state to the pdp verifier contract to prevent
     // wasteful state growth. 0.1 FIL
     function sybilFee() internal pure returns (uint256) {
         return SYBIL_FEE;
