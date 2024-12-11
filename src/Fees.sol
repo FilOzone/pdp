@@ -59,7 +59,6 @@ library PDPFees {
         } else if (estimatedGasFee >= gasLimitLeft) {
             return gasLimitRight - estimatedGasFee; // Partial discount on proof fee
         } else {
-            // Full proof fee is PROOF_FEE_PERCENTAGE% of reward
             return (rewardPerPeriod * PROOF_FEE_PERCENTAGE) / 100;
         }
     }

@@ -13,46 +13,18 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "forge-std/console.sol";
 
 interface PDPListener {
-    function proofSetCreated(
-        uint256 proofSetId,
-        address creator,
-        bytes calldata extraData
-    ) external;
-    function proofSetDeleted(
-        uint256 proofSetId,
-        uint256 deletedLeafCount,
-        bytes calldata extraData
-    ) external;
-    function rootsAdded(
-        uint256 proofSetId,
-        uint256 firstAdded,
-        PDPVerifier.RootData[] memory rootData,
-        bytes calldata extraData
-    ) external;
-    function rootsScheduledRemove(
-        uint256 proofSetId,
-        uint256[] memory rootIds,
-        bytes calldata extraData
-    ) external;
-    // Note: extraData not included as proving messages conceptually always originate from the SP
-    function possessionProven(
-        uint256 proofSetId,
-        uint256 challengedLeafCount,
-        uint256 seed,
-        uint256 challengeCount
-    ) external;
-    function nextProvingPeriod(
-        uint256 proofSetId,
-        uint256 challengeEpoch,
-        uint256 leafCount,
-        bytes calldata extraData
-    ) external;
+    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata extraData) external;
+        function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount, bytes calldata extraData) external;
+        function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] memory rootData, bytes calldata extraData) external;
+        function rootsScheduledRemove(uint256 proofSetId, uint256[] memory rootIds, bytes calldata extraData) external;
+        // Note: extraData not included as proving messages conceptually always originate from the SP
+        function possessionProven(uint256 proofSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external;
+        function nextProvingPeriod(uint256 proofSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata extraData) external;
 }
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
-    address public constant BURN_ACTOR =
-        0xff00000000000000000000000000000000000063;
+    address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
     uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_ROOT_SIZE = 1 << 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
