@@ -143,4 +143,38 @@ contract PDPFeesTest is Test {
         uint256 fee = PDPFees.sybilFee();
         assertEq(fee, PDPFees.SYBIL_FEE, "Sybil fee should match the constant");
     }
+
+    function testProofFeeWithGasFeeBoundAtLeftBoundary() public pure {
+        uint64 filUsdPrice = 5;
+        int32 filUsdPriceExpo = 0;
+        uint256 rawSize = 1e18;
+
+        uint256 rewardPerPeriod = computeRewardPerPeriod(filUsdPrice, filUsdPriceExpo, rawSize);
+        uint256 gasLimitLeft = (rewardPerPeriod * PDPFees.GAS_LIMIT_LEFT_PERCENTAGE) / 100;
+        
+        // Test exactly at gasLimitLeft
+        uint256 estimatedGasFee = gasLimitLeft;
+        
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+        
+        uint256 expectedFee = (rewardPerPeriod * PDPFees.PROOF_FEE_PERCENTAGE) / 100;
+        assertEq(fee, expectedFee, "Fee should be full proof fee at left boundary");
+    }
+
+    function testProofFeeWithGasFeeBoundNearRightBoundary() public pure {
+        uint64 filUsdPrice = 5;
+        int32 filUsdPriceExpo = 0;
+        uint256 rawSize = 1e18;
+
+        uint256 rewardPerPeriod = computeRewardPerPeriod(filUsdPrice, filUsdPriceExpo, rawSize);
+        uint256 gasLimitRight = (rewardPerPeriod * PDPFees.GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
+        
+        // Test at gasLimitRight - 1
+        uint256 estimatedGasFee = gasLimitRight - 1;
+        
+        uint256 fee = PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+        
+        uint256 expectedFee = 1; // Should be gasLimitRight - estimatedGasFee = 1
+        assertEq(fee, expectedFee, "Fee should be 1 when estimatedGasFee is just below right boundary");
+    }
 }
