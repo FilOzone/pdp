@@ -40,7 +40,8 @@ library PDPFees {
         // Calculate reward per epoch per byte (in AttoFIL)
         uint256 rewardPerEpochPerByte;
         if (filUsdPriceExpo >= 0) {
-            rewardPerEpochPerByte = (ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL) / (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
+            rewardPerEpochPerByte = (ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL) / 
+            (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
         } else {
             rewardPerEpochPerByte = (ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
                 (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice);
