@@ -48,18 +48,18 @@ library PDPFees {
         }
 
         // Calculate total reward for the proving period
-        uint256 rewardPerPeriod = rewardPerEpochPerByte * nProofEpochs * rawSize;
+        uint256 reward = rewardPerEpochPerByte * nProofEpochs * rawSize;
 
         // Calculate gas limits
-        uint256 gasLimitRight = (rewardPerPeriod * GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
-        uint256 gasLimitLeft = (rewardPerPeriod * GAS_LIMIT_LEFT_PERCENTAGE) / 100;
+        uint256 gasLimitRight = (reward * GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
+        uint256 gasLimitLeft = (reward * GAS_LIMIT_LEFT_PERCENTAGE) / 100;
 
         if (estimatedGasFee >= gasLimitRight) {
             return 0; // No proof fee if gas fee is above right limit
         } else if (estimatedGasFee >= gasLimitLeft) {
             return gasLimitRight - estimatedGasFee; // Partial discount on proof fee
         } else {
-            return (rewardPerPeriod * PROOF_FEE_PERCENTAGE) / 100;
+            return (reward * PROOF_FEE_PERCENTAGE) / 100;
         }
     }
 
