@@ -660,6 +660,35 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         tearDown();
     }
 
+    function testProofSetLastProvenEpochOnRootRemoval() public {
+        // Create a proof set and verify initial lastProvenEpoch is 0
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        assertEq(pdpVerifier.getProofSetLastProvenEpoch(setId), 0, "Initial lastProvenEpoch should be 0");
+
+        // Mock block.number to 2881    
+        uint256 blockNumber = 2881;
+        vm.roll(blockNumber);
+        // Add a root and verify lastProvenEpoch is set to current block number
+        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
+        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+
+
+        pdpVerifier.addRoots(setId, roots, empty);
+        assertEq(pdpVerifier.getProofSetLastProvenEpoch(setId), blockNumber, "lastProvenEpoch should be set to block.number after adding root");
+
+        // Schedule root removal
+        uint256[] memory rootsToRemove = new uint256[](1);
+        rootsToRemove[0] = 0;
+        pdpVerifier.scheduleRemovals(setId, rootsToRemove, empty);
+
+
+        // Call nextProvingPeriod and verify lastProvenEpoch is reset to 0
+        pdpVerifier.nextProvingPeriod(setId, blockNumber + challengeFinalityDelay, empty);
+        assertEq(pdpVerifier.getProofSetLastProvenEpoch(setId), 0, "lastProvenEpoch should be reset to 0 after removing last root");
+
+        tearDown();
+    }
+
     function testLateProofAccepted() public {
         // Mock Pyth oracle call to return $5 USD/FIL
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();

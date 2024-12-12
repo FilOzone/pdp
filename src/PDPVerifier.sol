@@ -195,6 +195,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return (proofSetOwner[setId], proofSetProposedOwner[setId]);
     }
 
+    function getProofSetLastProvenEpoch(uint256 setId) public view returns (uint256) {
+        require(proofSetLive(setId), "Proof set not live");
+        return proofSetLastProvenEpoch[setId];
+    }
+
     // Returns the root CID for a given proof set and root ID
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
         require(proofSetLive(setId), "Proof set not live");
