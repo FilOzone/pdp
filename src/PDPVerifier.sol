@@ -40,8 +40,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event ProofSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event RootsAdded(uint256 indexed firstAdded);
     event RootsRemoved(uint256[] indexed rootIds);
-    event ProofFeePaid(uint256 indexed setId, uint256 fee);
-    event FILUSDPrice(int64 price, int32 expo);
+    event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
 
     // Types
     // State fields
@@ -429,14 +428,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             // Return the overpayment
             payable(msg.sender).transfer(msg.value - proofFee);
         }
-        emit ProofFeePaid(setId, proofFee);
+        emit ProofFeePaid(setId, proofFee, filUsdPrice, filUsdPriceExpo);
     }
 
     function calculateCallDataSize(Proof[] calldata proofs) internal pure returns (uint256) {
         uint256 callDataSize = 0;
         for (uint256 i = 0; i < proofs.length; i++) {
-            // 32 for the leaf + each element in the proof is 32 bytes
-            callDataSize += 32 + (proofs[i].proof.length * 32);
+            // 64 for the (leaf + abi encoding overhead ) + each element in the proof is 32 bytes
+            callDataSize += 64 + (proofs[i].proof.length * 32);
         }
         return callDataSize;
     }
@@ -634,16 +633,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Add function to get FIL/USD price
-    function getFILUSDPrice() public returns (uint64, int32) {
+    function getFILUSDPrice() public view returns (uint64, int32) {
         // Get FIL/USD price no older than 1 day
         PythStructs.Price memory priceData = PYTH.getPriceNoOlderThan(
             FIL_USD_PRICE_FEED_ID,
             SECONDS_IN_DAY
         );
         require(priceData.price > 0, "failed to validate: price must be greater than 0");
-
-        // The Pyth price data represents USD per FIL as priceData.price * 10**(priceData.expo)
-        emit FILUSDPrice(priceData.price, priceData.expo);
 
         // Return the price and exponent representing USD per FIL
         return (uint64(priceData.price), priceData.expo);

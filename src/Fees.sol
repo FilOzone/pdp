@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {BitOps} from "./BitOps.sol";
-import "forge-std/console.sol";
 
 library PDPFees {
     uint256 constant ATTO_FIL = 1;
