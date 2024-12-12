@@ -113,6 +113,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
     mapping(uint256 => address) proofSetProposedOwner;
+    uint256 constant NO_PROVEN_EPOCH = 0;
     mapping(uint256 => uint256) proofSetLastProvenEpoch;
 
     // Methods
@@ -261,6 +262,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         nextChallengeEpoch[setId] = 0;  // Re-initialized when the first root is added.
         proofSetOwner[setId] = msg.sender;
         proofSetListener[setId] = listenerAddr;
+        proofSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
 
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).proofSetCreated(setId, msg.sender, extraData);
@@ -281,6 +283,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         proofSetLeafCount[setId] = 0;
         proofSetOwner[setId] = address(0);
         nextChallengeEpoch[setId] = 0;
+        proofSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
@@ -312,6 +315,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (needsChallengeEpoch) {
             nextChallengeEpoch[setId] = block.number + challengeFinality;
             challengeRange[setId] = proofSetLeafCount[setId];
+            proofSetLastProvenEpoch[setId] = block.number;
         }
 
         address listenerAddr = proofSetListener[setId];
@@ -492,6 +496,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Clear next challenge epoch if the set is now empty.
         // It will be re-set when new data is added.
         if (proofSetLeafCount[setId] == 0) {
+            proofSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
             nextChallengeEpoch[setId] = 0;
         }
 
