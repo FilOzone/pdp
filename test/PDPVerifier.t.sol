@@ -639,6 +639,11 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Test 1: Sending less than the required fee
 
+        // this is not the cleanest but it's the easiest way to calculate the correct fee
+        // as the proof fee calculation depends on gas fee and there is not good way
+        // to mock the total gas units that the provePossession function will use
+        // so we've just hardcoded the correct fee here by calling `provePossession` once
+        // and then using the gas used to calculate the correct fee here
         uint256 correctFee = 388051072754688;
         vm.expectRevert("Incorrect fee amount");
         pdpVerifier.provePossession{value: correctFee-1}(setId, proofs);
