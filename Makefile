@@ -7,6 +7,10 @@ PASSWORD ?=
 CHALLENGE_FINALITY ?=
 
 # Default target
+.PHONY: default
+default: build test
+
+# All target including installation
 .PHONY: all
 all: install build test
 

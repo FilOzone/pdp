@@ -29,6 +29,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
+    uint256 public constant SECONDS_IN_DAY = 86400;
     IPyth public constant PYTH = IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
 
     // FIL/USD price feed query ID on the Pyth network
@@ -637,7 +638,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Get FIL/USD price no older than 1 day
         PythStructs.Price memory priceData = PYTH.getPriceNoOlderThan(
             FIL_USD_PRICE_FEED_ID,
-            86400
+            SECONDS_IN_DAY
         );
         require(priceData.price > 0, "failed to validate: price must be greater than 0");
 

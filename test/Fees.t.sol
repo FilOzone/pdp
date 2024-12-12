@@ -10,10 +10,10 @@ contract PDPFeesTest is Test {
     function computeRewardPerPeriod(uint64 filUsdPrice, int32 filUsdPriceExpo, uint256 rawSize) internal pure returns (uint256) {
         uint256 rewardPerEpochPerByte;
         if (filUsdPriceExpo >= 0) {
-            rewardPerEpochPerByte = (PDPFees.MONTHLY_TIB_STORAGE_REWARD_USD * PDPFees.FIL_TO_ATTO_FIL) /
+            rewardPerEpochPerByte = (PDPFees.ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * PDPFees.FIL_TO_ATTO_FIL) /
                 (PDPFees.TIB_IN_BYTES * PDPFees.EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
         } else {
-            rewardPerEpochPerByte = (PDPFees.MONTHLY_TIB_STORAGE_REWARD_USD * PDPFees.FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
+            rewardPerEpochPerByte = (PDPFees.ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * PDPFees.FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
                 (PDPFees.TIB_IN_BYTES * PDPFees.EPOCHS_PER_MONTH * filUsdPrice);
         }
         uint256 rewardPerPeriod = rewardPerEpochPerByte * epochs_per_day * rawSize;

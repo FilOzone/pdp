@@ -12,7 +12,7 @@ library PDPFees {
     uint256 constant SYBIL_FEE = FIL_TO_ATTO_FIL / 10;
 
     // 2 USD/Tib/month is the current reward earned by Storage Providers
-    uint256 constant MONTHLY_TIB_STORAGE_REWARD_USD = 2;
+    uint256 constant ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD = 2;
     // 1% of reward per period
     uint256 constant PROOF_FEE_PERCENTAGE = 1;
     // 4% of reward per period for gas limit left bound
@@ -41,25 +41,25 @@ library PDPFees {
         // Calculate reward per epoch per byte (in AttoFIL)
         uint256 rewardPerEpochPerByte;
         if (filUsdPriceExpo >= 0) {
-            rewardPerEpochPerByte = (MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL) / (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
+            rewardPerEpochPerByte = (ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL) / (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
         } else {
-            rewardPerEpochPerByte = (MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
-            (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice);
+            rewardPerEpochPerByte = (ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
+                (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice);
         }
 
         // Calculate total reward for the proving period
-        uint256 reward = rewardPerEpochPerByte * nProofEpochs * rawSize;
+        uint256 estimatedCurrentReward = rewardPerEpochPerByte * nProofEpochs * rawSize;
 
         // Calculate gas limits
-        uint256 gasLimitRight = (reward * GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
-        uint256 gasLimitLeft = (reward * GAS_LIMIT_LEFT_PERCENTAGE) / 100;
+        uint256 gasLimitRight = (estimatedCurrentReward * GAS_LIMIT_RIGHT_PERCENTAGE) / 100;
+        uint256 gasLimitLeft = (estimatedCurrentReward * GAS_LIMIT_LEFT_PERCENTAGE) / 100;
 
         if (estimatedGasFee >= gasLimitRight) {
             return 0; // No proof fee if gas fee is above right limit
         } else if (estimatedGasFee >= gasLimitLeft) {
             return gasLimitRight - estimatedGasFee; // Partial discount on proof fee
         } else {
-            return (reward * PROOF_FEE_PERCENTAGE) / 100;
+            return (estimatedCurrentReward * PROOF_FEE_PERCENTAGE) / 100;
         }
     }
 
