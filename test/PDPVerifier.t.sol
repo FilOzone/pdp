@@ -619,6 +619,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     function testProveWithDifferentFeeAmounts() public {
         // Mock Pyth oracle call to return $5 USD/FIL
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
+        price.price = 1;
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
         uint leafCount = 10;
@@ -634,8 +635,8 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         uint challengeCount = 3;
         PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
-        // Mock block.number to 2880
-        vm.roll(2880);
+        // Mock block.number to 2881
+        vm.roll(2881);
 
         // Test 1: Sending less than the required fee
 
@@ -644,7 +645,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // to mock the total gas units that the provePossession function will use
         // so we've just hardcoded the correct fee here by calling `provePossession` once
         // and then using the gas used to calculate the correct fee here
-        uint256 correctFee = 388051072754688;
+        uint256 correctFee = 118234;
         vm.expectRevert("Incorrect fee amount");
         pdpVerifier.provePossession{value: correctFee-1}(setId, proofs);
 
