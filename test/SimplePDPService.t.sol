@@ -169,9 +169,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
         // Expect fault event when calling nextProvingPeriod without proof
         vm.expectEmit(true, true, true, true);
-        uint256[] memory faultedPeriods = new uint256[](1);
-        faultedPeriods[0] = pdpService.provingDeadlines(proofSetId);
-        emit SimplePDPService.FaultRecord(proofSetId, 1, faultedPeriods);
+        emit SimplePDPService.FaultRecord(proofSetId, 1, pdpService.provingDeadlines(proofSetId));
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
     }
 
@@ -183,9 +181,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
         // Expect fault event when calling nextProvingPeriod without proof
         vm.expectEmit(true, true, true, true);
-        uint256[] memory faultedPeriods = new uint256[](1);
-        faultedPeriods[0] = pdpService.provingDeadlines(proofSetId);
-        emit SimplePDPService.FaultRecord(proofSetId, 1, faultedPeriods);
+        emit SimplePDPService.FaultRecord(proofSetId, 1, pdpService.provingDeadlines(proofSetId));
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
     }
 
@@ -196,9 +192,7 @@ contract SimplePDPServiceFaultsTest is Test {
         vm.roll(block.number + pdpService.getMaxProvingPeriod() + 1);
         // Expect a fault event
         vm.expectEmit(true, true, true, true);
-        uint256[] memory faultedPeriods = new uint256[](1);
-        faultedPeriods[0] = pdpService.provingDeadlines(proofSetId);
-        emit SimplePDPService.FaultRecord(proofSetId, 1, faultedPeriods);
+        emit SimplePDPService.FaultRecord(proofSetId, 1, pdpService.provingDeadlines(proofSetId));
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
         assertFalse(pdpService.provenThisPeriod(proofSetId));
     }
@@ -221,11 +215,7 @@ contract SimplePDPServiceFaultsTest is Test {
         pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
 
         vm.expectEmit(true, true, true, true);
-        uint256[] memory faultedPeriods = new uint256[](3);
-        for (uint256 i = 0; i < 3; i++) {
-            faultedPeriods[i] = pdpService.provingDeadlines(proofSetId) + i * pdpService.getMaxProvingPeriod();
-        }
-        emit SimplePDPService.FaultRecord(proofSetId, 3, faultedPeriods);
+        emit SimplePDPService.FaultRecord(proofSetId, 3, pdpService.provingDeadlines(proofSetId));
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
     }
 
@@ -245,10 +235,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
         // Should emit fault record for 2 periods (current period not counted since not yet expired)
         vm.expectEmit(true, true, true, true);
-        uint256[] memory faultedPeriods = new uint256[](2);
-        faultedPeriods[0] = pdpService.provingDeadlines(proofSetId);
-        faultedPeriods[1] = pdpService.provingDeadlines(proofSetId) + pdpService.getMaxProvingPeriod();
-        emit SimplePDPService.FaultRecord(proofSetId, 2, faultedPeriods);
+        emit SimplePDPService.FaultRecord(proofSetId, 2, pdpService.provingDeadlines(proofSetId));
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
     }
 
@@ -261,7 +248,7 @@ contract SimplePDPServiceFaultsTest is Test {
         pdpService.possessionProven(proofSetId, leafCount, seed, 5);
         vm.expectRevert("Only one proof of possession allowed per proving period. Open a new proving period.");
         pdpService.possessionProven(proofSetId, leafCount, seed, 5);
-    }  
+    }
 
 
     function testCantProveBeforePeriodIsOpen() public {
@@ -307,10 +294,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
         // Should emit fault record for 2 periods
         vm.expectEmit(true, true, true, true);
-        uint256[] memory faultedPeriods = new uint256[](2);
-        faultedPeriods[0] = pdpService.provingDeadlines(proofSetId);
-        faultedPeriods[1] = pdpService.provingDeadlines(proofSetId) + pdpService.getMaxProvingPeriod();
-        emit SimplePDPService.FaultRecord(proofSetId, 2, faultedPeriods);
+        emit SimplePDPService.FaultRecord(proofSetId, 2, pdpService.provingDeadlines(proofSetId));
         // Works right on the deadline
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId)+pdpService.challengeWindow(), leafCount, empty);
     }
