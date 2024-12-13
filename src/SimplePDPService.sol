@@ -74,7 +74,7 @@ contract PDPRecordKeeper {
 contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event FaultRecord(uint256 indexed proofSetId, uint256 periodsFaulted, uint256 deadline);
 
-    uint256 public constant NO_CHALLENGE_SCHEDULED = 0; 
+    uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVING_DEADLINE = 0;
 
     // The address of the PDP verifier contract that is allowed to call this contract
@@ -114,7 +114,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
         return 60;
     }
 
-    // Initial value for challenge window start 
+    // Initial value for challenge window start
     // Can be used for first call to nextProvingPeriod
     function initChallengeWindowStart() public view returns (uint256) {
         return block.number + getMaxProvingPeriod() - challengeWindow();
@@ -137,7 +137,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
     }
 
     // The start of the NEXT OPEN proving period's challenge window
-    // Useful for querying before nextProvingPeriod to determine challengeEpoch to submit for nextProvingPeriod    
+    // Useful for querying before nextProvingPeriod to determine challengeEpoch to submit for nextProvingPeriod
     function nextChallengeWindowStart(uint256 setId) public view returns (uint256) {
         if (provingDeadlines[setId] == NO_PROVING_DEADLINE) {
             revert("Proving period not yet initialized");
@@ -189,6 +189,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
         // check for proof outside of challenge window
         if (provingDeadlines[proofSetId] < block.number) {
             revert("Current proving period passed. Open a new proving period.");
+        }
 
         if (provingDeadlines[proofSetId] - challengeWindow() > block.number) {
             revert("Too early. Wait for challenge window to open");
@@ -217,7 +218,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
         if (block.number <= prevDeadline) {
             revert("One call to nextProvingPeriod allowed per proving period");
         }
-    
+
         uint256 periodsSkipped;
         // Proving period is open 0 skipped periods
         if (block.number <= provingDeadlines[proofSetId]) {
@@ -227,7 +228,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
         }
 
         uint256 nextDeadline;
-        // the proofset has become empty and provingDeadline is set inactive 
+        // the proofset has become empty and provingDeadline is set inactive
         if (challengeEpoch == NO_CHALLENGE_SCHEDULED) {
             nextDeadline = NO_PROVING_DEADLINE;
         } else {
