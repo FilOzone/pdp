@@ -72,7 +72,7 @@ contract PDPRecordKeeper {
 // and provides a way to query these events.
 // This contract only supports one PDP service caller, set in the constructor.
 contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUpgradeable, OwnableUpgradeable {
-    event FaultRecord(uint256 indexed proofSetId, uint256 periodsFaulted, uint256[] faultedPeriods);
+    event FaultRecord(uint256 indexed proofSetId, uint256 periodsFaulted, uint256 deadline);
 
     // The address of the PDP verifier contract that is allowed to call this contract
     address public pdpVerifierAddress;
@@ -216,11 +216,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
             faultPeriods += 1;
         }
         if (faultPeriods > 0) {
-            uint256[] memory faultedPeriodsList = new uint256[](faultPeriods);
-            for (uint256 i = 0; i < faultPeriods; i++) {
-                faultedPeriodsList[i] = provingDeadlines[proofSetId] + i * getMaxProvingPeriod();
-            }
-            emit FaultRecord(proofSetId, faultPeriods, faultedPeriodsList);
+            emit FaultRecord(proofSetId, faultPeriods, provingDeadlines[proofSetId]);
         }
         provingDeadlines[proofSetId] = nextDeadline;
         provenThisPeriod[proofSetId] = false;
