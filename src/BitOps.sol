@@ -19,11 +19,6 @@ library BitOps {
         return n - x;
     }
 
-    function log2(uint256 x) internal pure returns (uint256) {
-        require(x > 0, "log2(0) is undefined");
-        return 255 - clz(x);
-    }
-
     int256 constant MASK128 = 0x00000000000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
     int256 constant MASK64 = 0x0000000000000000FFFFFFFFFFFFFFFF0000000000000000FFFFFFFFFFFFFFFF;
     int256 constant MASK32 = 0x00000000FFFFFFFF00000000FFFFFFFF00000000FFFFFFFF00000000FFFFFFFF;
