@@ -26,7 +26,7 @@ if [ -z "$VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
 fi
 echo "PDP verifier implementation deployed at: $VERIFIER_IMPLEMENTATION_ADDRESS"
 echo "Deploying PDP verifier proxy"
-INIT_DATA=$(cast calldata "initialize(uint256)" 1)
+INIT_DATA=$(cast calldata "initialize(uint256)" 150)
 PDP_VERIFIER_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.20 --chain-id 314159 src/ERC1967Proxy.sol:MyERC1967Proxy --constructor-args $VERIFIER_IMPLEMENTATION_ADDRESS $INIT_DATA | grep "Deployed to" | awk '{print $3}')
 echo "PDP verifier deployed at: $PDP_VERIFIER_ADDRESS"
 
