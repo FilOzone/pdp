@@ -34,6 +34,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // FIL/USD price feed query ID on the Pyth network
     bytes32 public constant FIL_USD_PRICE_FEED_ID = 0x150ac9b959aee0051e4091f0ef5216d941f590e1c5e7f91cf7635b5c11628c0e;
+    uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
 
     // Events
     event ProofSetCreated(uint256 indexed setId);
@@ -41,6 +42,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event RootsAdded(uint256 indexed firstAdded);
     event RootsRemoved(uint256[] indexed rootIds);
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
+    event ProofSetEmpty(uint256 indexed setId);
 
     // Types
     // State fields
@@ -266,7 +268,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
-        nextChallengeEpoch[setId] = 0;  // Re-initialized when the first root is added.
+        nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED;  // Initialized on first call to NextProvingPeriod
         proofSetOwner[setId] = msg.sender;
         proofSetListener[setId] = listenerAddr;
         proofSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
@@ -306,23 +308,17 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Appends new roots to the collection managed by a proof set.
-    // These roots won't be challenged until the next proving period.
+    // These roots won't be challenged until the next proving period is 
+    // started by calling nextProvingPeriod.
     function addRoots(uint256 setId, RootData[] calldata rootData, bytes calldata extraData) public returns (uint256) {
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(proofSetLive(setId), "Proof set not live");
         require(rootData.length > 0, "Must add at least one root");
         require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
-        bool needsChallengeEpoch = nextChallengeEpoch[setId] == 0;
         uint256 firstAdded = nextRootId[setId];
 
         for (uint256 i = 0; i < rootData.length; i++) {
             addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
-        }
-        // Initialise the first challenge epoch and challengeable leaf range when the first data is added.
-        if (needsChallengeEpoch) {
-            nextChallengeEpoch[setId] = block.number + challengeFinality;
-            challengeRange[setId] = proofSetLeafCount[setId];
-            proofSetLastProvenEpoch[setId] = block.number;
         }
 
         address listenerAddr = proofSetListener[setId];
@@ -390,7 +386,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 challengeEpoch = nextChallengeEpoch[setId];
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
-
+        require(challengeEpoch != NO_CHALLENGE_SCHEDULED, "no challenge scheduled");
+        
         uint256 seed = drawChallengeSeed(setId);
         uint256 leafCount = challengeRange[setId];
         uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
@@ -493,6 +490,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function nextProvingPeriod(uint256 setId, uint256 challengeEpoch, bytes calldata extraData) public {
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(msg.sender == proofSetOwner[setId], "only the owner can move to next proving period");
+        require(proofSetLeafCount[setId] > 0, "can only start proving once leaves are added");
+        
+        if (proofSetLastProvenEpoch[setId] == NO_PROVEN_EPOCH) {
+            proofSetLastProvenEpoch[setId] = block.number;
+        }
+
         // Take removed roots out of proving set
         uint256[] storage removals = scheduledRemovals[setId];
         uint256[] memory removalsToProcess = new uint256[](removals.length);
@@ -505,21 +508,22 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         removeRoots(setId, removalsToProcess);
         // Bring added roots into proving set
         challengeRange[setId] = proofSetLeafCount[setId];
-        if (challengeEpoch - block.number < challengeFinality) {
+        if (challengeEpoch < block.number + challengeFinality) {
             revert("challenge epoch must be at least challengeFinality epochs in the future");
         }
         nextChallengeEpoch[setId] = challengeEpoch;
 
         // Clear next challenge epoch if the set is now empty.
-        // It will be re-set when new data is added.
+        // It will be re-set after new data is added and nextProvingPeriod is called.
         if (proofSetLeafCount[setId] == 0) {
+            emit ProofSetEmpty(setId);
             proofSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
-            nextChallengeEpoch[setId] = 0;
+            nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED;
         }
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).nextProvingPeriod(setId, challengeEpoch,proofSetLeafCount[setId], extraData);
+            PDPListener(listenerAddr).nextProvingPeriod(setId, nextChallengeEpoch[setId], proofSetLeafCount[setId], extraData);
         }
     }
 

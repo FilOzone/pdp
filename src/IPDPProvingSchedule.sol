@@ -12,6 +12,11 @@ interface IPDPProvingSchedule {
     /// @return Challenge window size in epochs
     function challengeWindow() external pure returns (uint256);
 
+    /// @notice Value for initializing the challenge window start for a given proof set assuming proving period starts now
+    // @return Initial challenge window start in epochs
+    function initChallengeWindowStart(uint256 setId) external pure returns (uint256);
+
+
     /// @notice Calculates the start of the next challenge window for a given proof set
     /// @param setId The ID of the proof set
     /// @return The block number when the next challenge window starts

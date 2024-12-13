@@ -12,6 +12,9 @@ contract SimplePDPServiceTest is Test {
     SimplePDPService public pdpService;
     address public pdpVerifierAddress;
     bytes empty = new bytes(0);
+    uint256 public proofSetId;
+    uint256 public leafCount;
+    uint256 public seed;
 
     function setUp() public {
         pdpVerifierAddress = address(this);
@@ -19,6 +22,10 @@ contract SimplePDPServiceTest is Test {
         bytes memory initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifierAddress));
         MyERC1967Proxy pdpServiceProxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = SimplePDPService(address(pdpServiceProxy));
+        proofSetId = 1;
+        leafCount = 100;
+        seed = 12345;
+
     }
 
     function testInitialState() public view {
@@ -27,7 +34,6 @@ contract SimplePDPServiceTest is Test {
 
     function testAddRecord() public {
         uint64 epoch = 100;
-        uint256 proofSetId = 1;
 
         vm.roll(epoch);
         pdpService.proofSetCreated(proofSetId, address(this), empty);
@@ -41,7 +47,6 @@ contract SimplePDPServiceTest is Test {
     }
 
     function testListEvents() public {
-        uint256 proofSetId = 1;
         uint64 epoch1 = 100;
         uint64 epoch2 = 200;
 
@@ -67,15 +72,12 @@ contract SimplePDPServiceTest is Test {
     }
 
     function testOnlyPDPVerifierCanAddRecord() public {
-        uint256 proofSetId = 1;
-
         vm.prank(address(0xdead));
         vm.expectRevert("Caller is not the PDP verifier");
         pdpService.proofSetCreated(proofSetId, address(this), empty);
     }
 
     function testGetEventOutOfBounds() public {
-        uint256 proofSetId = 1;
         vm.expectRevert("Event index out of bounds");
         pdpService.getEvent(proofSetId, 0);
     }
@@ -88,6 +90,59 @@ contract SimplePDPServiceTest is Test {
     function testGetChallengesPerProof() public view{
         uint64 challenges = pdpService.getChallengesPerProof();
         assertEq(challenges, 5, "Challenges per proof should be 5");
+    }
+
+    function testInitialProvingPeriodHappyPath() public {
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        uint256 challengeEpoch = pdpService.initChallengeWindowStart();
+        
+        pdpService.nextProvingPeriod(proofSetId, challengeEpoch, leafCount, empty);
+        
+        assertEq(
+            pdpService.provingDeadlines(proofSetId), 
+            block.number + pdpService.getMaxProvingPeriod(),
+            "Deadline should be set to current block + max period"
+        );
+        assertFalse(pdpService.provenThisPeriod(proofSetId));
+    }
+
+    function testInitialProvingPeriodInvalidChallengeEpoch() public {
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        uint256 firstDeadline = block.number + pdpService.getMaxProvingPeriod();
+        
+        // Test too early
+        uint256 tooEarly = firstDeadline - pdpService.challengeWindow() - 1;
+        vm.expectRevert("Next challenge epoch must fall within the next challenge window");
+        pdpService.nextProvingPeriod(proofSetId, tooEarly, leafCount, empty);
+        
+        // Test too late
+        uint256 tooLate = firstDeadline + 1;
+        vm.expectRevert("Next challenge epoch must fall within the next challenge window");
+        pdpService.nextProvingPeriod(proofSetId, tooLate, leafCount, empty);
+    }
+
+    function testInactivateProofSetHappyPath() public {
+        // Setup initial state
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // Prove possession in first period
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
+        pdpService.possessionProven(proofSetId, leafCount, seed, 5);
+        
+        // Inactivate the proof set
+        pdpService.nextProvingPeriod(proofSetId, pdpService.NO_CHALLENGE_SCHEDULED(), leafCount, empty);
+        
+        assertEq(
+            pdpService.provingDeadlines(proofSetId),
+            pdpService.NO_PROVING_DEADLINE(),
+            "Proving deadline should be set to NO_PROVING_DEADLINE"
+        );
+        assertEq(
+            pdpService.provenThisPeriod(proofSetId),
+            false,
+            "Proven this period should now be false"
+        );
     }
 }
 
@@ -115,17 +170,19 @@ contract SimplePDPServiceFaultsTest is Test {
     function testPossessionProvenOnTime() public {
         // Set up the proving deadline
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
-        vm.roll(block.number + pdpService.getMaxProvingPeriod());
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
         pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
         assertTrue(pdpService.provenThisPeriod(proofSetId));
 
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
-        vm.roll(block.number + 1);
+        vm.roll(block.number + pdpService.getMaxProvingPeriod());
         pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
     }
 
     function testNextProvingPeriodCalledLastMinuteOK() public {
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         vm.roll(block.number + pdpService.getMaxProvingPeriod());
         pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
 
@@ -138,6 +195,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
     function testFirstEpochLateToProve() public {
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         vm.roll(block.number + pdpService.getMaxProvingPeriod() + 1);
         vm.expectRevert("Current proving period passed. Open a new proving period.");
         pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
@@ -146,7 +204,8 @@ contract SimplePDPServiceFaultsTest is Test {
     function testNextProvingPeriodTwiceFails() public {
         // Set up the proving deadline
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
-        vm.roll(block.number + pdpService.getMaxProvingPeriod() - 100);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
         pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
         uint256 deadline1 = pdpService.provingDeadlines(proofSetId);
         assertTrue(pdpService.provenThisPeriod(proofSetId));
@@ -163,6 +222,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
     function testFaultWithinOpenPeriod() public {
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
 
         // Move to open proving period
         vm.roll(block.number + pdpService.getMaxProvingPeriod() - 100);
@@ -175,6 +235,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
     function testFaultAfterPeriodOver() public {
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
 
         // Move past proving period
         vm.roll(block.number + pdpService.getMaxProvingPeriod() + 1);
@@ -188,6 +249,7 @@ contract SimplePDPServiceFaultsTest is Test {
     function testNextProvingPeriodWithoutProof() public {
         // Set up the proving deadline without marking as proven
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         // Move to the next period
         vm.roll(block.number + pdpService.getMaxProvingPeriod() + 1);
         // Expect a fault event
@@ -201,6 +263,7 @@ contract SimplePDPServiceFaultsTest is Test {
         uint256 invalidChallengeCount = 4; // Less than required
 
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         vm.expectRevert("Invalid challenge count < 5");
         pdpService.possessionProven(proofSetId, leafCount, seed, invalidChallengeCount);
     }
@@ -208,6 +271,7 @@ contract SimplePDPServiceFaultsTest is Test {
     function testMultiplePeriodsLate() public {
         // Set up the proving deadline
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         // Warp to 3 periods after the deadline
         vm.roll(block.number + pdpService.getMaxProvingPeriod() * 3 + 1);
         // unable to prove possession
@@ -223,9 +287,10 @@ contract SimplePDPServiceFaultsTest is Test {
         // Set up the proving deadline
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
 
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         // Move to first open proving period
-        vm.roll(block.number + pdpService.getMaxProvingPeriod() - 100);
-
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
+        
         // Submit valid proof in first period
         pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
         assertTrue(pdpService.provenThisPeriod(proofSetId));
@@ -241,9 +306,16 @@ contract SimplePDPServiceFaultsTest is Test {
 
     function testCanOnlyProveOncePerPeriod() public {
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
-        // We're technically at the previous deadline so we fail to prove until we roll forward 1
-        vm.expectRevert("Too early. Wait for proving period to open");
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+
+        // We're in the previous deadline so we fail to prove until we roll forward into challenge window
+        vm.expectRevert("Too early. Wait for challenge window to open");
         pdpService.possessionProven(proofSetId, leafCount, seed, 5);
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow() -1);
+        // We're one before the challenge window so we should still fail
+        vm.expectRevert("Too early. Wait for challenge window to open");
+        pdpService.possessionProven(proofSetId, leafCount, seed, 5);
+        // now we succeed
         vm.roll(block.number + 1);
         pdpService.possessionProven(proofSetId, leafCount, seed, 5);
         vm.expectRevert("Only one proof of possession allowed per proving period. Open a new proving period.");
@@ -252,15 +324,17 @@ contract SimplePDPServiceFaultsTest is Test {
 
     function testCantProveBeforePeriodIsOpen() public {
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
-        vm.roll(block.number + pdpService.getMaxProvingPeriod() -100);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);        
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
         pdpService.possessionProven(proofSetId, leafCount, seed, 5);
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
-        vm.expectRevert("Too early. Wait for proving period to open");
+        vm.expectRevert("Too early. Wait for challenge window to open");
         pdpService.possessionProven(proofSetId, leafCount, seed, 5);
     }
 
     function testMissChallengeWindow() public {
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         vm.roll(block.number + pdpService.getMaxProvingPeriod() - 100);
         // Too early
         uint256 tooEarly = pdpService.nextChallengeWindowStart(proofSetId)-1;
@@ -277,7 +351,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
     function testMissChallengeWindowAfterFaults() public {
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
-
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         // Skip 2 proving periods
         vm.roll(block.number + pdpService.getMaxProvingPeriod() * 3 - 100);
 
@@ -296,5 +370,47 @@ contract SimplePDPServiceFaultsTest is Test {
         emit SimplePDPService.FaultRecord(proofSetId, 2, pdpService.provingDeadlines(proofSetId));
         // Works right on the deadline
         pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId)+pdpService.challengeWindow(), leafCount, empty);
+    }
+
+    function testInactivateWithCurrentPeriodFault() public {
+        // Setup initial state
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // Move to end of period without proving
+        vm.roll(block.number + pdpService.getMaxProvingPeriod());
+        
+        // Expect fault event for the unproven period
+        vm.expectEmit(true, true, true, true);
+        emit SimplePDPService.FaultRecord(1);
+        
+        pdpService.nextProvingPeriod(proofSetId, pdpService.NO_CHALLENGE_SCHEDULED(), leafCount, empty);
+        
+        assertEq(
+            pdpService.provingDeadlines(proofSetId),
+            pdpService.NO_PROVING_DEADLINE(),
+            "Proving deadline should be set to NO_PROVING_DEADLINE"
+        );
+    }
+
+    function testInactivateWithMultiplePeriodFaults() public {
+        // Setup initial state
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // Skip 3 proving periods without proving
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() * 3 + 1);
+        
+        // Expect fault event for all missed periods
+        vm.expectEmit(true, true, true, true);
+        emit SimplePDPService.FaultRecord(3);
+        
+        pdpService.nextProvingPeriod(proofSetId, pdpService.NO_CHALLENGE_SCHEDULED(), leafCount, empty);
+        
+        assertEq(
+            pdpService.provingDeadlines(proofSetId),
+            pdpService.NO_PROVING_DEADLINE(),
+            "Proving deadline should be set to NO_PROVING_DEADLINE"
+        );
     }
 }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
@@ -256,6 +257,7 @@ contract PDPVerifierProofSetMutateTest is Test {
         PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         uint256 rootId = pdpVerifier.addRoots(setId, roots, empty);
+        assertEq(pdpVerifier.getChallengeRange(setId), 0);
         listenerAssert.expectEvent(PDPRecordKeeper.OperationType.ADD, setId);
         // flush add
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
@@ -363,7 +365,11 @@ contract PDPVerifierProofSetMutateTest is Test {
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots, empty);
         listenerAssert.expectEvent(PDPRecordKeeper.OperationType.ADD, setId);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED()); // Not updated on first add anymore
+        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        listenerAssert.expectEvent(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD, setId);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+        
 
         // Remove root
         uint256[] memory toRemove = new uint256[](1);
@@ -374,7 +380,7 @@ contract PDPVerifierProofSetMutateTest is Test {
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // flush
         listenerAssert.expectEvent(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD, setId);
 
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), 0);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED());
         assertEq(pdpVerifier.rootLive(setId, 0), false);
         assertEq(pdpVerifier.getNextRootId(setId), 1);
         assertEq(pdpVerifier.getProofSetLeafCount(setId), 0);
@@ -462,6 +468,75 @@ contract PDPVerifierProofSetMutateTest is Test {
 
         assertEq(false, pdpVerifier.rootLive(setId, 0));
         assertEq(false, pdpVerifier.rootLive(setId, 1));
+    }
+
+    function testNextProvingPeriodWithNoData() public {
+        // Get the NO_CHALLENGE_SCHEDULED constant value for clarity
+        uint256 NO_CHALLENGE = pdpVerifier.NO_CHALLENGE_SCHEDULED();
+        
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        listenerAssert.expectEvent(PDPRecordKeeper.OperationType.CREATE, setId);
+        
+        // Initial state should be NO_CHALLENGE
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE, "Initial state should be NO_CHALLENGE");
+        
+        // Try to set next proving period with various values
+        vm.expectRevert("can only start proving once leaves are added");
+        pdpVerifier.nextProvingPeriod(setId, block.number + 100, empty);
+        
+        vm.expectRevert("can only start proving once leaves are added");
+        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+
+        vm.expectRevert("can only start proving once leaves are added");
+        pdpVerifier.nextProvingPeriod(setId, type(uint256).max, empty);
+        
+        tearDown();
+    }
+    
+    function testNextProvingPeriodRevertsOnEmptyProofSet() public {
+        // Create a new proof set
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        
+        // Try to call nextProvingPeriod on the empty proof set
+        // Should revert because no leaves have been added yet
+        vm.expectRevert("can only start proving once leaves are added");
+        pdpVerifier.nextProvingPeriod(
+            setId,
+            block.number + challengeFinalityDelay,
+            empty
+        );
+    }
+
+    function testEmitProofSetEmptyEvent() public {
+        // Create a proof set with one root
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        listenerAssert.expectEvent(PDPRecordKeeper.OperationType.CREATE, setId);
+        
+        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
+        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        pdpVerifier.addRoots(setId, roots, empty);
+        listenerAssert.expectEvent(PDPRecordKeeper.OperationType.ADD, setId);
+
+        // Schedule root for removal
+        uint256[] memory toRemove = new uint256[](1);
+        toRemove[0] = 0;
+        pdpVerifier.scheduleRemovals(setId, toRemove, empty);
+        listenerAssert.expectEvent(PDPRecordKeeper.OperationType.REMOVE_SCHEDULED, setId);
+
+        // Expect ProofSetEmpty event when calling nextProvingPeriod
+        vm.expectEmit(true, false, false, false);
+        emit PDPVerifier.ProofSetEmpty(setId);
+        
+        // Call nextProvingPeriod which should remove the root and emit the event
+        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        listenerAssert.expectEvent(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD, setId);
+
+        // Verify the proof set is indeed empty
+        assertEq(pdpVerifier.getProofSetLeafCount(setId), 0);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), 0);
+        assertEq(pdpVerifier.getProofSetLastProvenEpoch(setId), 0);
+        
+        tearDown();
     }
 }
 
@@ -640,12 +715,12 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Test 1: Sending less than the required fee
 
-        // this is not the cleanest but it's the easiest way to calculate the correct fee
-        // as the proof fee calculation depends on gas fee and there is not good way
-        // to mock the total gas units that the provePossession function will use
-        // so we've just hardcoded the correct fee here by calling `provePossession` once
-        // and then using the gas used to calculate the correct fee here
-        uint256 correctFee = 118234;
+        // This is not the cleanest but recording a previous measurement of the correct fee
+        // is our only option as the proof fee calculation depends on gas which depends on 
+        // the method implementation. 
+        // To fix this method when changing code in provePossession run forge test -vvvv
+        // to get a trace, and read out the fee value from the ProofFeePaid event.
+        uint256 correctFee = 117672;
         vm.expectRevert("Incorrect fee amount");
         pdpVerifier.provePossession{value: correctFee-1}(setId, proofs);
 
@@ -674,7 +749,8 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
 
         pdpVerifier.addRoots(setId, roots, empty);
-        assertEq(pdpVerifier.getProofSetLastProvenEpoch(setId), blockNumber, "lastProvenEpoch should be set to block.number after adding root");
+        pdpVerifier.nextProvingPeriod(setId, blockNumber + challengeFinalityDelay, empty);
+        assertEq(pdpVerifier.getProofSetLastProvenEpoch(setId), blockNumber, "lastProvenEpoch should be set to block.number after first proving period root");
 
         // Schedule root removal
         uint256[] memory rootsToRemove = new uint256[](1);
@@ -861,6 +937,33 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         tearDown();
     }
 
+    function testNextProvingPeriodFlexibleScheduling() public {
+        // Mock Pyth oracle call to return $5 USD/FIL
+        (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
+        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
+
+        // Create proof set and add initial root
+        uint leafCount = 10;
+        (uint256 setId, bytes32[][] memory tree) = makeProofSetWithOneRoot(leafCount);
+
+        // Set challenge sampling far in the future
+        uint256 farFutureBlock = block.number + 1000;
+        pdpVerifier.nextProvingPeriod(setId, farFutureBlock, empty);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), farFutureBlock, "Challenge epoch should be set to far future");
+
+        // Reset to a closer block
+        uint256 nearerBlock = block.number + challengeFinalityDelay;
+        pdpVerifier.nextProvingPeriod(setId, nearerBlock, empty);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), nearerBlock, "Challenge epoch should be reset to nearer block");
+
+        // Verify we can still prove possession at the new block
+        vm.roll(nearerBlock);
+        
+        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 5, tree, 10);
+        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(nearerBlock), abi.encode(nearerBlock));
+        pdpVerifier.provePossession{value: 1e18}(setId, proofs);
+    }
+
 
     ///// Helpers /////
 
@@ -960,9 +1063,6 @@ contract SumTreeHeightTest is Test {
         }
     }
 }
-
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "../src/PDPVerifier.sol";
@@ -1490,6 +1590,8 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
         rootsPP1[0] = PDPVerifier.RootData(Cids.cidFromDigest("test1", treesA[0][0][0]), leafCountsA[0] * 32);
         rootsPP1[1] = PDPVerifier.RootData(Cids.cidFromDigest("test2", treesA[1][0][0]), leafCountsA[1] * 32);
         pdpVerifier.addRoots(setId, rootsPP1, empty);
+        // flush the original addRoots call
+        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
         uint256 challengeRangePP1 = pdpVerifier.getChallengeRange(setId);
         assertEq(challengeRangePP1, pdpVerifier.getProofSetLeafCount(setId), "Last challenged leaf should be total leaf count - 1");
