@@ -17,27 +17,34 @@ if [ -z "$KEYSTORE" ]; then
   exit 1
 fi
 
-echo "Deploying PDP verifier"
+ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
+echo "Deploying PDP verifier from address $ADDR"
 # Parse the output of forge create to extract the contract address
-VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.20 --chain-id 314159 src/PDPVerifier.sol:PDPVerifier | grep "Deployed to" | awk '{print $3}')
+ 
+NONCE="$(cast nonce --rpc-url "$RPC_URL" "$ADDR")"
+VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314159 src/PDPVerifier.sol:PDPVerifier | grep "Deployed to" | awk '{print $3}')
 if [ -z "$VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP verifier contract address"
     exit 1
 fi
 echo "PDP verifier implementation deployed at: $VERIFIER_IMPLEMENTATION_ADDRESS"
 echo "Deploying PDP verifier proxy"
+NONCE=$(expr $NONCE + "1")
+
 INIT_DATA=$(cast calldata "initialize(uint256)" 150)
-PDP_VERIFIER_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.20 --chain-id 314159 src/ERC1967Proxy.sol:MyERC1967Proxy --constructor-args $VERIFIER_IMPLEMENTATION_ADDRESS $INIT_DATA | grep "Deployed to" | awk '{print $3}')
+PDP_VERIFIER_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --nonce $NONCE --chain-id 314159 src/ERC1967Proxy.sol:MyERC1967Proxy --constructor-args $VERIFIER_IMPLEMENTATION_ADDRESS $INIT_DATA | grep "Deployed to" | awk '{print $3}')
 echo "PDP verifier deployed at: $PDP_VERIFIER_ADDRESS"
 
 echo "Deploying PDP Service"
-SERVICE_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.20 --chain-id 314159 src/SimplePDPService.sol:SimplePDPService | grep "Deployed to" | awk '{print $3}')
+NONCE=$(expr $NONCE + "1")
+SERVICE_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --nonce $NONCE --chain-id 314159 src/SimplePDPService.sol:SimplePDPService | grep "Deployed to" | awk '{print $3}')
 if [ -z "$SERVICE_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP service contract address"
     exit 1
 fi
 echo "PDP service implementation deployed at: $SERVICE_IMPLEMENTATION_ADDRESS"
 echo "Deploying PDP Service proxy"
+NONCE=$(expr $NONCE + "1")
 INIT_DATA=$(cast calldata "initialize(address)" $PDP_VERIFIER_ADDRESS)
-PDP_SERVICE_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.20 --chain-id 314159 src/ERC1967Proxy.sol:MyERC1967Proxy --constructor-args $SERVICE_IMPLEMENTATION_ADDRESS $INIT_DATA | grep "Deployed to" | awk '{print $3}')
+PDP_SERVICE_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --nonce $NONCE --chain-id 314159 src/ERC1967Proxy.sol:MyERC1967Proxy --constructor-args $SERVICE_IMPLEMENTATION_ADDRESS $INIT_DATA | grep "Deployed to" | awk '{print $3}')
 echo "PDP service deployed at: $PDP_SERVICE_ADDRESS"
