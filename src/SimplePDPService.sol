@@ -105,13 +105,13 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
     // SLA specification functions setting values for PDP service providers
     // Max number of epochs between two consecutive proofs
     function getMaxProvingPeriod() public pure returns (uint64) {
-        return 2880;
+        return 15;
     }
 
     // Number of epochs at the end of a proving period during which a
     // proof of possession can be submitted
     function challengeWindow() public pure returns (uint256) {
-        return 60;
+        return 5;
     }
 
     // Initial value for challenge window start
