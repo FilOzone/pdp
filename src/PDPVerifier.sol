@@ -37,12 +37,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
 
     // Events
-    event ProofSetCreated(uint256 indexed setId);
+    event ProofSetCreated(uint256 indexed setId, address indexed owner);
+    event ProofSetOwnerChanged(uint256 indexed setId, address indexed oldOwner, address indexed newOwner);
     event ProofSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
-    event RootsAdded(uint256 indexed firstAdded);
-    event RootsRemoved(uint256[] indexed rootIds);
-    event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
     event ProofSetEmpty(uint256 indexed setId);
+
+    event RootsAdded(uint256 indexed setId, uint256[] rootIds);
+    event RootsRemoved(uint256 indexed setId, uint256[] rootIds);
+   
+    event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
 
     // Types
     // State fields
@@ -249,8 +252,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function claimProofSetOwnership(uint256 setId) public {
         require(proofSetLive(setId), "Proof set not live");
         require(proofSetProposedOwner[setId] == msg.sender, "Only the proposed owner can claim ownership");
+        address oldOwner = proofSetOwner[setId];
         proofSetOwner[setId] = msg.sender;
         delete proofSetProposedOwner[setId];
+        emit ProofSetOwnerChanged(setId, oldOwner, msg.sender);
     }
 
     // A proof set is created empty, with no roots. Creation yields a proof set ID
@@ -276,7 +281,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).proofSetCreated(setId, msg.sender, extraData);
         }
-        emit ProofSetCreated(setId);
+        emit ProofSetCreated(setId, msg.sender);
         return setId;
     }
 
@@ -321,11 +326,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
         }
 
+        uint256[] memory rootIds = new uint256[](rootData.length);
+        for (uint256 i = 0; i < rootData.length; i++) {
+            rootIds[i] = firstAdded + i;
+        }
+        emit RootsAdded(setId, rootIds);
+
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).rootsAdded(setId, firstAdded, rootData, extraData);
         }
-        emit RootsAdded(firstAdded);
 
         return firstAdded;
     }
@@ -506,6 +516,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         removeRoots(setId, removalsToProcess);
+        emit RootsRemoved(setId, removalsToProcess);
+        
         // Bring added roots into proving set
         challengeRange[setId] = proofSetLeafCount[setId];
         if (challengeEpoch < block.number + challengeFinality) {
