@@ -71,7 +71,7 @@ contract PDPRecordKeeper {
 // It maintains a record of all events that have occurred in the PDP service,
 // and provides a way to query these events.
 // This contract only supports one PDP service caller, set in the constructor.
-contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event FaultRecord(uint256 indexed proofSetId, uint256 periodsFaulted, uint256 deadline);
 
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
@@ -157,26 +157,17 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
 
     // Listener interface methods
     // Note we just drop the user defined extraData as this contract has no use for it
-    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata) external onlyPDPVerifier {
-        receiveProofSetEvent(proofSetId, OperationType.CREATE, abi.encode(creator));
-    }
+    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata) external onlyPDPVerifier {}
 
-    function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount, bytes calldata) external onlyPDPVerifier {
-        receiveProofSetEvent(proofSetId, OperationType.DELETE, abi.encode(deletedLeafCount));
-    }
+    function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount, bytes calldata) external onlyPDPVerifier {}
 
-    function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] memory rootData, bytes calldata) external onlyPDPVerifier {
-        receiveProofSetEvent(proofSetId, OperationType.ADD, abi.encode(firstAdded, rootData));
-    }
+    function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] memory rootData, bytes calldata) external onlyPDPVerifier {}
 
-    function rootsScheduledRemove(uint256 proofSetId, uint256[] memory rootIds, bytes calldata) external onlyPDPVerifier {
-        receiveProofSetEvent(proofSetId, OperationType.REMOVE_SCHEDULED, abi.encode(rootIds));
-    }
+    function rootsScheduledRemove(uint256 proofSetId, uint256[] memory rootIds, bytes calldata) external onlyPDPVerifier {}
 
     // possession proven checks for correct challenge count and reverts if too low
     // it also checks that proofs are not late and emits a fault record if so
-    function possessionProven(uint256 proofSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external onlyPDPVerifier {
-        receiveProofSetEvent(proofSetId, OperationType.PROVE_POSSESSION, abi.encode(challengedLeafCount, seed, challengeCount));
+    function possessionProven(uint256 proofSetId, uint256 /*challengedLeafCount*/, uint256 /*seed*/, uint256 challengeCount) external onlyPDPVerifier {
         if (provenThisPeriod[proofSetId]) {
             revert("Only one proof of possession allowed per proving period. Open a new proving period.");
         }
@@ -198,9 +189,7 @@ contract SimplePDPService is PDPListener, PDPRecordKeeper, Initializable, UUPSUp
     }
 
     // nextProvingPeriod checks for unsubmitted proof and emits a fault if so
-    function nextProvingPeriod(uint256 proofSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata) external onlyPDPVerifier {
-        receiveProofSetEvent(proofSetId, OperationType.NEXT_PROVING_PERIOD, abi.encode(challengeEpoch, leafCount));
-
+    function nextProvingPeriod(uint256 proofSetId, uint256 challengeEpoch, uint256 /*leafCount*/, bytes calldata) external onlyPDPVerifier {
         // initialize state for new proofset
         if (provingDeadlines[proofSetId] == NO_PROVING_DEADLINE) {
             uint256 firstDeadline = block.number + getMaxProvingPeriod();

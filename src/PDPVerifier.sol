@@ -47,6 +47,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
    
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
 
+    event PossessionProven(uint256 indexed setId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount);
+    event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
+
     // Types
     // State fields
      event Debug(string message, uint256 value);
@@ -436,6 +439,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             PDPListener(listenerAddr).possessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
         }
         proofSetLastProvenEpoch[setId] = block.number;
+        emit PossessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
     }
 
     function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal {
@@ -537,6 +541,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).nextProvingPeriod(setId, nextChallengeEpoch[setId], proofSetLeafCount[setId], extraData);
         }
+        emit NextProvingPeriod(setId, challengeEpoch, proofSetLeafCount[setId]);
     }
 
     // removes roots from a proof set's state.
