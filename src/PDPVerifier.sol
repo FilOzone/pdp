@@ -325,13 +325,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(rootData.length > 0, "Must add at least one root");
         require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
         uint256 firstAdded = nextRootId[setId];
+        uint256[] memory rootIds = new uint256[](rootData.length);
+
 
         for (uint256 i = 0; i < rootData.length; i++) {
             addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
-        }
-
-        uint256[] memory rootIds = new uint256[](rootData.length);
-        for (uint256 i = 0; i < rootData.length; i++) {
             rootIds[i] = firstAdded + i;
         }
         emit RootsAdded(setId, rootIds);
