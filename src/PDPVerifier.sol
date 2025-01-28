@@ -47,7 +47,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
    
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
 
-    event PossessionProven(uint256 indexed setId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount);
+
+    event PossessionProven(uint256 indexed setId, RootIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
 
     // Types
@@ -400,6 +401,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(block.number >= challengeEpoch, "premature proof");
         require(proofs.length > 0, "empty proof");
         require(challengeEpoch != NO_CHALLENGE_SCHEDULED, "no challenge scheduled");
+        RootIdAndOffset[] memory challenges = new RootIdAndOffset[](proofs.length);
         
         uint256 seed = drawChallengeSeed(setId);
         uint256 leafCount = challengeRange[setId];
@@ -420,12 +422,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
 
             // Find the root that has this leaf, and the offset of the leaf within that root.
-            RootIdAndOffset memory root = findOneRootId(setId, challengeIdx, sumTreeTop);
-            bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, root.rootId));
-            bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, root.offset);
+            challenges[i] = findOneRootId(setId, challengeIdx, sumTreeTop);
+            bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, challenges[i].rootId));
+            bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, challenges[i].offset);
             require(ok, "proof did not verify");
         }
 
+     
         // Note: We don't want to include gas spent on the listener call in the fee calculation
         // to only account for proof verification fees and avoid gamability by getting the listener
         // to do extraneous work just to inflate the gas fee.
@@ -439,7 +442,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             PDPListener(listenerAddr).possessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
         }
         proofSetLastProvenEpoch[setId] = block.number;
-        emit PossessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
+        emit PossessionProven(setId, challenges);
     }
 
     function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal {

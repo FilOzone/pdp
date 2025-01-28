@@ -656,7 +656,11 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // Submit proof.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.PossessionProven(setId, challengeCount, challengeEpoch, challengeCount);
+        PDPVerifier.RootIdAndOffset[] memory challenges = new PDPVerifier.RootIdAndOffset[](challengeCount);
+        for (uint i = 0; i < challengeCount; i++) {
+            challenges[i] = PDPVerifier.RootIdAndOffset(0, 0);
+        }
+        emit PDPVerifier.PossessionProven(setId, challenges);
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
 
        
@@ -702,7 +706,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // the method implementation. 
         // To fix this method when changing code in provePossession run forge test -vvvv
         // to get a trace, and read out the fee value from the ProofFeePaid event.
-        uint256 correctFee = 117672;
+        uint256 correctFee = 117162;
         vm.expectRevert("Incorrect fee amount");
         pdpVerifier.provePossession{value: correctFee-1}(setId, proofs);
 
