@@ -439,14 +439,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         //
         // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
         uint256 gasUsed = (initialGas - gasleft()) + ((calculateCallDataSize(proofs) + 32) * 1300);
-        calculateAndBurnProofFee(setId, gasUsed);
+        uint256 refund = calculateAndBurnProofFee(setId, gasUsed);
 
-        address listenerAddr = proofSetListener[setId];
-        if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).possessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
+        if (proofSetListener[setId] != address(0)) {
+            PDPListener(proofSetListener[setId]).possessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
         }
         proofSetLastProvenEpoch[setId] = block.number;
         emit PossessionProven(setId, challenges);
+        if (refund > 0) {
+            payable(msg.sender).transfer(refund);
+        }
     }
 
     function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
@@ -462,10 +464,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         );
     }
 
-    function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal {
+    // Calculates and burns the proof fee.
+    // Returns the funds to be refunded to the caller.
+    function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal returns (uint256) {
         uint256 estimatedGasFee = gasUsed * block.basefee;
         uint256 rawSize = 32 * challengeRange[setId];
         (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
+        uint256 refund = 0;
 
         uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(
             estimatedGasFee,
@@ -477,9 +482,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         burnFee(proofFee);
         if (msg.value > proofFee) {
             // Return the overpayment
-            payable(msg.sender).transfer(msg.value - proofFee);
+            refund = msg.value - proofFee;
         }
         emit ProofFeePaid(setId, proofFee, filUsdPrice, filUsdPriceExpo);
+        return refund;
     }
 
     function calculateCallDataSize(Proof[] calldata proofs) internal pure returns (uint256) {
