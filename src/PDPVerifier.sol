@@ -290,7 +290,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit ProofSetCreated(setId, msg.sender);
         if (msg.value > sybilFee) {
             // Return the overpayment
-            payable(msg.sender).transfer(msg.value - sybilFee);
+            (bool success, ) = msg.sender.call{value: msg.value - sybilFee}("");
+            require(success, "Transfer failed.");
         }
         return setId;
     }
@@ -448,7 +449,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         proofSetLastProvenEpoch[setId] = block.number;
         emit PossessionProven(setId, challenges);
         if (refund > 0) {
-            payable(msg.sender).transfer(refund);
+            (bool success, ) = msg.sender.call{value: refund}("");
+            require(success, "Transfer failed.");
         }
     }
 
