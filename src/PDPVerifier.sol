@@ -275,10 +275,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 sybilFee = PDPFees.sybilFee();
         require(msg.value >= sybilFee, "sybil fee not met");
         burnFee(sybilFee);
-        if (msg.value > sybilFee) {
-            // Return the overpayment
-            payable(msg.sender).transfer(msg.value - sybilFee);
-        }
+
 
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
@@ -291,6 +288,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             PDPListener(listenerAddr).proofSetCreated(setId, msg.sender, extraData);
         }
         emit ProofSetCreated(setId, msg.sender);
+        if (msg.value > sybilFee) {
+            // Return the overpayment
+            payable(msg.sender).transfer(msg.value - sybilFee);
+        }
         return setId;
     }
 
