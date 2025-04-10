@@ -38,3 +38,7 @@ deploy-calibnet:
 .PHONY: deploy-devnet
 deploy-devnet:
 	./tools/deploy-devnet.sh
+
+.PHONY: deploy-mainnet
+deploy-mainnet:
+	./tools/deploy-mainnet.sh
