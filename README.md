@@ -6,6 +6,7 @@
 - [Test](#test)
 - [Deploy](#deploy)
 - [Design Documentation](#design-documentation)
+- [Security Audits](#security-audits)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -43,6 +44,10 @@ make deploy-calibrationnet
 
 ## Design Documentation
 For comprehensive design details, see [DESIGN.md](docs/design.md)
+
+## Security Audits
+The PDP contracts have undergone the following security audits:
+- [Zellic Security Audit (April 2025)](https://github.com/Zellic/publications/blob/master/Proof%20of%20Data%20Possession%20-%20Zellic%20Audit%20Report.pdf)
 
 ## Contributing
 Contributions are welcome! Please follow these contribution guidelines:
