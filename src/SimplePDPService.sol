@@ -102,7 +102,6 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     // Track when proving was first activated for each proof set
     mapping(uint256 => uint256) public provingActivationEpoch;
 
-    // Track the end epoch of the last recorded period (helps with gap detection)
     mapping(uint256 => uint256) public lastRecordedPeriodEndEpoch;
 
      /// @custom:oz-upgrades-unsafe-allow constructor
