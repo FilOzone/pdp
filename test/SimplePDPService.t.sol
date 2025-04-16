@@ -377,9 +377,7 @@ contract SimplePDPServiceFaultsTest is Test {
             "Proving deadline should be set to NO_PROVING_DEADLINE"
         );
     }
-    
-    // Tests for calculateFaultsBetweenEpochs function
-    
+        
     function testCalculateFaultsBasicCase() public {
         // Setup initial state - first proving period
         uint256 startBlock = block.number;

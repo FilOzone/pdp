@@ -87,7 +87,6 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     mapping(uint256 => uint256) public provingDeadlines;
     mapping(uint256 => bool) public provenThisPeriod;
     
-    // Data structure to track the status of each proving period
     struct ProvingPeriodStatus {
         bool proven;               // Whether this period had a successful proof
         uint256 startEpoch;        // First epoch in this period (inclusive)
@@ -373,16 +372,10 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         return (faultCount, lastConsideredEpoch);
     }
     
-    /**
-     * @dev Helper function to get maximum of two values
-     */
     function max(uint256 a, uint256 b) internal pure returns (uint256) {
         return a > b ? a : b;
     }
     
-    /**
-     * @dev Helper function to get minimum of two values
-     */
     function min(uint256 a, uint256 b) internal pure returns (uint256) {
         return a < b ? a : b;
     }
