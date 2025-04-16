@@ -377,4 +377,231 @@ contract SimplePDPServiceFaultsTest is Test {
             "Proving deadline should be set to NO_PROVING_DEADLINE"
         );
     }
+    
+    // Tests for calculateFaultsBetweenEpochs function
+    
+    function testCalculateFaultsBasicCase() public {
+        // Setup initial state - first proving period
+        uint256 startBlock = block.number;
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // Move to challenge window and prove possession
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
+        pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
+        
+        // Start next proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod());
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Don't prove for this period (this will be a fault)
+        
+        // Start third proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() * 2);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Move to challenge window and prove possession
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() * 2 + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
+        pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
+        
+        // Start fourth proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() * 3);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Calculate faults for the whole range
+        (uint256 faultCount, uint256 lastConsideredEpoch) = pdpService.calculateFaultsBetweenEpochs(
+            proofSetId, 
+            startBlock, 
+            startBlock + pdpService.getMaxProvingPeriod() * 4
+        );
+        
+        // Second period wasn't proven, so we should have getMaxProvingPeriod() epochs with faults
+        assertEq(faultCount, pdpService.getMaxProvingPeriod(), "Should count exactly one period of faults");
+        assertEq(lastConsideredEpoch, startBlock + pdpService.getMaxProvingPeriod() * 3, "Last considered epoch should be end of third period");
+    }
+    
+    function testCalculateFaultsMultiplePeriods() public {
+        // Setup initial state
+        uint256 startBlock = block.number;
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // First period - don't prove possession (fault)
+        
+        // Start second proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod());
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Second period - don't prove possession (fault)
+        
+        // Start third proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() * 2);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Third period - prove possession
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() * 2 + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
+        pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
+        
+        // Start fourth proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() * 3);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Calculate faults for the whole range
+        (uint256 faultCount, uint256 lastConsideredEpoch) = pdpService.calculateFaultsBetweenEpochs(
+            proofSetId, 
+            startBlock, 
+            startBlock + pdpService.getMaxProvingPeriod() * 4
+        );
+        
+        // First two periods weren't proven, so we should have 2*getMaxProvingPeriod() epochs with faults
+        assertEq(faultCount, pdpService.getMaxProvingPeriod() * 2, "Should count exactly two periods of faults");
+        assertEq(lastConsideredEpoch, startBlock + pdpService.getMaxProvingPeriod() * 3, "Last considered epoch should be end of third period");
+    }
+    
+    function testCalculateFaultsPartialRange() public {
+        // Setup initial state
+        uint256 startBlock = block.number;
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // First period - don't prove possession (fault)
+        
+        // Start second proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod());
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Second period - don't prove possession (fault)
+        
+        // Start third proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() * 2);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Calculate faults for a partial range - middle of first period to middle of second period
+        uint256 rangeStart = startBlock + pdpService.getMaxProvingPeriod() / 2; // Middle of first period
+        uint256 rangeEnd = startBlock + pdpService.getMaxProvingPeriod() + pdpService.getMaxProvingPeriod() / 2; // Middle of second period
+        
+        (uint256 faultCount, uint256 lastConsideredEpoch) = pdpService.calculateFaultsBetweenEpochs(
+            proofSetId, 
+            rangeStart, 
+            rangeEnd
+        );
+        
+        // Expected faults: half of period 1 + half of period 2 = getMaxProvingPeriod()
+        uint256 expectedFaults = pdpService.getMaxProvingPeriod();
+        assertEq(faultCount, expectedFaults, "Should count exactly one period worth of faults");
+        
+        // For our range that ends in the middle of the second period, lastConsideredEpoch should be rangeEnd
+        assertEq(lastConsideredEpoch, rangeEnd, "Last considered epoch should match rangeEnd");
+    }
+    
+    function testCalculateFaultsNotInitializedProofSet() public view {
+        // Don't initialize the proof set - no calls to nextProvingPeriod
+        uint256 startBlock = block.number;
+        
+        // Calculate faults - should return 0 since proof set wasn't initialized for proving
+        (uint256 faultCount, uint256 lastConsideredEpoch) = pdpService.calculateFaultsBetweenEpochs(
+            proofSetId, 
+            startBlock, 
+            startBlock + 1000
+        );
+        
+        assertEq(faultCount, 0, "Should count zero faults for uninitialized proof set");
+        assertEq(lastConsideredEpoch, startBlock, "Last considered epoch should be startBlock");
+    }
+    
+    function testCalculateFaultsFutureRange() public {
+        // Setup initial state with several periods
+        uint256 startBlock = block.number;
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // First period - prove possession
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
+        pdpService.possessionProven(proofSetId, leafCount, seed, challengeCount);
+        
+        // Start second proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod());
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Calculate faults for a range in the future (beyond recorded periods)
+        uint256 futureStart = startBlock + pdpService.getMaxProvingPeriod() * 5;
+        uint256 futureEnd = startBlock + pdpService.getMaxProvingPeriod() * 6;
+        
+        (uint256 faultCount, uint256 lastConsideredEpoch) = pdpService.calculateFaultsBetweenEpochs(
+            proofSetId, 
+            futureStart, 
+            futureEnd
+        );
+        
+        // Should return 0 faults since we can't count faults for future/unrecorded periods
+        assertEq(faultCount, 0, "Should count zero faults for future range");
+        assertEq(lastConsideredEpoch, startBlock + pdpService.getMaxProvingPeriod(), "Last considered epoch should be end of last recorded period");
+    }
+    
+    function testCalculateFaultsBeforeProvingStarted() public {
+        // Start at a high block number so we can query before it
+        vm.roll(10000);
+        uint256 startBlock = block.number;
+        
+        // Initialize the proof set
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // Don't prove possession (will be a fault)
+        
+        // Start second proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod());
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+        
+        // Calculate faults for a range that starts before proving began
+        uint256 earlyStart = startBlock - 1000; // 1000 blocks before proving started
+        uint256 earlyEnd = startBlock + pdpService.getMaxProvingPeriod() * 2; // End after second period
+        
+        (uint256 faultCount, uint256 lastConsideredEpoch) = pdpService.calculateFaultsBetweenEpochs(
+            proofSetId, 
+            earlyStart, 
+            earlyEnd
+        );
+        
+        // Should only count faults from when proving started to the end of periods
+        // First period wasn't proven, so it's getMaxProvingPeriod() epochs of faults
+        // Since we use inclusivity on one end and exclusivity on the other,
+        // the actual range is startBlock through (startBlock + getMaxProvingPeriod())
+        // which is getMaxProvingPeriod() + 1 epochs
+        assertEq(faultCount, pdpService.getMaxProvingPeriod() + 1, "Should only count faults after proving started");
+        assertEq(lastConsideredEpoch, startBlock + pdpService.getMaxProvingPeriod(), "Last considered epoch should be end of recorded period");
+    }
+    
+    function testCalculateFaultsCurrentPeriodOverlap() public {
+        // Setup initial state
+        uint256 startBlock = block.number;
+        pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
+        pdpService.nextProvingPeriod(proofSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+        
+        // First period - don't prove possession (fault)
+        
+        // Start second proving period
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod());
+        pdpService.nextProvingPeriod(proofSetId, pdpService.nextChallengeWindowStart(proofSetId), leafCount, empty);
+
+        // Move into the middle of the second period (which is still active/current)
+        vm.roll(startBlock + pdpService.getMaxProvingPeriod() + 1000);
+        
+        // Calculate faults for a range that spans both the completed first period and part of the active second period
+        uint256 queryStart = startBlock + pdpService.getMaxProvingPeriod() - 500; // 500 blocks before end of first period
+        uint256 queryEnd = startBlock + pdpService.getMaxProvingPeriod() + 1500; // 1500 blocks into second period
+        
+        (uint256 faultCount, uint256 lastConsideredEpoch) = pdpService.calculateFaultsBetweenEpochs(
+            proofSetId, 
+            queryStart, 
+            queryEnd
+        );
+        
+    
+        assertEq(faultCount, 500, "Should only count faults up to the end of completed period");
+        
+        // Last considered epoch should be the end of the first period
+        assertEq(lastConsideredEpoch, startBlock + pdpService.getMaxProvingPeriod(), 
+            "Last considered epoch should be the end of the previous period");
+    }
 }
