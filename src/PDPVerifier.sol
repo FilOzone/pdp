@@ -628,6 +628,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Perform sumtree addition
     //
     function sumTreeAdd(uint256 setId, uint256 count, uint256 rootId) internal {
+        mapping(uint256 => uint256) storage set = sumTreeCounts[setId];
+
         uint256 index = rootId;
         uint256 h = heightFromIndex(index);
 
@@ -635,22 +637,25 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Sum BaseArray[j - 2^i] for i in [0, h)
         for (uint256 i = 0; i < h; i++) {
             uint256 j = index - (1 << i);
-            sum += sumTreeCounts[setId][j];
+            sum += set[j];
         }
-        sumTreeCounts[setId][rootId] = sum;
+        set[rootId] = sum;
     }
 
     // Perform sumtree removal
     //
     function sumTreeRemove(uint256 setId, uint256 index, uint256 delta) internal {
+        mapping(uint256 => uint256) storage set = sumTreeCounts[setId];
+        uint256 nextRootForSet = nextRootId[setId];
+
         uint256 top = uint256(256 - BitOps.clz(nextRootId[setId]));
         uint256 h = uint256(heightFromIndex(index));
 
         // Deletion traversal either terminates at
         // 1) the top of the tree or
         // 2) the highest node right of the removal index
-        while (h <= top && index < nextRootId[setId]) {
-            sumTreeCounts[setId][index] -= delta;
+        while (h <= top && index < nextRootForSet) {
+            set[index] -= delta;
             index += 1 << h;
             h = heightFromIndex(index);
         }
@@ -667,27 +672,30 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
 
+        mapping(uint256 => uint256) storage set = sumTreeCounts[setId];
+        uint256 nextRootForSet = nextRootId[setId];
+
         // Binary search until we find the index of the sumtree leaf covering the index range
         uint256 candidate;
         for (uint256 h = top; h > 0; h--) {
             // Search has taken us past the end of the sumtree
             // Only option is to go left
-            if (searchPtr >= nextRootId[setId]) {
+            if (searchPtr >= nextRootForSet) {
                 searchPtr -= 1 << (h - 1);
                 continue;
             }
 
-            candidate = acc + sumTreeCounts[setId][searchPtr];
+            candidate = acc + set[searchPtr];
             // Go right
             if (candidate <= leafIndex) {
-                acc += sumTreeCounts[setId][searchPtr];
+                acc = candidate;
                 searchPtr += 1 << (h - 1);
             } else {
                 // Go left
                 searchPtr -= 1 << (h - 1);
             }
         }
-        candidate = acc + sumTreeCounts[setId][searchPtr];
+        candidate = acc + set[searchPtr];
         if (candidate <= leafIndex) {
             // Choose right
             return RootIdAndOffset(searchPtr + 1, leafIndex - candidate);
