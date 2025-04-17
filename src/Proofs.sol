@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // The verification functions are adapted from OpenZeppelin Contracts (last updated v5.0.0) (utils/cryptography/MerkleProof.sol)
 
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.30;
 
 import {BitOps} from "./BitOps.sol";
 

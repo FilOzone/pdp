@@ -11,7 +11,7 @@ set -euo pipefail
 
 
 CHAIN_ID="${CHAIN_ID:-314159}"
-COMPILER_VERSION="${COMPILER_VERSION:-0.8.22}"
+COMPILER_VERSION="${COMPILER_VERSION:-0.8.30}"
 
 #####################################
 # 1. Create INIT_DATA               #

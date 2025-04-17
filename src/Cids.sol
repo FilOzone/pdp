@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.30;
 
 library Cids {
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995

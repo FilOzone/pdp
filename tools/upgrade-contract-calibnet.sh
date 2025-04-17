@@ -34,7 +34,7 @@ fi
 
 echo "Deploying new $IMPLEMENTATION_PATH implementation contract"
 # Parse the output of forge create to extract the contract address
-IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.23 --chain-id 314159 "$IMPLEMENTATION_PATH" | grep "Deployed to" | awk '{print $3}')
+IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.30 --chain-id 314159 "$IMPLEMENTATION_PATH" | grep "Deployed to" | awk '{print $3}')
 
 if [ -z "$IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP verifier contract address"
