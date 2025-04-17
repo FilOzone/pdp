@@ -164,7 +164,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     // Note many of these are noops as they are not important for the SimplePDPService's functionality
     // of enforcing proof contraints and reporting faults.
     // Note we generally just drop the user defined extraData as this contract has no use for it
-    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata) external onlyPDPVerifier {}
+    function proofSetCreated(uint256 proofSetId, address creator, address beneficiary, bytes calldata) external onlyPDPVerifier {}
 
     function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount, bytes calldata) external onlyPDPVerifier {}
 
