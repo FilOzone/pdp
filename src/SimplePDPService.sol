@@ -86,23 +86,6 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     address public pdpVerifierAddress;
     mapping(uint256 => uint256) public provingDeadlines;
     mapping(uint256 => bool) public provenThisPeriod;
-    
-    struct ProvingPeriodStatus {
-        bool proven;               // Whether this period had a successful proof
-        uint256 startEpoch;        // First epoch in this period (inclusive)
-        uint256 endEpoch;          // Last epoch in this period (inclusive)
-    }
-
-    // Main storage mapping - records status for each completed proving period
-    mapping(uint256 => mapping(uint256 => ProvingPeriodStatus)) public provingPeriodHistory;
-
-    // Track the sequential ID of each period for efficient lookup
-    mapping(uint256 => uint256) public lastRecordedPeriodId;
-
-    // Track when proving was first activated for each proof set
-    mapping(uint256 => uint256) public provingActivationEpoch;
-
-    mapping(uint256 => uint256) public lastRecordedPeriodEndEpoch;
 
      /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -226,10 +209,6 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
             }
             provingDeadlines[proofSetId] = firstDeadline;
             provenThisPeriod[proofSetId] = false;
-            
-            // Initialize the activation epoch when proving first starts
-            // This marks when the proof set became active for proving
-            provingActivationEpoch[proofSetId] = block.number;
             return;
         }
 
@@ -266,116 +245,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         if (faultPeriods > 0) {
             emit FaultRecord(proofSetId, faultPeriods, provingDeadlines[proofSetId]);
         }
-        
-        // Record the status of the current/previous proving period that's ending
-        // This is done before updating the state for the next period
-        if (provingDeadlines[proofSetId] != NO_PROVING_DEADLINE) {
-            uint256 periodId = lastRecordedPeriodId[proofSetId];
-            uint256 periodStart;
-            uint256 periodEnd = provingDeadlines[proofSetId];
-            
-            // Determine the start epoch for this period
-            if (periodId == 0 || lastRecordedPeriodEndEpoch[proofSetId] + 1 < periodEnd - getMaxProvingPeriod()) {
-                // First period or gap detected - use the actual start
-                periodStart = periodEnd - getMaxProvingPeriod();
-            } else {
-                // Normal sequential period - use end of previous period + 1
-                periodStart = lastRecordedPeriodEndEpoch[proofSetId] + 1;
-            }
-            
-            // Only record if this is a valid period
-            if (periodEnd >= periodStart) {
-                // Record the proving period status
-                provingPeriodHistory[proofSetId][periodId] = ProvingPeriodStatus({
-                    proven: provenThisPeriod[proofSetId],
-                    startEpoch: periodStart,
-                    endEpoch: periodEnd
-                });
-                
-                // Update tracking variables
-                lastRecordedPeriodEndEpoch[proofSetId] = periodEnd;
-                lastRecordedPeriodId[proofSetId]++;
-            }
-        }
-        
         provingDeadlines[proofSetId] = nextDeadline;
         provenThisPeriod[proofSetId] = false;
-    }
-    
-    /**
-     * @notice Calculate the number of faulted epochs between two specified epochs
-     * @dev Returns the count of epochs where the provider failed to prove possession
-     *      Only counts completed proving periods and excludes epochs before proving activation
-     *      fromEpoch is exclusive, toEpoch is inclusive
-     * @param proofSetId The ID of the proof set to check for faults
-     * @param fromEpoch The starting epoch (exclusive)
-     * @param toEpoch The ending epoch (inclusive)
-     * @return faultCount The number of epochs that had faults
-     * @return lastConsideredEpoch The last epoch that was included in the calculation
-     */
-    function calculateFaultsBetweenEpochs(uint256 proofSetId, uint256 fromEpoch, uint256 toEpoch) 
-        public view returns (uint256 faultCount, uint256 lastConsideredEpoch)
-    {
-        // Skip if proving wasn't active or range is invalid
-        if (provingActivationEpoch[proofSetId] == 0 || fromEpoch >= toEpoch) {
-            return (0, fromEpoch);
-        }
-        
-        // Never consider epochs before proving was activated
-        // Since fromEpoch is exclusive, we compare with activation - 1
-        fromEpoch = max(fromEpoch, provingActivationEpoch[proofSetId] - 1);
-        
-        // Determine the most recent period that has completed
-        uint256 mostRecentCompletedPeriodId = lastRecordedPeriodId[proofSetId] > 0 ? 
-                                             lastRecordedPeriodId[proofSetId] - 1 : 0;
-        
-        // If no periods recorded yet, use activation epoch as boundary
-        if (lastRecordedPeriodId[proofSetId] == 0) {
-            return (0, fromEpoch);
-        }
-        
-        // Get the last recorded proving period
-        ProvingPeriodStatus memory lastPeriod = provingPeriodHistory[proofSetId][mostRecentCompletedPeriodId];
-        lastConsideredEpoch = lastPeriod.endEpoch;
-        
-        // Don't look beyond the requested range
-        lastConsideredEpoch = min(lastConsideredEpoch, toEpoch);
-        
-        // Skip if we're not looking at any completed periods
-        if (fromEpoch >= lastConsideredEpoch) {
-            return (0, lastConsideredEpoch);
-        }
-        
-        // Count faults in each period that overlaps our range
-        faultCount = 0;
-        for (uint256 i = 0; i < lastRecordedPeriodId[proofSetId]; i++) {
-            ProvingPeriodStatus memory period = provingPeriodHistory[proofSetId][i];
-            
-            // Skip if period ended before our range starts or started after our range ends
-            if (period.endEpoch <= fromEpoch || period.startEpoch > lastConsideredEpoch) {
-                continue;
-            }
-            
-            // If this period wasn't proven, add the number of epochs that fall in our range
-            if (!period.proven) {
-                uint256 overlapStart = max(fromEpoch + 1, period.startEpoch);  // +1 makes fromEpoch exclusive
-                uint256 overlapEnd = min(lastConsideredEpoch, period.endEpoch);
-                
-                // Count epochs in this faulty period that overlap our query range
-                if (overlapEnd >= overlapStart) {  // Ensure valid range
-                    faultCount += (overlapEnd - overlapStart + 1);  // +1 because both ends are inclusive
-                }
-            }
-        }
-        
-        return (faultCount, lastConsideredEpoch);
-    }
-    
-    function max(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a > b ? a : b;
-    }
-    
-    function min(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a < b ? a : b;
     }
 }
