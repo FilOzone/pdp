@@ -13,7 +13,7 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
 /// @title PDPListener
 /// @notice Interface for PDP Service applications managing data storage.
-/// @dev This interface exists to provide an extensible hook for applic ations to use the PDP verification contract
+/// @dev This interface exists to provide an extensible hook for applications to use the PDP verification contract
 /// to implement data storage applications.
 interface PDPListener {
     function proofSetCreated(uint256 proofSetId, address creator, address beneficiary, bytes calldata extraData) external;
