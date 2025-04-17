@@ -13,7 +13,7 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
 /// @title PDPListener
 /// @notice Interface for PDP Service applications managing data storage.
-/// @dev This interface exists to provide an extensible hook for applications to use the PDP verification contract
+/// @dev This interface exists to provide an extensible hook for applic ations to use the PDP verification contract
 /// to implement data storage applications.
 interface PDPListener {
     function proofSetCreated(uint256 proofSetId, address creator, address beneficiary, bytes calldata extraData) external;
@@ -60,7 +60,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Types
     // State fields
-     event Debug(string message, uint256 value);
 
     /*
     A proof set is the metadata required for tracking data for proof of possession.
@@ -313,7 +312,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         proofSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
 
         if (listenerAddr != address(0)) {
-            // Pass the beneficiary address to the listener
             PDPListener(listenerAddr).proofSetCreated(setId, msg.sender, beneficiary, extraData);
         }
         
@@ -467,7 +465,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 // Find the root that has this leaf, and the offset of the leaf within that root.
                 challenges[i] = findOneRootId(setId, challengeIdx, sumTreeTop);
                 bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, challenges[i].rootId));
-                bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, challenges[i].offset);
+                uint256 rootHeight = 256 - BitOps.clz(rootLeafCounts[setId][challenges[i].rootId] - 1) + 1;
+                bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, challenges[i].offset, rootHeight);
                 require(ok, "proof did not verify");
             }
         }
