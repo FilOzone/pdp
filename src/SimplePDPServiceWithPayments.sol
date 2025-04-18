@@ -6,6 +6,7 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initiali
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "../lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 // Import the Payments interface
 interface Payments {
@@ -61,11 +62,16 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
     // Constants
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVING_DEADLINE = 0;
-    uint256 public constant PROOFSET_CREATION_FEE = 1000000 * 10**18; // 1,000,000 USDFC
     uint256 public constant MIB_IN_BYTES = 1024 * 1024; // 1 MiB in bytes
-    uint256 public constant RATE_PER_MIB_PER_EPOCH = 1 * 10**18; // 1 USDFC per MiB per epoch
     uint256 public constant BYTES_PER_LEAF = 32; // Each leaf is 32 bytes
     uint256 public constant COMMISSION_MAX_BPS = 10000; // 100% in basis points
+    
+    // Dynamic fee values based on token decimals
+    uint256 public PROOFSET_CREATION_FEE; // 1 USDFC with correct decimals
+    uint256 public RATE_PER_MIB_PER_EPOCH; // 1 USDFC per MiB per epoch with correct decimals
+    
+    // Token decimals
+    uint8 public tokenDecimals;
     
     // External contract addresses
     address public pdpVerifierAddress;
@@ -138,6 +144,13 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
         paymentsContractAddress = _paymentsContractAddress;
         usdFcTokenAddress = _usdFcTokenAddress;
         operatorCommissionBps = _initialOperatorCommissionBps;
+        
+        // Read token decimals from the USDFC token contract
+        tokenDecimals = IERC20Metadata(_usdFcTokenAddress).decimals();
+        
+        // Initialize the fee constants based on the actual token decimals
+        PROOFSET_CREATION_FEE = (1 * 10**tokenDecimals) / 10; // 0.1 USDFC
+        RATE_PER_MIB_PER_EPOCH = (1 * 10**tokenDecimals) / 10; // 0.1 USDFC per MiB per epoch
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -491,7 +504,7 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
      * @param totalBytes Total size of the stored data in bytes
      * @return ratePerEpoch The calculated rate per epoch in tokens (1 USDFC per MiB per epoch)
      */
-    function calculateStorageRatePerEpoch(uint256 totalBytes) internal pure returns (uint256) {
+    function calculateStorageRatePerEpoch(uint256 totalBytes) internal view returns (uint256) {
         // Convert bytes to MiB, rounding up
         uint256 sizeInMiB = totalBytes / MIB_IN_BYTES;
         if (totalBytes % MIB_IN_BYTES > 0) {
