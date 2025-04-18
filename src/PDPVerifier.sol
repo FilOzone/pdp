@@ -16,7 +16,7 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 /// @dev This interface exists to provide an extensible hook for applications to use the PDP verification contract
 /// to implement data storage applications.
 interface PDPListener {
-    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata extraData) external;
+    function proofSetCreated(uint256 proofSetId, address creator, address beneficiary, bytes calldata extraData) external;
     function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount, bytes calldata extraData) external;
     function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] memory rootData, bytes calldata extraData) external;
     function rootsScheduledRemove(uint256 proofSetId, uint256[] memory rootIds, bytes calldata extraData) external;
@@ -45,6 +45,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Events
     event ProofSetCreated(uint256 indexed setId, address indexed owner);
     event ProofSetOwnerChanged(uint256 indexed setId, address indexed oldOwner, address indexed newOwner);
+    event OwnerBeneficiaryChanged(address indexed owner, address indexed oldBeneficiary, address indexed newBeneficiary);
     event ProofSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event ProofSetEmpty(uint256 indexed setId);
 
@@ -59,6 +60,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Types
     // State fields
+     event Debug(string message, uint256 value);
+
     /*
     A proof set is the metadata required for tracking data for proof of possession.
     It maintains a list of CIDs of data to be proven and metadata needed to
@@ -128,6 +131,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // proofset owner has exclusive permission to add and remove roots and delete the proof set
     mapping(uint256 => address) proofSetOwner;
     mapping(uint256 => address) proofSetProposedOwner;
+    // beneficiary is the address that receives payments for all proof sets owned by a storage provider
+    mapping(address => address) ownerToBeneficiary;
     mapping(uint256 => uint256) proofSetLastProvenEpoch;
 
     // Methods
@@ -213,6 +218,20 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(proofSetLive(setId), "Proof set not live");
         return proofSetLastProvenEpoch[setId];
     }
+    
+    // Returns the beneficiary address for a given owner
+    function getOwnerBeneficiary(address owner) public view returns (address) {
+        address beneficiary = ownerToBeneficiary[owner];
+        // If no beneficiary is set, the owner acts as their own beneficiary
+        return beneficiary == address(0) ? owner : beneficiary;
+    }
+    
+    // Returns the beneficiary address for a proof set's owner
+    function getProofSetBeneficiary(uint256 setId) public view returns (address) {
+        require(proofSetLive(setId), "Proof set not live");
+        address owner = proofSetOwner[setId];
+        return getOwnerBeneficiary(owner);
+    }
 
     // Returns the root CID for a given proof set and root ID
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
@@ -255,6 +274,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             proofSetProposedOwner[setId] = newOwner;
         }
     }
+    
+    // Storage provider can set their beneficiary address for all their proof sets
+    function setBeneficiary(address newBeneficiary) public {
+        require(newBeneficiary != address(0), "Beneficiary address cannot be zero");
+        
+        address oldBeneficiary = getOwnerBeneficiary(msg.sender);
+        ownerToBeneficiary[msg.sender] = newBeneficiary;
+        
+        emit OwnerBeneficiaryChanged(msg.sender, oldBeneficiary, newBeneficiary);
+    }
 
     function claimProofSetOwnership(uint256 setId) public {
         require(proofSetLive(setId), "Proof set not live");
@@ -274,6 +303,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(msg.value >= sybilFee, "sybil fee not met");
         burnFee(sybilFee);
 
+        address beneficiary = getOwnerBeneficiary(msg.sender);
+
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
         nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED;  // Initialized on first call to NextProvingPeriod
@@ -282,15 +313,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         proofSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
 
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).proofSetCreated(setId, msg.sender, extraData);
+            // Pass the beneficiary address to the listener
+            PDPListener(listenerAddr).proofSetCreated(setId, msg.sender, beneficiary, extraData);
         }
+        
         emit ProofSetCreated(setId, msg.sender);
 
-        // Return the at the end to avoid any possible re-entrency issues.
+        // Return at the end to avoid any possible re-entrancy issues.
         if (msg.value > sybilFee) {
             (bool success, ) = msg.sender.call{value: msg.value - sybilFee}("");
             require(success, "Transfer failed.");
         }
+        
         return setId;
     }
 
@@ -433,8 +467,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 // Find the root that has this leaf, and the offset of the leaf within that root.
                 challenges[i] = findOneRootId(setId, challengeIdx, sumTreeTop);
                 bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, challenges[i].rootId));
-                uint256 rootHeight = 256 - BitOps.clz(rootLeafCounts[setId][challenges[i].rootId] - 1) + 1;
-                bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, challenges[i].offset, rootHeight);
+                bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, challenges[i].offset);
                 require(ok, "proof did not verify");
             }
         }
