@@ -36,7 +36,7 @@ contract SimplePDPServiceTest is Test {
     function testOnlyPDPVerifierCanAddRecord() public {
         vm.prank(address(0xdead));
         vm.expectRevert("Caller is not the PDP verifier");
-        pdpService.proofSetCreated(proofSetId, address(this), empty);
+        pdpService.proofSetCreated(proofSetId, address(this), address(0x01), empty);
     }
 
     function testGetMaxProvingPeriod() public view {

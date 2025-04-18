@@ -173,6 +173,8 @@ contract PDPVerifierOwnershipTest is Test {
         nonOwner = address(0xffff);
     }
 
+    
+
     function testOwnershipTransfer() public {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         pdpVerifier.proposeProofSetOwner(setId, nextOwner);
@@ -705,7 +707,7 @@ contract ProofBuilderHelper is Test {
 // to help with more flexible testing.
 contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
 
-    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata) external override {
+    function proofSetCreated(uint256 proofSetId, address creator, address /*beneficiary*/, bytes calldata) external override {
         receiveProofSetEvent(proofSetId, PDPRecordKeeper.OperationType.CREATE, abi.encode(creator));
     }
 
@@ -1455,7 +1457,7 @@ contract BadListener is PDPListener {
         badOperation = operationType;
     }
 
-    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata) external view {
+    function proofSetCreated(uint256 proofSetId, address creator, address /*beneficiary*/, bytes calldata) external view {
         receiveProofSetEvent(proofSetId, PDPRecordKeeper.OperationType.CREATE, abi.encode(creator));
     }
 
@@ -1541,7 +1543,7 @@ contract PDPListenerIntegrationTest is Test {
 contract ExtraDataListener is PDPListener {
     mapping(uint256 => mapping(PDPRecordKeeper.OperationType => bytes)) public extraDataBySetId;
 
-    function proofSetCreated(uint256 proofSetId, address, bytes calldata extraData) external {
+    function proofSetCreated(uint256 proofSetId, address, address /*beneficiary*/, bytes calldata extraData) external {
         extraDataBySetId[proofSetId][PDPRecordKeeper.OperationType.CREATE] = extraData;
     }
 
@@ -1748,5 +1750,66 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
 
         // CHECK: the next challenge epoch has been updated
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay, "Next challenge epoch should be updated");
+    }
+}
+
+contract PDPVerifierBeneficiaryTest is Test {
+    PDPVerifier pdpVerifier;
+    address public owner;
+    address public beneficiary;
+    address public otherAddress;
+
+    function setUp() public {
+        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPVerifier.initialize.selector,
+            2 // challengeFinalityDelay
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
+        pdpVerifier = PDPVerifier(address(proxy));
+
+        owner = address(this);
+        beneficiary = address(0xBEEF);
+        otherAddress = address(0xC0FFEE);
+    }
+
+    function testBeneficiaryLogic() public {
+        // 1. Initial state: Owner is their own beneficiary
+        assertEq(pdpVerifier.getOwnerBeneficiary(owner), owner, "Initially, owner should be their own beneficiary");
+
+        // Create a proof set and check its beneficiary
+        TestingRecordKeeperService listener = new TestingRecordKeeperService();
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), "");
+        assertEq(pdpVerifier.getProofSetBeneficiary(setId), owner, "Proof set beneficiary should initially be owner");
+
+        // 2. Set a new beneficiary
+        vm.expectEmit(true, true, false, true); // Check owner, oldBeneficiary, newBeneficiary
+        emit PDPVerifier.OwnerBeneficiaryChanged(owner, owner, beneficiary);
+        pdpVerifier.setBeneficiary(beneficiary);
+
+        // Verify the new beneficiary is set correctly for the owner
+        assertEq(pdpVerifier.getOwnerBeneficiary(owner), beneficiary, "Owner beneficiary should be updated");
+
+        // Verify the new beneficiary is reflected for the existing proof set
+        assertEq(pdpVerifier.getProofSetBeneficiary(setId), beneficiary, "Proof set beneficiary should be updated");
+
+        // Create a new proof set and verify its beneficiary is the new one
+        uint256 setId2 = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), "");
+         assertEq(pdpVerifier.getProofSetBeneficiary(setId2), beneficiary, "New proof set beneficiary should be the set beneficiary");
+
+        // 3. Test changing beneficiary from a non-owner address (should not change anything)
+        vm.startPrank(otherAddress);
+        vm.expectEmit(true, true, false, true);
+        // The beneficiary for 'otherAddress' changes, not for 'owner'
+        emit PDPVerifier.OwnerBeneficiaryChanged(otherAddress, otherAddress, beneficiary);
+        pdpVerifier.setBeneficiary(beneficiary);
+        vm.stopPrank();
+        assertEq(pdpVerifier.getOwnerBeneficiary(owner), beneficiary, "Owner beneficiary should remain unchanged by otherAddress call");
+        assertEq(pdpVerifier.getOwnerBeneficiary(otherAddress), beneficiary, "otherAddress beneficiary should be updated");
+    }
+
+    function testSetBeneficiaryZeroAddressReverts() public {
+        vm.expectRevert("Beneficiary address cannot be zero");
+        pdpVerifier.setBeneficiary(address(0));
     }
 }
