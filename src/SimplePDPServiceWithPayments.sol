@@ -354,9 +354,10 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
             // This marks when the proof set became active for proving
             provingActivationEpoch[proofSetId] = block.number;
             
-            // Set up the initial rate based on leaf count
-            uint256 nextDeadline = firstDeadline;
-            // Don't return early - continue to the rate update at the end
+            // Update the payment rate
+            updateRailPaymentRate(proofSetId, leafCount);
+            
+            return;
         }
 
         // Revert when proving period not yet open
@@ -406,29 +407,31 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
         provenThisPeriod[proofSetId] = false;
         
         // Update the payment rate based on current proof set size
-        // Only for proof sets that have a payment rail configured
-        if (proofSetInfo[proofSetId].railId != 0) {
-            uint256 newRatePerEpoch = 0; // Default to 0 for empty proof sets
-            
-            // Calculate rate only if proof set is active and has leaves
-            if (nextDeadline != NO_PROVING_DEADLINE && leafCount > 0) {
-                uint256 totalBytes = getProofSetSizeInBytes(leafCount);
-                newRatePerEpoch = calculateStorageRatePerEpoch(totalBytes);
-            }
-            
-            // Update the rail payment rate
-            Payments payments = Payments(paymentsContractAddress);
-            uint256 railId = proofSetInfo[proofSetId].railId;
-            
-            // Call modifyRailPayment with the new rate and no one-time payment
-            payments.modifyRailPayment(
-                railId,
-                newRatePerEpoch,
-                0 // No one-time payment during rate update
-            );
-            
-            emit RailRateUpdated(proofSetId, railId, newRatePerEpoch);
-        }
+        updateRailPaymentRate(proofSetId, leafCount);
+    }
+    
+
+    function updateRailPaymentRate(uint256 proofSetId, uint256 leafCount) internal {
+        // Revert if no payment rail is configured for this proof set
+        require(proofSetInfo[proofSetId].railId != 0, "No payment rail configured");
+        
+        uint256 newRatePerEpoch = 0; // Default to 0 for empty proof sets
+        
+        uint256 totalBytes = getProofSetSizeInBytes(leafCount);
+        newRatePerEpoch = calculateStorageRatePerEpoch(totalBytes);
+        
+        // Update the rail payment rate
+        Payments payments = Payments(paymentsContractAddress);
+        uint256 railId = proofSetInfo[proofSetId].railId;
+        
+        // Call modifyRailPayment with the new rate and no one-time payment
+        payments.modifyRailPayment(
+            railId,
+            newRatePerEpoch,
+            0 // No one-time payment during rate update
+        );
+        
+        emit RailRateUpdated(proofSetId, railId, newRatePerEpoch);
     }
     
     /**
