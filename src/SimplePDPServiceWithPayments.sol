@@ -216,23 +216,22 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
      * @notice Handles proof set creation by creating a payment rail
      * @dev Called by the PDPVerifier contract when a new proof set is created
      * @param proofSetId The ID of the newly created proof set
-     * @param creator The address that created the proof set (not used in this implementation)
-     * @param beneficiary The address that will receive payments for this proof set
+     * @param creator The address that created the proof set and will receive payments
      * @param extraData Encoded data containing metadata and payer information
      */
-    function proofSetCreated(uint256 proofSetId, address creator, address beneficiary, bytes calldata extraData) external onlyPDPVerifier {
+    function proofSetCreated(uint256 proofSetId, address creator, bytes calldata extraData) external onlyPDPVerifier {
         // Decode the extra data to get the metadata and payer address
         require(extraData.length > 0, "Extra data required for proof set creation");
         ProofSetCreateData memory createData = decodeProofSetCreateData(extraData);
         
         // Validate the addresses
         require(createData.payer != address(0), "Payer address cannot be zero");
-        require(beneficiary != address(0), "Beneficiary address cannot be zero");
+        require(creator != address(0), "Creator address cannot be zero");
         
         // Initialize the ProofSetInfo struct
         ProofSetInfo storage info = proofSetInfo[proofSetId];
         info.payer = createData.payer;
-        info.payee = beneficiary;
+        info.payee = creator; // Using creator as the payee
         info.metadata = createData.metadata;
         info.commissionBps = operatorCommissionBps; // Use the contract's default commission rate
         
@@ -243,7 +242,7 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
         uint256 railId = payments.createRail(
             usdFcTokenAddress, // token address
             createData.payer,  // from (payer)
-            beneficiary,       // to (beneficiary)
+            creator,          // to (creator)
             address(this),     // this contract acts as the arbiter
             operatorCommissionBps // commission rate
         );
@@ -255,7 +254,7 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
         railToProofSet[railId] = proofSetId;
         
         // Charge the one-time proof set creation fee
-        // This is a payment from payer to beneficiary of a fixed amount
+        // This is a payment from payer to creator of a fixed amount
         payments.modifyRailPayment(
             railId,
             0, // Initial rate is 0, will be updated when roots are added
@@ -263,7 +262,7 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
         );
         
         // Emit event for tracking
-        emit ProofSetRailCreated(proofSetId, railId, createData.payer, beneficiary);
+        emit ProofSetRailCreated(proofSetId, railId, createData.payer, creator);
     }
 
     // TODO: Payment rail termination; not needed in MVP
