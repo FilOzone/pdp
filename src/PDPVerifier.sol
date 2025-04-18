@@ -643,13 +643,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Perform sumtree removal
     //
     function sumTreeRemove(uint256 setId, uint256 index, uint256 delta) internal {
-        uint256 top = uint256(256 - BitOps.clz(nextRootId[setId]));
         uint256 h = uint256(heightFromIndex(index));
 
         // Deletion traversal either terminates at
         // 1) the top of the tree or
         // 2) the highest node right of the removal index
-        while (h <= top && index < nextRootId[setId]) {
+        while (index < nextRootId[setId]) {
             sumTreeCounts[setId][index] -= delta;
             index += 1 << h;
             h = heightFromIndex(index);
