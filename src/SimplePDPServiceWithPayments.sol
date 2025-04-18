@@ -7,44 +7,7 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgr
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-
-// Import the Payments interface
-interface Payments {
-    function createRail(
-        address token,
-        address from,
-        address to,
-        address arbiter,
-        uint256 commissionRateBps
-    ) external returns (uint256);
-    
-    function modifyRailPayment(
-        uint256 railId,
-        uint256 newRate,
-        uint256 oneTimePayment
-    ) external;
-}
-
-interface IArbiter {
-    struct ArbitrationResult {
-        // The actual payment amount determined by the arbiter after arbitration of a rail during settlement
-        uint256 modifiedAmount;
-        // The epoch up to and including which settlement should occur.
-        uint256 settleUpto;
-        // A placeholder note for any additional information the arbiter wants to send to the caller of `settleRail`
-        string note;
-    }
-
-    function arbitratePayment(
-        uint256 railId,
-        uint256 proposedAmount,
-        // the epoch up to and including which the rail has already been settled
-        uint256 fromEpoch,
-        // the epoch up to and including which arbitration is requested; payment will be arbitrated for (toEpoch - fromEpoch) epochs
-        uint256 toEpoch,
-        uint256 rate
-    ) external returns (ArbitrationResult memory result);
-}
+import {Payments, IArbiter} from "@fws-payments/Payments.sol";
 
 
 /// @title SimplePDPServiceWithPayments
@@ -65,6 +28,7 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
     uint256 public constant MIB_IN_BYTES = 1024 * 1024; // 1 MiB in bytes
     uint256 public constant BYTES_PER_LEAF = 32; // Each leaf is 32 bytes
     uint256 public constant COMMISSION_MAX_BPS = 10000; // 100% in basis points
+    uint256 public constant DEFAULT_LOCKUP_PERIOD = 2880 * 30; // One month in epochs (assuming 30 days)
     
     // Dynamic fee values based on token decimals
     uint256 public PROOFSET_CREATION_FEE; // 1 USDFC with correct decimals
@@ -266,6 +230,14 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
         // Store reverse mapping from rail ID to proof set ID for arbitration
         railToProofSet[railId] = proofSetId;
         
+        // First, set a lockupFixed value that's at least equal to the one-time payment
+        // This is necessary because modifyRailPayment requires that lockupFixed >= oneTimePayment
+        payments.modifyRailLockup(
+            railId,
+            DEFAULT_LOCKUP_PERIOD, // One month in epochs
+            PROOFSET_CREATION_FEE // lockupFixed equal to the one-time payment amount
+        );
+        
         // Charge the one-time proof set creation fee
         // This is a payment from payer to creator of a fixed amount
         payments.modifyRailPayment(
@@ -331,6 +303,8 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
             revert("Too early. Wait for challenge window to open");
         }
         provenThisPeriod[proofSetId] = true;
+        uint256 currentPeriod = getProvingPeriodForEpoch(proofSetId, block.number);
+        provenPeriods[proofSetId][currentPeriod] = true;    
     }
 
     // nextProvingPeriod checks for unsubmitted proof in which case it emits a fault event
@@ -592,8 +566,7 @@ contract SimplePDPServiceWithPayments is PDPListener, IArbiter, Initializable, U
         uint256 railId,
         uint256 proposedAmount,
         uint256 fromEpoch,
-        uint256 toEpoch,
-        uint256 /*rate*/
+        uint256 toEpoch
     ) external override returns (ArbitrationResult memory result) {
         // Get the proof set ID associated with this rail
         uint256 proofSetId = railToProofSet[railId];
