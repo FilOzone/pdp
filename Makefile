@@ -23,12 +23,12 @@ install:
 # Build target
 .PHONY: build
 build:
-	forge build
+	forge build --via-ir
 
 # Test target
 .PHONY: test
 test:
-	forge test -vv
+	forge test --via-ir -vv
 
 # Deployment targets
 .PHONY: deploy-calibnet
@@ -38,3 +38,7 @@ deploy-calibnet:
 .PHONY: deploy-devnet
 deploy-devnet:
 	./tools/deploy-devnet.sh
+
+.PHONY: deploy-mainnet
+deploy-mainnet:
+	./tools/deploy-mainnet.sh

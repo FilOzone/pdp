@@ -11,7 +11,7 @@ contract MerkleProveTest is Test {
     function testVerifyEmptyProof() public view {
         bytes32 root = sha256("hello");
         bytes32[] memory proof = new bytes32[](0);
-        bool result = MerkleVerify.verify(proof, root, root, 0);
+        bool result = MerkleVerify.verify(proof, root, root, 0, 1);
         assertEq(result, true, "Verify should return true");
     }
 
@@ -22,8 +22,8 @@ contract MerkleProveTest is Test {
 
         for (uint i = 0; i < leaves.length; i++) {
             bytes32[] memory proof = MerkleProve.buildProof(tree, i);
-            assertTrue(MerkleVerify.verify(proof, root, leaves[i], i), string.concat("Invalid proof ", vm.toString(i)));
-            assertFalse(MerkleVerify.verify(proof, root, leaves[i], i+1), string.concat("False proof ", vm.toString(i)));
+            assertTrue(MerkleVerify.verify(proof, root, leaves[i], i, tree.length), string.concat("Invalid proof ", vm.toString(i)));
+            assertFalse(MerkleVerify.verify(proof, root, leaves[i], i+1, tree.length), string.concat("False proof ", vm.toString(i)));
         }
     }
 
@@ -34,34 +34,39 @@ contract MerkleProveTest is Test {
 
         for (uint i = 0; i < leaves.length; i++) {
             bytes32[] memory proof = MerkleProve.buildProof(tree, i);
-            assertTrue(MerkleVerify.verify(proof, root, leaves[i], i), string.concat("Invalid proof ", vm.toString(i)));
+            assertTrue(MerkleVerify.verify(proof, root, leaves[i], i, tree.length), string.concat("Invalid proof ", vm.toString(i)));
             // Ensure the proof is invalid for every other index within range
             for (uint j = 0; j < leaves.length; j++) {
                 if (j != i) {
-                    assertFalse(MerkleVerify.verify(proof, root, leaves[i], j));
+                    assertFalse(MerkleVerify.verify(proof, root, leaves[i], j, tree.length), string.concat("False proof ", vm.toString(i)));
                 }
             }
         }
     }
 
-    function testVerifyTreesManyLeaves() public view {
+    function testVerifyTreesManyLeaves() public {
+        bytes32[] memory leaves;
+        bytes32[][] memory tree;
+        bytes32[] memory proof;
+        vm.pauseGasMetering();
         for (uint256 width = 4; width < 60; width++) {
-            bytes32[] memory leaves = ProofUtil.generateLeaves(width);
-            bytes32[][] memory tree = MerkleProve.buildTree(leaves);
+            leaves = ProofUtil.generateLeaves(width);
+            tree = MerkleProve.buildTree(leaves);
             bytes32 root = tree[0][0];
 
             // Verify proof for each leaf
             for (uint256 i = 0; i < leaves.length; i++) {
-                bytes32[] memory proof = MerkleProve.buildProof(tree, i);
-                assertTrue(MerkleVerify.verify(proof, root, leaves[i], i), string.concat("Invalid proof ", vm.toString(i)));
+                proof = MerkleProve.buildProof(tree, i);
+                assertTrue(MerkleVerify.verify(proof, root, leaves[i], i, tree.length), string.concat("Invalid proof ", vm.toString(i)));
                 // Ensure the proof is invalid for every other index within range
                 for (uint j = 0; j < leaves.length; j++) {
                     if (j != i) {
-                        assertFalse(MerkleVerify.verify(proof, root, leaves[i], j));
+                        assertFalse(MerkleVerify.verify(proof, root, leaves[i], j, tree.length), string.concat("False proof ", vm.toString(i)));
                     }
                 }
             }
         }
+        vm.resumeGasMetering();
     }
 
     // Tests that the merkle root of a tree committing to known data (all zeros) matches the

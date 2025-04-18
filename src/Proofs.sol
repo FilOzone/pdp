@@ -19,20 +19,24 @@ library MerkleVerify {
      * defined by `root` at `position`. For this, a `proof` must be provided, containing
      * sibling hashes on the branch from the leaf to the root of the tree.
      *
+     * Will only return true if the leaf is at the bottom of the tree for the given tree height
+     *
      * This version handles proofs in memory.
      */
-    function verify(bytes32[] memory proof, bytes32 root, bytes32 leaf, uint256 position) internal view returns (bool) {
-        return processProofMemory(proof, leaf, position) == root;
+    function verify(bytes32[] memory proof, bytes32 root, bytes32 leaf, uint256 position, uint256 treeHeight) internal view returns (bool) {
+        // Tree heigh includes root, proof does not 
+        require(proof.length == treeHeight - 1, "proof length does not match tree height");
+        return processInclusionProofMemory(proof, leaf, position) == root;
     }
 
     /**
      * Returns the rebuilt hash obtained by traversing a Merkle tree up
      * from `leaf` at `position` using `proof`. A `proof` is valid if and only if the rebuilt
-     * hash matches the root of the tree.
+     * hash matches the root of the tree.  
      *
      * This version handles proofs in memory.
      */
-    function processProofMemory(bytes32[] memory proof, bytes32 leaf, uint256 position) internal view returns (bytes32) {
+    function processInclusionProofMemory(bytes32[] memory proof, bytes32 leaf, uint256 position) internal view returns (bytes32) {
         bytes32 computedHash = leaf;
         for (uint256 i = 0; i < proof.length; i++) {
             // If position is even, the leaf/node is on the left and sibling is on the right.
@@ -147,7 +151,7 @@ library MerkleProve {
 
     // Gets an inclusion proof from a Merkle tree for a leaf at a given index.
     // The proof is constructed by traversing up the tree to the root, and the sibling of each node is appended to the proof.
-    // A final unpaired element in any level is paired with itself.
+    // A final unpaired element in any level is paired with the zero-tree of the same height.
     // Every proof thus has length equal to the height of the tree minus 1.
     function buildProof(bytes32[][] memory tree, uint256 index) internal pure returns (bytes32[] memory) {
         require(index < tree[tree.length - 1].length, "Index out of bounds");

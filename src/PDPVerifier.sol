@@ -434,7 +434,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 challenges[i] = findOneRootId(setId, challengeIdx, sumTreeTop);
                 bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, challenges[i].rootId));
                 uint256 rootHeight = 256 - BitOps.clz(rootLeafCounts[setId][challenges[i].rootId] - 1) + 1;
-                
                 bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, challenges[i].offset, rootHeight);
                 require(ok, "proof did not verify");
             }
