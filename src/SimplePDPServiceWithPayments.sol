@@ -626,11 +626,11 @@ contract SimplePDPServiceWithPayments is
 
         uint256 ratePerEpoch = numerator / denominator;
 
-        // Ensure minimum rate is 0.1 USDFC if calculation results in 0 due to rounding,
+        // Ensure minimum rate is 0.00001 USDFC if calculation results in 0 due to rounding,
         // but only if bytes >= 1 MiB (already checked above).
         // This prevents charging 0 for sizes slightly above 1 MiB but below the threshold for a rate of 1 unit.
         if (ratePerEpoch == 0 && totalBytes >= MIB_IN_BYTES) {
-             uint256 minRate = (1 * 10 ** uint256(tokenDecimals)) / 10;
+             uint256 minRate = (1 * 10 ** uint256(tokenDecimals)) / 100000;
              return minRate;
         }
 
