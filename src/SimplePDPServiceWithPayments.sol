@@ -50,11 +50,12 @@ contract SimplePDPServiceWithPayments is
     uint256 public constant MIB_IN_BYTES = 1024 * 1024; // 1 MiB in bytes
     uint256 public constant BYTES_PER_LEAF = 32; // Each leaf is 32 bytes
     uint256 public constant COMMISSION_MAX_BPS = 10000; // 100% in basis points
-    uint256 public constant DEFAULT_LOCKUP_PERIOD = 2880 * 30; // One month in epochs (assuming 30 days)
+    uint256 public constant DEFAULT_LOCKUP_PERIOD = 2880 * 10; // 10 days in epochs
+    uint256 public constant GIB_IN_BYTES = MIB_IN_BYTES * 1024; // 1 GiB in bytes
+    uint256 public constant EPOCHS_PER_MONTH = 2880 * 30; 
 
     // Dynamic fee values based on token decimals
-    uint256 public PROOFSET_CREATION_FEE; // 1 USDFC with correct decimals
-    uint256 public RATE_PER_MIB_PER_EPOCH; // 1 USDFC per MiB per epoch with correct decimals
+    uint256 public PROOFSET_CREATION_FEE; // 0.1 USDFC with correct decimals
 
     // Token decimals
     uint8 public tokenDecimals;
@@ -148,7 +149,6 @@ contract SimplePDPServiceWithPayments is
 
         // Initialize the fee constants based on the actual token decimals
         PROOFSET_CREATION_FEE = (1 * 10 ** tokenDecimals) / 10; // 0.1 USDFC
-        RATE_PER_MIB_PER_EPOCH = (1 * 10 ** tokenDecimals) / 10; // 0.1 USDFC per MiB per epoch
     }
 
     function _authorizeUpgrade(
@@ -290,7 +290,7 @@ contract SimplePDPServiceWithPayments is
         // This is necessary because modifyRailPayment requires that lockupFixed >= oneTimePayment
         payments.modifyRailLockup(
             railId,
-            DEFAULT_LOCKUP_PERIOD, // One month in epochs
+            DEFAULT_LOCKUP_PERIOD,
             PROOFSET_CREATION_FEE // lockupFixed equal to the one-time payment amount
         );
 
@@ -605,20 +605,34 @@ contract SimplePDPServiceWithPayments is
 
     /**
      * @notice Calculate the per-epoch rate based on total storage size
+     * @dev Rate is 2 USDFC per GiB per month. Free if totalBytes < 1 MiB.
      * @param totalBytes Total size of the stored data in bytes
-     * @return ratePerEpoch The calculated rate per epoch in tokens (1 USDFC per MiB per epoch)
+     * @return ratePerEpoch The calculated rate per epoch in the token's smallest unit
      */
     function calculateStorageRatePerEpoch(
         uint256 totalBytes
-    ) internal view returns (uint256) {
-        // Convert bytes to MiB, rounding up
-        uint256 sizeInMiB = totalBytes / MIB_IN_BYTES;
-        if (totalBytes % MIB_IN_BYTES > 0) {
-            sizeInMiB += 1; // Round up to next MiB
+    ) public view returns (uint256) {
+        // Free tier: No charge if storage is less than 1 MiB
+        if (totalBytes < MIB_IN_BYTES) {
+            return 0;
         }
 
-        // Calculate rate per epoch: size in MiB × rate per MiB per epoch
-        uint256 ratePerEpoch = sizeInMiB * RATE_PER_MIB_PER_EPOCH;
+       
+        uint256 numerator = totalBytes * 2 * (10 ** uint256(tokenDecimals));
+        uint256 denominator = GIB_IN_BYTES * EPOCHS_PER_MONTH;
+
+        // Ensure denominator is not zero (shouldn't happen with constants)
+        require(denominator > 0, "Denominator cannot be zero");
+
+        uint256 ratePerEpoch = numerator / denominator;
+
+        // Ensure minimum rate is 0.1 USDFC if calculation results in 0 due to rounding,
+        // but only if bytes >= 1 MiB (already checked above).
+        // This prevents charging 0 for sizes slightly above 1 MiB but below the threshold for a rate of 1 unit.
+        if (ratePerEpoch == 0 && totalBytes >= MIB_IN_BYTES) {
+             uint256 minRate = (1 * 10 ** uint256(tokenDecimals)) / 10;
+             return minRate;
+        }
 
         return ratePerEpoch;
     }
@@ -641,7 +655,7 @@ contract SimplePDPServiceWithPayments is
      */
     function getProofSetSizeInBytes(
         uint256 leafCount
-    ) internal pure returns (uint256) {
+    ) public pure returns (uint256) {
         return leafCount * BYTES_PER_LEAF;
     }
 
