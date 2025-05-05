@@ -14,6 +14,7 @@ print_usage() {
     echo "  --runs <number>          Number of optimization runs (default: 200)"
     echo "  --license <type>         License type (default: UNLICENSED)"
     echo "  --contract-name <name>   Contract name (default: derived from source file)"
+    echo "  --metadata <file>        Path to metadata.json file (optional)"
     echo "  --node-modules <path>    Path to node_modules directory (default: ./node_modules)"
     echo ""
     echo "Example:"
@@ -74,6 +75,7 @@ create_verification_payload() {
     local license="$5"
     local contract_name="$6"
     local contract_address="$7"
+    local metadata_file="$8"
     
     local payload_dir="$TEMP_DIR/payload"
     rm -rf "$payload_dir"
@@ -86,15 +88,70 @@ create_verification_payload() {
     mkdir -p "$payload_dir/$(dirname "$source_file")"
     cp "$source_file" "$payload_dir/$source_file"
     copy_dependencies "$source_file" "$payload_dir"
-
-    # Generate metadata.json using forge inspect
-    echo "Generating metadata.json using forge..." >&2
-    forge inspect "$source_file:$main_contract_name" metadata > "$payload_dir/metadata.json"
-    if [ ! -f "$payload_dir/metadata.json" ]; then
-        echo "Error: Failed to generate metadata.json" >&2
-        exit 1
+    
+    # Check if metadata file is provided
+    if [ -n "$metadata_file" ] && [ -f "$metadata_file" ]; then
+        echo "Including provided metadata file: $metadata_file" >&2
+        cp "$metadata_file" "$payload_dir/metadata.json"
+    else
+        # Try to generate metadata.json using forge if available
+        echo "Generating metadata.json using forge..." >&2
+        if command -v forge &> /dev/null; then
+            forge inspect "$source_file:$main_contract_name" metadata > "$payload_dir/metadata.json" || {
+                echo "Warning: Failed to generate metadata with forge, creating a minimal metadata.json" >&2
+                # Create minimal metadata.json
+                cat > "$payload_dir/metadata.json" << EOF
+{
+  "compiler": {
+    "version": "${compiler}"
+  },
+  "language": "Solidity",
+  "output": {
+    "abi": []
+  },
+  "settings": {
+    "compilationTarget": {
+      "${main_source_file}": "${main_contract_name}"
+    },
+    "optimizer": {
+      "enabled": ${optimize},
+      "runs": ${runs}
+    }
+  }
+}
+EOF
+            }
+        else
+            echo "Warning: forge command not found, creating a minimal metadata.json" >&2
+            # Create minimal metadata.json
+            cat > "$payload_dir/metadata.json" << EOF
+{
+  "compiler": {
+    "version": "${compiler}"
+  },
+  "language": "Solidity",
+  "output": {
+    "abi": []
+  },
+  "settings": {
+    "compilationTarget": {
+      "${main_source_file}": "${main_contract_name}"
+    },
+    "optimizer": {
+      "enabled": ${optimize},
+      "runs": ${runs}
+    }
+  }
+}
+EOF
+        fi
+        
+        if [ ! -s "$payload_dir/metadata.json" ]; then
+            echo "Error: metadata.json is empty or not created" >&2
+            exit 1
+        fi
+        echo "Metadata file created" >&2
     fi
-    echo "Generated metadata.json successfully" >&2
     
     local input_json="$payload_dir/input.json"
     
@@ -231,6 +288,10 @@ while [[ $# -gt 0 ]]; do
             contract_name="$2"
             shift 2
             ;;
+        --metadata)
+            metadata_file="$2"
+            shift 2
+            ;;
         --node-modules)
             node_modules="$2"
             shift 2
@@ -268,7 +329,12 @@ if [ ! -f "$source_file" ]; then
     exit 1
 fi
 
+if [ -n "$metadata_file" ] && [ ! -f "$metadata_file" ]; then
+    echo "Error: Metadata file not found: $metadata_file" >&2
+    exit 1
+fi
+
 echo "Creating verification payload..." >&2
-payload_dir=$(create_verification_payload "$source_file" "$compiler" "$optimize" "$runs" "$license" "$contract_name" "$contract_address")
+payload_dir=$(create_verification_payload "$source_file" "$compiler" "$optimize" "$runs" "$license" "$contract_name" "$contract_address" "$metadata_file")
 
 submit_verification_request "$payload_dir" "$contract_address" "$network"
