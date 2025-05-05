@@ -87,7 +87,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     tracking linear proof set data.  The first index is the proof set id
     and the second index if any is the index of the data in the array.
 
-    Invariant: rootCids.length == rootLeafCount.length == sumTreeCounts.length
+    Invariant: rootDigests.length == rootLeafCount.length == sumTreeCounts.length
     */
 
     // Network epoch delay between last proof of possession and next
@@ -106,7 +106,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329838769
     uint64 nextProofSetId;
     // The CID of each root. Roots and all their associated data can be appended and removed but not modified.
-    mapping(uint256 => mapping(uint256 => Cids.Cid)) rootCids;
+    mapping(uint256 => mapping(uint256 => Cids.Cid)) deprecatedRootCids;
     // The leaf count of each root
     mapping(uint256 => mapping(uint256 => uint256)) rootLeafCounts;
     // The sum tree array for finding the root id of a given leaf index.
@@ -129,6 +129,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) proofSetOwner;
     mapping(uint256 => address) proofSetProposedOwner;
     mapping(uint256 => uint256) proofSetLastProvenEpoch;
+    mapping(uint256 => bytes32) rootDigests;
 
     // Methods
 
@@ -148,6 +149,28 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function migrate() public onlyProxy reinitializer(2) {
         require(msg.sender == address(this), "Only callable by self during upgrade");
+
+        // Traverse all proofsets to move from cids to digests
+        for (uint256 setId = 0; setId < nextProofSetId; setId++) {
+            // Skip deleted proofsets
+            if (!proofSetLive(setId)) {
+                continue;
+            }
+            uint256 nextId = nextRootId[setId];
+
+            // Traverse all roots in this proofset
+            for (uint256 rootId = 0; rootId < nextId; rootId++) {
+                // Skip removed roots
+                if (!rootLive(setId, rootId)) {
+                    continue;
+                }
+
+                Cids.Cid memory cid = deprecatedRootCids[setId][rootId];
+                bytes32 digest = Cids.digestFromCid(cid);
+                rootDigests[setId][rootId] = digest;
+            }
+        }
+
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
@@ -223,9 +246,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Returns the root CID for a given proof set and root ID
+    // TODO: return a commpv2 here 
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
         require(proofSetLive(setId), "Proof set not live");
-        return rootCids[setId][rootId];
+        return Cids.Cid(rootDigests[setId][rootId]);
     }
 
     // Returns the root leaf count for a given proof set and root ID
@@ -368,11 +392,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (rawSize > MAX_ROOT_SIZE) {
             revert IndexedError(callIdx, "Root size must be less than 2^50");
         }
+        // TODO: enforce commpv2
+        // TODO: validate commpv2 against rawSize 
 
         uint256 leafCount = rawSize / LEAF_SIZE;
         uint256 rootId = nextRootId[setId]++;
         sumTreeAdd(setId, leafCount, rootId);
-        rootCids[setId][rootId] = root;
+        rootDigests[setId][rootId] = Cids.digestFromCid(root);
         rootLeafCounts[setId][rootId] = leafCount;
         proofSetLeafCount[setId] += leafCount;
         return rootId;
@@ -605,7 +631,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 delta = rootLeafCounts[setId][rootId];
         sumTreeRemove(setId, rootId, delta);
         delete rootLeafCounts[setId][rootId];
-        delete rootCids[setId][rootId];
+        delete rootDigests[setId][rootId];
         return delta;
     }
 
