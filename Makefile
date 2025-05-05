@@ -33,12 +33,12 @@ install:
 # Build target
 .PHONY: build
 build:
-	forge build
+	forge build --via-ir
 
 # Test target
 .PHONY: test
 test:
-	forge test -vv
+	forge test --via-ir -vv
 
 # Deployment targets
 .PHONY: deploy-calibnet
@@ -49,7 +49,6 @@ deploy-calibnet:
 deploy-devnet:
 	./tools/deploy-devnet.sh
 
-# Contract verification target
 .PHONY: verify
 verify:
 	@if [ -z "$(CONTRACT_NAME)" ]; then \
@@ -80,3 +79,8 @@ verify:
 		$(CONTRACT_FILE) \
 		$(CONTRACT_ADDRESS) \
 		$(NETWORK)
+
+.PHONY: deploy-mainnet
+deploy-mainnet:
+	./tools/deploy-mainnet.sh
+

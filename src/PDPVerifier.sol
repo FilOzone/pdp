@@ -50,7 +50,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     event RootsAdded(uint256 indexed setId, uint256[] rootIds);
     event RootsRemoved(uint256 indexed setId, uint256[] rootIds);
-   
+
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
 
 
@@ -59,8 +59,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Types
     // State fields
-     event Debug(string message, uint256 value);
-
     /*
     A proof set is the metadata required for tracking data for proof of possession.
     It maintains a list of CIDs of data to be proven and metadata needed to
@@ -96,7 +94,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // randomness sampling for challenge generation.
     //
     // The purpose of this delay is to prevent SPs from biasing randomness by running forking attacks.
-    // Given a small enough challengeFinality an SP can run several trials of challenge sampling and 
+    // Given a small enough challengeFinality an SP can run several trials of challenge sampling and
     // fork around samples that don't suit them, grinding the challenge randomness.
     // For the filecoin L1, a safe value is 150 using the same analysis setting 150 epochs between
     // PoRep precommit and PoRep provecommit phases.
@@ -275,10 +273,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 sybilFee = PDPFees.sybilFee();
         require(msg.value >= sybilFee, "sybil fee not met");
         burnFee(sybilFee);
-        if (msg.value > sybilFee) {
-            // Return the overpayment
-            payable(msg.sender).transfer(msg.value - sybilFee);
-        }
 
         uint256 setId = nextProofSetId++;
         proofSetLeafCount[setId] = 0;
@@ -291,6 +285,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             PDPListener(listenerAddr).proofSetCreated(setId, msg.sender, extraData);
         }
         emit ProofSetCreated(setId, msg.sender);
+
+        // Return the at the end to avoid any possible re-entrency issues.
+        if (msg.value > sybilFee) {
+            (bool success, ) = msg.sender.call{value: msg.value - sybilFee}("");
+            require(success, "Transfer failed.");
+        }
         return setId;
     }
 
@@ -322,18 +322,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Appends new roots to the collection managed by a proof set.
-    // These roots won't be challenged until the next proving period is 
+    // These roots won't be challenged until the next proving period is
     // started by calling nextProvingPeriod.
     function addRoots(uint256 setId, RootData[] calldata rootData, bytes calldata extraData) public returns (uint256) {
+        uint256 nRoots = rootData.length;
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(proofSetLive(setId), "Proof set not live");
-        require(rootData.length > 0, "Must add at least one root");
+        require(nRoots > 0, "Must add at least one root");
         require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
         uint256 firstAdded = nextRootId[setId];
         uint256[] memory rootIds = new uint256[](rootData.length);
 
 
-        for (uint256 i = 0; i < rootData.length; i++) {
+        for (uint256 i = 0; i < nRoots; i++) {
             addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
             rootIds[i] = firstAdded + i;
         }
@@ -396,57 +397,73 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Verifies and records that the provider proved possession of the
     // proof set Merkle roots at some epoch. The challenge seed is determined
     // by the epoch of the previous proof of possession.
-    // Note that this method is not restricted to the proof set owner.
-    function provePossession(uint256 setId, Proof[] calldata proofs) public payable{
+    function provePossession(uint256 setId, Proof[] calldata proofs) public payable {
         uint256 initialGas = gasleft();
-        require(msg.sender == proofSetOwner[setId], "only the owner can move to next proving period");
-        uint256 challengeEpoch = nextChallengeEpoch[setId];
-        require(block.number >= challengeEpoch, "premature proof");
-        require(proofs.length > 0, "empty proof");
-        require(challengeEpoch != NO_CHALLENGE_SCHEDULED, "no challenge scheduled");
-        RootIdAndOffset[] memory challenges = new RootIdAndOffset[](proofs.length);
-        
-        uint256 seed = drawChallengeSeed(setId);
-        uint256 leafCount = challengeRange[setId];
-        uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
-        for (uint64 i = 0; i < proofs.length; i++) {
-            // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
-            // Note -- there is a slight deviation here from the uniform distribution.
-            // Some leaves are challenged with probability p and some have probability p + deviation. 
-            // This deviation is bounded by leafCount / 2^256 given a 256 bit hash.
-            // Deviation grows with proofset leaf count.
-            // Assuming a 1000EiB = 1 ZiB network size ~ 2^70 bytes of data or 2^65 leaves
-            // This deviation is bounded by 2^65 / 2^256 = 2^-191 which is negligible.            
-            //   If modifying this code to use a hash function with smaller output size 
-            //   this deviation will increase and caution is advised.
-            // To remove this deviation we could use the standard solution of rejection sampling
-            //   This is complicated and slightly more costly at one more hash on average for maximally misaligned proofsets
-            //   and comes at no practical benefit given how small the deviation is.
-            bytes memory payload = abi.encodePacked(seed, setId, i);
-            uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
-
-            // Find the root that has this leaf, and the offset of the leaf within that root.
-            challenges[i] = findOneRootId(setId, challengeIdx, sumTreeTop);
-            bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, challenges[i].rootId));
-            bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, challenges[i].offset);
-            require(ok, "proof did not verify");
+        uint256 nProofs = proofs.length;
+        require(msg.sender == proofSetOwner[setId], "Only the owner can prove possession");
+        require(nProofs > 0, "empty proof");
+        {
+            uint256 challengeEpoch = nextChallengeEpoch[setId];
+            require(block.number >= challengeEpoch, "premature proof");
+            require(challengeEpoch != NO_CHALLENGE_SCHEDULED, "no challenge scheduled");
         }
 
-     
+        RootIdAndOffset[] memory challenges = new RootIdAndOffset[](proofs.length);
+
+        uint256 seed = drawChallengeSeed(setId);
+        {
+            uint256 leafCount = challengeRange[setId];
+            uint256 sumTreeTop = 256 - BitOps.clz(nextRootId[setId]);
+            for (uint64 i = 0; i < nProofs; i++) {
+                // Hash (SHA3) the seed,  proof set id, and proof index to create challenge.
+                // Note -- there is a slight deviation here from the uniform distribution.
+                // Some leaves are challenged with probability p and some have probability p + deviation.
+                // This deviation is bounded by leafCount / 2^256 given a 256 bit hash.
+                // Deviation grows with proofset leaf count.
+                // Assuming a 1000EiB = 1 ZiB network size ~ 2^70 bytes of data or 2^65 leaves
+                // This deviation is bounded by 2^65 / 2^256 = 2^-191 which is negligible.
+                //   If modifying this code to use a hash function with smaller output size
+                //   this deviation will increase and caution is advised.
+                // To remove this deviation we could use the standard solution of rejection sampling
+                //   This is complicated and slightly more costly at one more hash on average for maximally misaligned proofsets
+                //   and comes at no practical benefit given how small the deviation is.
+                bytes memory payload = abi.encodePacked(seed, setId, i);
+                uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
+
+                // Find the root that has this leaf, and the offset of the leaf within that root.
+                challenges[i] = findOneRootId(setId, challengeIdx, sumTreeTop);
+                bytes32 rootHash = Cids.digestFromCid(getRootCid(setId, challenges[i].rootId));
+                uint256 rootHeight = 256 - BitOps.clz(rootLeafCounts[setId][challenges[i].rootId] - 1) + 1;
+                bool ok = MerkleVerify.verify(proofs[i].proof, rootHash, proofs[i].leaf, challenges[i].offset, rootHeight);
+                require(ok, "proof did not verify");
+            }
+        }
+
+
         // Note: We don't want to include gas spent on the listener call in the fee calculation
         // to only account for proof verification fees and avoid gamability by getting the listener
         // to do extraneous work just to inflate the gas fee.
         //
         // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
         uint256 gasUsed = (initialGas - gasleft()) + ((calculateCallDataSize(proofs) + 32) * 1300);
-        calculateAndBurnProofFee(setId, gasUsed);
+        uint256 refund = calculateAndBurnProofFee(setId, gasUsed);
 
-        address listenerAddr = proofSetListener[setId];
-        if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).possessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
+        {
+            address listenerAddr = proofSetListener[setId];
+            if (listenerAddr != address(0)) {
+                PDPListener(listenerAddr).possessionProven(setId, proofSetLeafCount[setId], seed, proofs.length);
+            }
         }
+
         proofSetLastProvenEpoch[setId] = block.number;
         emit PossessionProven(setId, challenges);
+
+        // Return the overpayment after doing everything else to avoid re-entrancy issues (all state has been updated by this point). If this
+        // call fails, the entire operation reverts.
+        if (refund > 0) {
+            (bool success, ) = msg.sender.call{value: refund}("");
+            require(success, "Transfer failed.");
+        }
     }
 
     function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
@@ -462,7 +479,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         );
     }
 
-    function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal {
+    function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal returns (uint256 refund) {
         uint256 estimatedGasFee = gasUsed * block.basefee;
         uint256 rawSize = 32 * challengeRange[setId];
         (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
@@ -473,13 +490,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             filUsdPriceExpo,
             rawSize,
             block.number - proofSetLastProvenEpoch[setId]
-        );        
+        );
         burnFee(proofFee);
-        if (msg.value > proofFee) {
-            // Return the overpayment
-            payable(msg.sender).transfer(msg.value - proofFee);
-        }
         emit ProofFeePaid(setId, proofFee, filUsdPrice, filUsdPriceExpo);
+
+        return msg.value - proofFee; // burnFee asserts that proofFee <= msg.value;
     }
 
     function calculateCallDataSize(Proof[] calldata proofs) internal pure returns (uint256) {
@@ -524,23 +539,26 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(msg.sender == proofSetOwner[setId], "only the owner can move to next proving period");
         require(proofSetLeafCount[setId] > 0, "can only start proving once leaves are added");
-        
+
         if (proofSetLastProvenEpoch[setId] == NO_PROVEN_EPOCH) {
             proofSetLastProvenEpoch[setId] = block.number;
         }
 
         // Take removed roots out of proving set
         uint256[] storage removals = scheduledRemovals[setId];
-        uint256[] memory removalsToProcess = new uint256[](removals.length);
+        uint256 nRemovals = removals.length;
+        if (nRemovals > 0) {
+            uint256[] memory removalsToProcess = new uint256[](nRemovals);
 
-        for (uint256 i = 0; i < removalsToProcess.length; i++) {
-            removalsToProcess[i] = removals[removals.length - 1];
-            removals.pop();
+            for (uint256 i = 0; i < nRemovals; i++) {
+                removalsToProcess[i] = removals[removals.length - 1];
+                removals.pop();
+            }
+
+            removeRoots(setId, removalsToProcess);
+            emit RootsRemoved(setId, removalsToProcess);
         }
 
-        removeRoots(setId, removalsToProcess);
-        emit RootsRemoved(setId, removalsToProcess);
-        
         // Bring added roots into proving set
         challengeRange[setId] = proofSetLeafCount[setId];
         if (challengeEpoch < block.number + challengeFinality) {

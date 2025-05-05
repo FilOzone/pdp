@@ -1,0 +1,18 @@
+Proofset ID,Gas value,Message type,Message Link,DataSize,RootCount,Proofset Size
+4,"105,553,070",ProvePossession,https://calibration.filfox.info/en/message/bafy2bzaceackgsldv7rl6uu2ohy2arg6on4vnm3sh6qk6ac7skcaiscdmwxyo?t=4,64GiB,39,2496 GiB
+5,"99,514,874",ProvePossession,https://calibration.filfox.info/en/message/bafy2bzaceds37k36ddwexmf5flapycyrqxbvrredq2ps55wm4mgpbtvmcjqoq?t=4,100MB,113,11300 MB
+6,"123,405,148",ProvePossession,https://calibration.filfox.info/en/message/bafy2bzacecr7kbrtvqkd6nmhn3tlxazlt2nceiykpqhkkxynpsxvrz2vsc7eo?t=4,1MB,1011,1011MB
+5,"105,682,164",ProvePossession,https://calibration.filfox.info/en/message/bafy2bzaceb6gacb6tmm54ekn3gzg3cfnwc2w375vv6han2hwurrkb3qxmse6g?t=3,100 MB,113,11300 MB
+4,"111,308,777",ProvePossession,https://calibration.filfox.info/en/message/bafy2bzacecu6kfdqpsor6fyrhhuthynnvxcc7by64uumdf44pbawvhomw6hhk?t=4,64 GiB,39,
+4,"145,714,311",ProvePossession,https://calibration.filfox.info/en/message/0x4bbdd4066f84c53a1609791230af0c140b121cc7ceffe95b3fa5d86be190dabb?t=4,64GiB,39,"145,714,311"
+5,"149,567,082",ProvePossession,https://calibration.filfox.info/en/message/0xb3d1a93d99577afdd00a80c8ccd15e4df87143c63358b95fb3a269140e0e3ce0?t=1,100MB,113,"149,567,082"
+6,"153,074,953",ProvePossession,https://calibration.filfox.info/en/message/0xfb0ed656e96947dbe3d6f1d2b6739e8abf49a745e35f4689d7fa331969fb8af0?t=4,1MB,1011,"153,074,953"
+7,"177,255,135",ProvePossession,https://calibration.filfox.info/en/message/0xf1375c2c9ff02b624ec4d133d15aed1c5d4b0c086aa0bdba88d1687b4c398017?t=4,1MB,10000,"177,255,135"
+4,"56,652,758",NextProvingPeriod,https://calibration.filfox.info/en/message/0xac88291db41349c2903286d0a1d82ffad19ded9f41d59823b2281d92f60dd75f?t=4,64GiB,39,
+5,"54,861,912",NextProvingPeriod,https://calibration.filfox.info/en/message/0x6a4d020c3b4ea05cd34f1a4546459b579db204d87e2e0db4d7314511dd2b219d?t=1,100MB,113,
+6,"54,254,719",NextProvingPeriod,https://calibration.filfox.info/en/message/0xf049119c4f65fa3c680f71feda7f745b243bddb23ce04e05e31405cbc75abc51?t=4,1MB,1011,
+7,"54,199,247",NextProvingPeriod,https://calibration.filfox.info/en/message/0xd83eb0b78398760b866e5244e08cfc10b59526f1e3cf7c7fa5e95f6343ea780c?t=4,1MB,10000,
+4,"44,250,736",AddRoots,https://calibration.filfox.info/en/message/0x327817faf41fddc47f9416ab5623c54dc14d924615f5d3fb78f1d88eeba425a8?t=4,64GiB,39,
+5,"55,549,661",AddRoots,https://calibration.pdp-explorer.eng.filoz.org/proofsets/5,100MB,113,
+6,"81,035,371",AddRoots,https://calibration.filfox.info/en/message/0x2d9fa3570a0d605aba79df00efea292bfb75b6601ff49f4673fc7f50cb5a6df4?t=1,1MB,1011,
+7,"98,250,749",AddRoots,https://calibration.filfox.info/en/message/0x5d09607e618e8d3377e5900b410d60e55efd6b573725d9539d9fb626321f95a1?t=4,1MB,10000,

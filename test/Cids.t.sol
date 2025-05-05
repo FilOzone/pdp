@@ -13,4 +13,15 @@ contract CidsTest is Test {
         bytes32 foundDigest = Cids.digestFromCid(c);
         assertEq(foundDigest, digest);
     }
+    
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testDigestTooShort() public {
+        bytes memory byteArray = new bytes(31);
+        for (uint256 i = 0; i < 31; i++) {
+            byteArray[i] = bytes1(uint8(i));
+        }
+        Cids.Cid memory c = Cids.Cid(byteArray);
+        vm.expectRevert("Cid data is too short");
+        Cids.digestFromCid(c);
+    }
 }

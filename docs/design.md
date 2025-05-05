@@ -47,7 +47,7 @@ The PDP system follows these primary interaction patterns:
   - Manage proving periods
 - **State management**: Maintains proof set state including roots, sizes, and challenge epochs
 
-Search over proof set data to find a challenged leaf is the heart of the PDPVerifier.  To do this efficiently the verifier needs binary search.  To implement binary search efficiently with a mutating array of proofset roots we use a Fenwick/BIT tree variant.  See the design document: https://www.notion.so/filecoindev/PDP-Logical-Array-4405cda734964622993d3d58389942e8 
+Search over proof set data to find a challenged leaf is the heart of the PDPVerifier.  To do this efficiently the verifier needs binary search.  To implement binary search efficiently with a mutating array of proofset roots we use a Fenwick/BIT tree variant.  See the design document: https://www.notion.so/filecoindev/PDP-Logical-Array-4405cda734964622993d3d58389942e8
 
 Much of the design of the verifier comes down to preventing proving parties from grinding attacks: See grinding prevention design document: https://www.notion.so/filecoindev/PDP-Grinding-Mitigations-1a3dc41950c180de9403cc2bb5c14bbb
 
@@ -78,36 +78,36 @@ Detailed description of key data structures.
 ### ProofSet
 A proof set is a logical container that holds an ordered collection of Merkle roots representing arrays of data:
 
-```
+```solidity
 struct Root {
-id: u64
-data: CID,
-size: u64, // Must be multiple of 32.
+    id: u64
+    data: CID,
+    size: u64, // Must be multiple of 32.
 }
 struct ProofSet {
-id: u64,
-// Protocol enforced delay in epochs between a successful proof and availability of
-// the next challenge.
-challengeDelay: u64,
-// ID to assign to the next root (a sequence number).
-nextRootID: u64,
-// Roots in the proof set.
-roots: Root[],
-// The total size of all roots.
-totalSize: u64,
-// Epoch from which to draw the next challenge.
-nextChallengeEpoch: u64,
+    id: u64,
+    // Protocol enforced delay in epochs between a successful proof and availability of
+    // the next challenge.
+    challengeDelay: u64,
+    // ID to assign to the next root (a sequence number).
+    nextRootID: u64,
+    // Roots in the proof set.
+    roots: Root[],
+    // The total size of all roots.
+    totalSize: u64,
+    // Epoch from which to draw the next challenge.
+    nextChallengeEpoch: u64,
 }
 ```
 
 ### Proof Structure
 Each proof certifies the inclusion of a leaf at a specified position within a Merkle tree:
 
-```
+```solidity
 struct Proof {
-leaf: bytes32,
-leafOffset: uint,
-proof: bytes32[],
+    leaf: bytes32,
+    leafOffset: uint,
+    proof: bytes32[],
 }
 ```
 
@@ -195,4 +195,3 @@ Detailed description of key workflows.
 - **Proving Period**: The time window between successive challenge windows
 - **Challenge Window**: The time window during which proofs must be submitted
 - **Challenge**: A random request to prove possession of specific data
-

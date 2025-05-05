@@ -14,3 +14,7 @@ remappings = [
     'forge-std/=lib/forge-std/src/',
     '@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity',
 ]
+
+optimizer_runs = 1000000000
+via_ir = true
+

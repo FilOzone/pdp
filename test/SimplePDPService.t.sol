@@ -78,6 +78,13 @@ contract SimplePDPServiceTest is Test {
         pdpService.nextProvingPeriod(proofSetId, tooLate, leafCount, empty);
     }
 
+    function testProveBeforeInitialization() public {
+        
+        // Create a simple mock proof
+        vm.expectRevert("Proving not yet started");
+        pdpService.possessionProven(proofSetId, leafCount, seed, 5);
+    }
+
     function testInactivateProofSetHappyPath() public {
         // Setup initial state
         pdpService.rootsAdded(proofSetId, 0, new PDPVerifier.RootData[](0), empty);
