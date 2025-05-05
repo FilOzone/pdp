@@ -129,7 +129,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) proofSetOwner;
     mapping(uint256 => address) proofSetProposedOwner;
     mapping(uint256 => uint256) proofSetLastProvenEpoch;
-    mapping(uint256 => bytes32) rootDigests;
+    mapping(uint256 => mapping(uint256 => bytes32)) rootDigests;
 
     // Methods
 
@@ -246,10 +246,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Returns the root CID for a given proof set and root ID
-    // TODO: return a commpv2 here 
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
         require(proofSetLive(setId), "Proof set not live");
-        return Cids.Cid(rootDigests[setId][rootId]);
+        uint256 rawSize = 32 * rootLeafCounts[setId][rootId];
+        return Cids.commpV2FromDigest(rawSize, rootDigests[setId][rootId]);
     }
 
     // Returns the root leaf count for a given proof set and root ID

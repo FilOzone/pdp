@@ -25,3 +25,57 @@ contract CidsTest is Test {
         Cids.digestFromCid(c);
     }
 }
+
+contract CidsUvarintTestHelper {
+    using Cids for *;
+
+    // Expose _uvarintLength as public
+    function uvarintLength(uint256 value) public pure returns (uint256) {
+        return Cids._uvarintLength(value);
+    }
+
+    // Expose _writeUvarint as public
+    function writeUvarint(uint256 value) public pure returns (bytes memory) {
+        uint256 len = Cids._uvarintLength(value);
+        bytes memory data = new bytes(len);
+        Cids._writeUvarint(data, 0, value);
+        return data;
+    }
+}
+
+contract CidsCommpV2UvarintTest is Test {
+    CidsUvarintTestHelper helper;
+
+    function setUp() public {
+        helper = new CidsUvarintTestHelper();
+    }
+
+    function testUvarintLength() public view {
+        assertEq(helper.uvarintLength(0), 1);
+        assertEq(helper.uvarintLength(127), 1);
+        assertEq(helper.uvarintLength(128), 2);
+        assertEq(helper.uvarintLength(255), 2);
+        assertEq(helper.uvarintLength(300), 2);
+        assertEq(helper.uvarintLength(16383), 2);
+        assertEq(helper.uvarintLength(16384), 3);
+        assertEq(helper.uvarintLength(2097151), 3);
+        assertEq(helper.uvarintLength(2097152), 4);
+    }
+
+    function testWriteUvarint() public view {
+        assertUvarint(0, hex"00");
+        assertUvarint(127, hex"7f");
+        assertUvarint(128, hex"8001");
+        assertUvarint(255, hex"ff01");
+        assertUvarint(300, hex"ac02");
+        assertUvarint(16384, hex"808001");
+    }
+
+    function assertUvarint(uint256 value, bytes memory expected) public view {
+        bytes memory actual = helper.writeUvarint(value);
+        assertEq(actual, expected);
+    }
+
+
+
+}
