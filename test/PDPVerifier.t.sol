@@ -221,7 +221,7 @@ contract PDPVerifierOwnershipTest is Test {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](1);
-        rootDataArray[0] = PDPVerifier.RootData(testCid, 100 * pdpVerifier.LEAF_SIZE());
+        rootDataArray[0] = PDPVerifier.RootData(testCid, 100 * Cids.COMMP_LEAF_SIZE());
         pdpVerifier.addRoots(setId, rootDataArray, empty);
 
         uint256[] memory rootIdsToRemove = new uint256[](1);
@@ -1252,7 +1252,7 @@ contract SumTreeAddTest is Test {
 
         for (uint256 i = 0; i < counts.length; i++) {
             Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
-            rootDataArray[i] = PDPVerifier.RootData(testCid, counts[i] * pdpVerifier.LEAF_SIZE());
+            rootDataArray[i] = PDPVerifier.RootData(testCid, counts[i] * Cids.COMMP_LEAF_SIZE());
         }
         pdpVerifier.addRoots(testSetId, rootDataArray, empty);
         assertEq(pdpVerifier.getProofSetLeafCount(testSetId), 87, "Incorrect final proof set leaf count");
@@ -1294,7 +1294,7 @@ contract SumTreeAddTest is Test {
         for (uint256 i = 0; i < counts.length; i++) {
             Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
             PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](1);
-            rootDataArray[0] = PDPVerifier.RootData(testCid, counts[i] * pdpVerifier.LEAF_SIZE());
+            rootDataArray[0] = PDPVerifier.RootData(testCid, counts[i] * Cids.COMMP_LEAF_SIZE());
             pdpVerifier.addRoots(testSetId, rootDataArray, empty);
             // Assert the root was added correctly
             assertEq(pdpVerifier.getRootCid(testSetId, i).data, testCid.data, "Root not added correctly");
@@ -1437,7 +1437,7 @@ contract SumTreeAddTest is Test {
         for (uint256 i = 0; i < sizes.length; i++) {
             Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
             PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](1);
-            rootDataArray[0] = PDPVerifier.RootData(testCid, sizes[i] * pdpVerifier.LEAF_SIZE());
+            rootDataArray[0] = PDPVerifier.RootData(testCid, sizes[i] * Cids.COMMP_LEAF_SIZE());
             pdpVerifier.addRoots(testSetId, rootDataArray, empty);
         }
         pdpVerifier.scheduleRemovals(testSetId, rootIdsToRemove, empty);

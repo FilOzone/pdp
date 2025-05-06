@@ -28,7 +28,6 @@ interface PDPListener {
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
-    uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_ROOT_SIZE = 1 << 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
@@ -248,8 +247,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns the root CID for a given proof set and root ID
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
         require(proofSetLive(setId), "Proof set not live");
-        uint256 rawSize = 32 * rootLeafCounts[setId][rootId];
-        return Cids.commpV2FromDigest(rawSize, rootDigests[setId][rootId]);
+        return Cids.commpV2FromDigest(rootLeafCounts[setId][rootId], rootDigests[setId][rootId]);
     }
 
     // Returns the root leaf count for a given proof set and root ID
@@ -347,16 +345,22 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit ProofSetDeleted(setId, deletedLeafCount);
     }
 
-    // Struct for tracking root data
+    // Struct for tracking root data as commpv2 cids
     struct RootData {
         Cids.Cid root;
         uint256 rawSize;
     }
 
+    // Struct for input root data as raw size and digest
+    struct RootDataRaw {
+        uint256 rawSize;
+        bytes32 digest;
+    }
+
     // Appends new roots to the collection managed by a proof set.
     // These roots won't be challenged until the next proving period is
     // started by calling nextProvingPeriod.
-    function addRoots(uint256 setId, RootData[] calldata rootData, bytes calldata extraData) public returns (uint256) {
+    function addRoots(uint256 setId, RootDataRaw[] calldata rootData, bytes calldata extraData) public returns (uint256) {
         uint256 nRoots = rootData.length;
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(proofSetLive(setId), "Proof set not live");
@@ -367,14 +371,21 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
 
         for (uint256 i = 0; i < nRoots; i++) {
-            addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
+            addOneRoot(setId, i, rootData[i].digest, rootData[i].rawSize);
             rootIds[i] = firstAdded + i;
         }
         emit RootsAdded(setId, rootIds);
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).rootsAdded(setId, firstAdded, rootData, extraData);
+            RootData[] memory rootDataCids = new RootData[](nRoots);
+            for (uint256 i = 0; i < nRoots; i++) {
+                rootDataCids[i] = RootData({
+                    root: Cids.commpV2FromDigest(rootData[i].rawSize, rootData[i].digest),
+                    rawSize: rootData[i].rawSize
+                });
+            }
+            PDPListener(listenerAddr).rootsAdded(setId, firstAdded, rootDataCids, extraData);
         }
 
         return firstAdded;
@@ -382,8 +393,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     error IndexedError(uint256 idx, string msg);
 
-    function addOneRoot(uint256 setId, uint256 callIdx, Cids.Cid calldata root, uint256 rawSize) internal returns (uint256) {
-        if (rawSize % LEAF_SIZE != 0) {
+    function addOneRoot(uint256 setId, uint256 callIdx, bytes32 digest, uint256 rawSize) internal returns (uint256) {
+        if (rawSize % Cids.COMMP_LEAF_SIZE != 0) {
             revert IndexedError(callIdx, "Size must be a multiple of 32");
         }
         if (rawSize == 0) {
@@ -392,13 +403,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (rawSize > MAX_ROOT_SIZE) {
             revert IndexedError(callIdx, "Root size must be less than 2^50");
         }
-        // TODO: enforce commpv2
-        // TODO: validate commpv2 against rawSize 
 
-        uint256 leafCount = rawSize / LEAF_SIZE;
+        uint256 leafCount = rawSize / Cids.COMMP_LEAF_SIZE;
         uint256 rootId = nextRootId[setId]++;
         sumTreeAdd(setId, leafCount, rootId);
-        rootDigests[setId][rootId] = Cids.digestFromCid(root);
+        rootDigests[setId][rootId] = digest;
         rootLeafCounts[setId][rootId] = leafCount;
         proofSetLeafCount[setId] += leafCount;
         return rootId;

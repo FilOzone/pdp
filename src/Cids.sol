@@ -1,8 +1,18 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
+import {BitOps} from "./BitOps.sol";
+
 library Cids {
-    // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329836995
+    uint256 public constant COMMP_LEAF_SIZE = 32;
+    //  0x01    0x55                0x9120
+    // (cidv1)  (raw)  (fr32-sha2-256-trunc254-padded-binary-tree)
+    bytes4 public constant COMMP_V2_PREFIX = hex"01559120";
+    //  0x01    0x81e203                       0x9220
+    // (cidv1) (fil-commitment-unsealed) (sha2-256-trunc254-padded)
+    bytes6 public constant COMMP_V1_PREFIX = hex"0181e2039220";
+
+    // A helper struct for events + getter functions to display digests as CommpV2 CIDs
     struct Cid {
         bytes data;
     }
@@ -16,6 +26,29 @@ library Cids {
         }
         return bytes32(dataSlice);
     }
+
+    // Checks that cid matches commpv1 or commpv2.
+    // If cid matches commpv2 then we validate that the on chain size matches commpv2 digest
+    function validateCommP(Cid memory cid, uint256 leafCount) internal pure {
+        if (hasPrefix6(cid, COMMP_V1_PREFIX)) {
+            return
+        }
+        if (!hasPrefix4(cid, COMMP_V2_PREFIX)) {
+            revert "Cid must be commp"
+        }
+        // Validate commpv2
+    }
+
+    function hasPrefix4(bytes memory data, bytes4 prefix) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        return bytes(data[:4]) == prefix;
+    }
+
+    function hasPrefix6(bytes memory data, bytes6 prefix) internal pure returns (bool) {
+        if (data.length < 6) return false;
+        return bytes(data[:6]) == prefix;
+    }
+
 
     // Makes a CID from a prefix and a digest.
     // The prefix doesn't matter to these contracts, which only inspect the last 32 bytes (the hash digest).
@@ -33,28 +66,23 @@ library Cids {
     // Creates a CommPv2 CID from a raw size and hash digest according to FRC-0069.
     // The CID uses the Raw codec (0x55) and fr32-sha2-256-trunc254-padded-binary-tree multihash (0x1011).
     // The digest format is: uvarint padding | uint8 height | 32 byte root data
-    function commpV2FromDigest(uint256 rawSize, bytes32 digest) internal pure returns (Cids.Cid memory) {
+    function commpV2FromDigest(uint256 leafCount, bytes32 digest) internal pure returns (Cids.Cid memory) {
         // Calculate padding and height
+ 
+        // Height is limited to 50 for PDP so packing into uint8 is safe for our use case
+        uint8 height = uint8(256 - BitOps.clz(leafCount - 1) + 1);
+
+        // padding = (next power of 2 - leafCount) * 127 / 128
+        // padding is the pre-fr32 padded number of 0 bytes appended to data to hit a power of 2
+        // after we do fr32 padding. 
+        // since pdp assumes raw size includes fr32 padding this means we multiple by 127 / 128
         uint256 padding;
-        uint8 height;
-        
-        if (rawSize < 127) {
-            // If data < 127 bytes, pad to 127 bytes
-            padding = 127 - rawSize;
-            height = 2; // 127 bytes = 2^7 * 127/128
-        } else {
-            // Calculate the next multiple of 127/128 bytes
-            uint256 paddedSize = ((rawSize * 128 + 126) / 127) * 127;
-            padding = paddedSize - rawSize;
+        // All CommPs need to be padded to at least 127 bytes pre fr32 
+        // Since we take fr32 padded leaves this means 
+        if (leafCount < 4) { 
             
-            // Calculate height based on padded size
-            // height = log2(paddedSize * 128/127)
-            uint256 sizeInLeaves = paddedSize * 128 / 127;
-            height = 0;
-            while (sizeInLeaves > 1) {
-                sizeInLeaves >>= 1;
-                height++;
-            }
+        } else {
+            padding = ((1 << height) - leafCount) * 32 * 127 / 128;
         }
 
         // Create the multihash digest
@@ -80,6 +108,10 @@ library Cids {
         cidData[1] = 0x55; // Raw codec
         cidData[2] = 0x10; // fr32-sha2-256-trunc254-padded-binary-tree multihash (high byte)
         cidData[3] = 0x11; // fr32-sha2-256-trunc254-padded-binary-tree multihash (low byte)
+        //  0x1011 
+        //  0001 0000 0001 0001
+        // 1001 0000 0001 0001 
+        // 0x9011
         
         for (uint256 i = 0; i < multihashDigest.length; i++) {
             cidData[4 + i] = multihashDigest[i];

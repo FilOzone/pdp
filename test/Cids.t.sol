@@ -69,13 +69,11 @@ contract CidsCommpV2UvarintTest is Test {
         assertUvarint(255, hex"ff01");
         assertUvarint(300, hex"ac02");
         assertUvarint(16384, hex"808001");
+        assertUvarint(4113, hex"9120")
     }
 
     function assertUvarint(uint256 value, bytes memory expected) public view {
         bytes memory actual = helper.writeUvarint(value);
         assertEq(actual, expected);
     }
-
-
-
 }
