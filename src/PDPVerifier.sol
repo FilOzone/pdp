@@ -86,7 +86,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     tracking linear proof set data.  The first index is the proof set id
     and the second index if any is the index of the data in the array.
 
-    Invariant: rootDigests.length == rootLeafCount.length == sumTreeCounts.length
+    Invariant: rootCids.length == rootLeafCount.length == sumTreeCounts.length
     */
 
     // Network epoch delay between last proof of possession and next
@@ -128,7 +128,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) proofSetOwner;
     mapping(uint256 => address) proofSetProposedOwner;
     mapping(uint256 => uint256) proofSetLastProvenEpoch;
-    mapping(uint256 => mapping(uint256 => bytes32)) rootDigests;
 
     // Methods
 
@@ -148,27 +147,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function migrate() public onlyProxy reinitializer(2) {
         require(msg.sender == address(this), "Only callable by self during upgrade");
-
-        // Traverse all proofsets to move from cids to digests
-        for (uint256 setId = 0; setId < nextProofSetId; setId++) {
-            // Skip deleted proofsets
-            if (!proofSetLive(setId)) {
-                continue;
-            }
-            uint256 nextId = nextRootId[setId];
-
-            // Traverse all roots in this proofset
-            for (uint256 rootId = 0; rootId < nextId; rootId++) {
-                // Skip removed roots
-                if (!rootLive(setId, rootId)) {
-                    continue;
-                }
-
-                Cids.Cid memory cid = deprecatedRootCids[setId][rootId];
-                bytes32 digest = Cids.digestFromCid(cid);
-                rootDigests[setId][rootId] = digest;
-            }
-        }
 
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
@@ -247,7 +225,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns the root CID for a given proof set and root ID
     function getRootCid(uint256 setId, uint256 rootId) public view returns (Cids.Cid memory) {
         require(proofSetLive(setId), "Proof set not live");
-        return Cids.commpV2FromDigest(rootLeafCounts[setId][rootId], rootDigests[setId][rootId]);
+        return rootCids[setId][rootId];
     }
 
     // Returns the root leaf count for a given proof set and root ID
@@ -351,16 +329,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 rawSize;
     }
 
-    // Struct for input root data as raw size and digest
-    struct RootDataRaw {
-        uint256 rawSize;
-        bytes32 digest;
-    }
-
     // Appends new roots to the collection managed by a proof set.
     // These roots won't be challenged until the next proving period is
     // started by calling nextProvingPeriod.
-    function addRoots(uint256 setId, RootDataRaw[] calldata rootData, bytes calldata extraData) public returns (uint256) {
+    function addRoots(uint256 setId, RootData[] calldata rootData, bytes calldata extraData) public returns (uint256) {
         uint256 nRoots = rootData.length;
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(proofSetLive(setId), "Proof set not live");
@@ -371,21 +343,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
 
         for (uint256 i = 0; i < nRoots; i++) {
-            addOneRoot(setId, i, rootData[i].digest, rootData[i].rawSize);
+            addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
             rootIds[i] = firstAdded + i;
         }
         emit RootsAdded(setId, rootIds);
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
-            RootData[] memory rootDataCids = new RootData[](nRoots);
-            for (uint256 i = 0; i < nRoots; i++) {
-                rootDataCids[i] = RootData({
-                    root: Cids.commpV2FromDigest(rootData[i].rawSize, rootData[i].digest),
-                    rawSize: rootData[i].rawSize
-                });
-            }
-            PDPListener(listenerAddr).rootsAdded(setId, firstAdded, rootDataCids, extraData);
+            PDPListener(listenerAddr).rootsAdded(setId, firstAdded, rootData, extraData);
         }
 
         return firstAdded;
@@ -393,7 +358,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     error IndexedError(uint256 idx, string msg);
 
-    function addOneRoot(uint256 setId, uint256 callIdx, bytes32 digest, uint256 rawSize) internal returns (uint256) {
+    function addOneRoot(uint256 setId, uint256 callIdx, Cids.Cid calldata root, uint256 rawSize) internal returns (uint256) {
         if (rawSize % Cids.COMMP_LEAF_SIZE != 0) {
             revert IndexedError(callIdx, "Size must be a multiple of 32");
         }
@@ -407,7 +372,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 leafCount = rawSize / Cids.COMMP_LEAF_SIZE;
         uint256 rootId = nextRootId[setId]++;
         sumTreeAdd(setId, leafCount, rootId);
-        rootDigests[setId][rootId] = digest;
+        rootCids[setId][rootId] = root;
         rootLeafCounts[setId][rootId] = leafCount;
         proofSetLeafCount[setId] += leafCount;
         return rootId;
@@ -640,7 +605,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 delta = rootLeafCounts[setId][rootId];
         sumTreeRemove(setId, rootId, delta);
         delete rootLeafCounts[setId][rootId];
-        delete rootDigests[setId][rootId];
+        delete rootCids[setId][rootId];
         return delta;
     }
 
