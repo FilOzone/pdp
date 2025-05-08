@@ -28,7 +28,6 @@ interface PDPListener {
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
-    uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_ROOT_SIZE = 1 << 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
@@ -106,7 +105,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329838769
     uint64 nextProofSetId;
     // The CID of each root. Roots and all their associated data can be appended and removed but not modified.
-    mapping(uint256 => mapping(uint256 => Cids.Cid)) rootCids;
+    mapping(uint256 => mapping(uint256 => Cids.Cid)) deprecatedRootCids;
     // The leaf count of each root
     mapping(uint256 => mapping(uint256 => uint256)) rootLeafCounts;
     // The sum tree array for finding the root id of a given leaf index.
@@ -141,6 +140,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
+    }
+
+    string public constant VERSION = "1.1.0";
+    event ContractUpgraded(string version, address implementation);
+
+    function migrate() public onlyProxy reinitializer(2) {
+        require(msg.sender == address(this), "Only callable by self during upgrade");
+
+        emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -315,7 +323,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit ProofSetDeleted(setId, deletedLeafCount);
     }
 
-    // Struct for tracking root data
+    // Struct for tracking root data as commpv2 cids
     struct RootData {
         Cids.Cid root;
         uint256 rawSize;
@@ -351,7 +359,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error IndexedError(uint256 idx, string msg);
 
     function addOneRoot(uint256 setId, uint256 callIdx, Cids.Cid calldata root, uint256 rawSize) internal returns (uint256) {
-        if (rawSize % LEAF_SIZE != 0) {
+        if (rawSize % Cids.COMMP_LEAF_SIZE != 0) {
             revert IndexedError(callIdx, "Size must be a multiple of 32");
         }
         if (rawSize == 0) {
@@ -361,7 +369,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             revert IndexedError(callIdx, "Root size must be less than 2^50");
         }
 
-        uint256 leafCount = rawSize / LEAF_SIZE;
+        uint256 leafCount = rawSize / Cids.COMMP_LEAF_SIZE;
         uint256 rootId = nextRootId[setId]++;
         sumTreeAdd(setId, leafCount, rootId);
         rootCids[setId][rootId] = root;
