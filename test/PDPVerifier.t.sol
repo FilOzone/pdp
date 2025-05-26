@@ -1322,6 +1322,133 @@ contract SumTreeAddTest is Test {
         // Assert final proof set leaf count
         assertEq(pdpVerifier.getProofSetLeafCount(testSetId), 820, "Incorrect final proof set leaf count");
     }
+    function assertSumTreeInvariant(uint256 setId) internal view {
+    uint256 nextRootId = pdpVerifier.getNextRootId(setId);
+    for (uint256 index = 0; index < nextRootId; index++) {
+        uint256 height = pdpVerifier.getTestHeightFromIndex(index);
+        uint256 range = 1 << height;
+
+        if (index + 1 < range) {
+            continue; // skip to avoid underflow
+        }
+
+        uint256 expectedSum = 0;
+        for (uint256 j = index + 1 - range; j <= index; j++) {
+            expectedSum += pdpVerifier.getRootLeafCount(setId, j);
+        }
+
+        uint256 actualSum = pdpVerifier.getSumTreeCounts(setId, index);
+        assertEq(
+            actualSum,
+            expectedSum,
+            string(abi.encodePacked("SumTree invariant failed at index ", vm.toString(index)))
+        );
+    }
+}
+
+function testSumTreeInvariantAfterAddsAndRemovals() public {
+    uint256[] memory counts = new uint256[](6);
+    counts[0] = 10;
+    counts[1] = 20;
+    counts[2] = 5;
+    counts[3] = 15;
+    counts[4] = 25;
+    counts[5] = 30;
+
+    PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](counts.length);
+    for (uint256 i = 0; i < counts.length; i++) {
+        Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
+        rootDataArray[i] = PDPVerifier.RootData(
+            testCid,
+            counts[i] * pdpVerifier.LEAF_SIZE()
+        );
+    }
+    pdpVerifier.addRoots(testSetId, rootDataArray, empty);
+
+    uint256[] memory toRemove = new uint256[](2);
+
+    toRemove[0] = 1;
+    toRemove[1] = 4;
+    pdpVerifier.scheduleRemovals(testSetId, toRemove, empty);
+
+    pdpVerifier.nextProvingPeriod(
+        testSetId,
+        block.number + challengeFinalityDelay,
+        empty
+    );
+
+    assertSumTreeInvariant(testSetId);
+}
+function testAdvancedSumTreeInvariant() public {
+    uint256 numRoots = 16;
+    uint256[] memory counts = new uint256[](numRoots);
+    PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](numRoots);
+
+    // Round 1 Add roots with dynamic sizes
+    for (uint256 i = 0; i < numRoots; i++) {
+        uint256 size = ((i + 1) * 10) + (i % 3); // mild randomness
+        counts[i] = size;
+        Cids.Cid memory cid = Cids.Cid(abi.encodePacked("root", i));
+        rootDataArray[i] = PDPVerifier.RootData(cid, size * pdpVerifier.LEAF_SIZE());
+    }
+
+    pdpVerifier.addRoots(testSetId, rootDataArray, empty);
+    pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+
+    // Assert invariant after first round
+    assertSumTreeInvariant(testSetId);
+
+    // Round 2 Remove a few roots and add new ones
+    uint256[] memory toRemove = new uint256[](4);  // Initialize toRemove array
+    toRemove[0] = 2;
+    toRemove[1] = 5;
+    toRemove[2] = 7;
+    toRemove[3] = 12;
+    pdpVerifier.scheduleRemovals(testSetId, toRemove, empty);
+
+    // Add 4 more roots to simulate continued updates
+    PDPVerifier.RootData[] memory round2Roots = new PDPVerifier.RootData[](4);  // Initialize round2Roots array
+    for (uint256 i = 0; i < 4; i++) {
+        uint256 rootId = numRoots + i;
+        uint256 size = 50 + i * 11;
+        Cids.Cid memory cid = Cids.Cid(abi.encodePacked("newRoot", rootId));
+        round2Roots[i] = PDPVerifier.RootData(cid, size * pdpVerifier.LEAF_SIZE());
+    }
+    pdpVerifier.addRoots(testSetId, round2Roots, empty);
+    pdpVerifier.nextProvingPeriod(testSetId, block.number + 2 * challengeFinalityDelay, empty);
+
+    // Final invariant check after multiple rounds
+    assertSumTreeInvariant(testSetId);
+
+    // Additional sanity checks
+    bytes memory emptyBytes = new bytes(0);  // Initialize emptyBytes
+    for (uint256 i = 0; i < toRemove.length; i++) {
+        assertEq(pdpVerifier.getRootLeafCount(testSetId, toRemove[i]), 0, "Leaf count should be zero for removed roots");
+        assertEq(pdpVerifier.getRootCid(testSetId, toRemove[i]).data, emptyBytes, "CID should be cleared for removed root");
+    }
+
+    uint256 nextRootId = pdpVerifier.getNextRootId(testSetId);
+    assertGt(nextRootId, numRoots, "New roots not added properly");
+    assertGt(pdpVerifier.getProofSetLeafCount(testSetId), 0, "Leaf count should be positive after add/remove");
+}
+function testFuzzedSumTreeInvariant(uint256 seed) public {
+    vm.assume(seed > 100);
+    uint256 numRoots = 16;
+    PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](numRoots);
+
+    for (uint256 i = 0; i < numRoots; i++) {
+        uint256 dynamicSize = uint256(keccak256(abi.encode(seed, i))) % 100 + 1;
+        Cids.Cid memory cid = Cids.Cid(abi.encodePacked("fuzz", i));
+        rootDataArray[i] = PDPVerifier.RootData(cid, dynamicSize * pdpVerifier.LEAF_SIZE());
+    }
+
+    pdpVerifier.addRoots(testSetId, rootDataArray, empty);
+    pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+    assertSumTreeInvariant(testSetId);
+}
+
+
+
 
     function testFindRootId() public {
         setUpTestingArray();
@@ -1803,5 +1930,222 @@ contract PDPVerifierMigrateTest is Test {
         // Second call should fail because reinitializer(2) can only be called once
         vm.expectRevert("InvalidInitialization()");
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
+    }
+}
+
+/// @title SumTreeEnhancedTest
+/// @notice Advanced tests for SumTree data structure focusing on stress testing, performance, and edge cases
+/// @dev Tagged with [ADVANCED] to distinguish from basic tests
+contract SumTreeEnhancedTest is Test {
+    SumTreeInternalTestPDPVerifier pdpVerifier;
+    TestingRecordKeeperService listener;
+    uint256 testSetId;
+    uint256 challengeFinalityDelay = 100;
+    bytes empty = new bytes(0);
+
+    function setUp() public {
+        PDPVerifier pdpVerifierImpl = new SumTreeInternalTestPDPVerifier();
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPVerifier.initialize.selector,
+            challengeFinalityDelay
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
+        pdpVerifier = SumTreeInternalTestPDPVerifier(address(proxy));
+        listener = new TestingRecordKeeperService();
+        testSetId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+    }
+
+    /// @notice [ADVANCED] Tests SumTree invariants under heavy load with multiple rounds of adds and removes
+    function testSumTreeStressTest() public {
+        uint256 numRounds = 5;
+        uint256 rootsPerRound = 8;
+        
+        for (uint256 round = 0; round < numRounds; round++) {
+            // Add roots
+            PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](rootsPerRound);
+            for (uint256 i = 0; i < rootsPerRound; i++) {
+                uint256 size = ((round + 1) * 100) + (i * 10) + (i % 3);
+                Cids.Cid memory cid = Cids.Cid(abi.encodePacked("stress", round, i));
+                roots[i] = PDPVerifier.RootData(cid, size * pdpVerifier.LEAF_SIZE());
+            }
+            pdpVerifier.addRoots(testSetId, roots, empty);
+            
+            // Remove some roots
+            uint256[] memory toRemove = new uint256[](rootsPerRound / 2);
+            for (uint256 i = 0; i < toRemove.length; i++) {
+                toRemove[i] = round * rootsPerRound + (i * 2);
+            }
+            pdpVerifier.scheduleRemovals(testSetId, toRemove, empty);
+            
+            // Process changes
+            pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+            
+            // Verify invariants
+            assertSumTreeInvariant(testSetId);
+        }
+    }
+
+    /// @notice [ADVANCED] Tests SumTree behavior with edge case sizes and patterns
+    function testSumTreeEdgeCases() public {
+        // Test with very small sizes
+        testSumTreeWithValues([uint256(1), 2, 1]);
+        
+        // Test with very large sizes
+        testSumTreeWithValues([uint256(1000), 2000, 1000]);
+        
+        // Test with alternating patterns
+        testSumTreeWithPattern(10, true); // Alternating add/remove
+        testSumTreeWithPattern(10, false); // Sequential add/remove
+    }
+
+    /// @notice [ADVANCED] Tests SumTree performance with large numbers of operations
+    function testSumTreePerformance() public {
+        uint256 numOperations = 100;
+        uint256 startGas = gasleft();
+        
+        for (uint256 i = 0; i < numOperations; i++) {
+            // Add root
+            PDPVerifier.RootData[] memory root = new PDPVerifier.RootData[](1);
+            root[0] = PDPVerifier.RootData(
+                Cids.Cid(abi.encodePacked("perf", i)),
+                ((i + 1) * 10) * pdpVerifier.LEAF_SIZE()
+            );
+            pdpVerifier.addRoots(testSetId, root, empty);
+            
+            // Remove every other root
+            if (i % 2 == 1) {
+                uint256[] memory toRemove = new uint256[](1);
+                toRemove[0] = i - 1;
+                pdpVerifier.scheduleRemovals(testSetId, toRemove, empty);
+            }
+            
+            pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+        }
+        
+        uint256 gasUsed = startGas - gasleft();
+        console.log("Gas used for %d operations: %d", numOperations, gasUsed);
+    }
+
+    /// @notice [ADVANCED] Tests SumTree with randomized operations
+    function testSumTreeRandomized(uint256 seed) public {
+        vm.assume(seed > 0);
+        uint256 numOperations = 20;
+        bool hasLeaves = false;
+        
+        for (uint256 i = 0; i < numOperations; i++) {
+            uint256 operation = uint256(keccak256(abi.encode(seed, i))) % 3;
+            
+            if (operation == 0) {
+                // Add root
+                PDPVerifier.RootData[] memory root = new PDPVerifier.RootData[](1);
+                uint256 size = uint256(keccak256(abi.encode(seed, i, "size"))) % 100 + 1;
+                root[0] = PDPVerifier.RootData(
+                    Cids.Cid(abi.encodePacked("rand", i)),
+                    size * pdpVerifier.LEAF_SIZE()
+                );
+                pdpVerifier.addRoots(testSetId, root, empty);
+                hasLeaves = true;
+            } else if (operation == 1) {
+                // Remove root
+                uint256 nextRootId = pdpVerifier.getNextRootId(testSetId);
+                if (nextRootId > 0) {
+                    uint256[] memory toRemove = new uint256[](1);
+                    toRemove[0] = uint256(keccak256(abi.encode(seed, i, "remove"))) % nextRootId;
+                    pdpVerifier.scheduleRemovals(testSetId, toRemove, empty);
+                }
+            }
+            
+            // Only call nextProvingPeriod if we have leaves
+            if (hasLeaves && 
+                pdpVerifier.getScheduledRemovals(testSetId).length == 0 && 
+                pdpVerifier.getProofSetLeafCount(testSetId) > 0) {
+                pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+                assertSumTreeInvariant(testSetId);
+            }
+        }
+    }
+
+    // Helper functions
+    function testSumTreeWithSizes(uint256[] memory sizes, uint256[3] memory values) internal {
+        require(sizes.length == 3, "Sizes array must have length 3");
+        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            Cids.Cid memory cid = Cids.Cid(abi.encodePacked("edge", i));
+            roots[i] = PDPVerifier.RootData(cid, sizes[i] * values[i] * pdpVerifier.LEAF_SIZE());
+        }
+        pdpVerifier.addRoots(testSetId, roots, empty);
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+        assertSumTreeInvariant(testSetId);
+    }
+
+    function testSumTreeWithPattern(uint256 numOperations, bool alternating) internal {
+        for (uint256 i = 0; i < numOperations; i++) {
+            if (alternating) {
+                // Add and remove in alternating pattern
+                if (i % 2 == 0) {
+                    PDPVerifier.RootData[] memory root = new PDPVerifier.RootData[](1);
+                    root[0] = PDPVerifier.RootData(
+                        Cids.Cid(abi.encodePacked("alt", i)),
+                        ((i + 1) * 10) * pdpVerifier.LEAF_SIZE()
+                    );
+                    pdpVerifier.addRoots(testSetId, root, empty);
+                } else {
+                    uint256[] memory toRemove = new uint256[](1);
+                    toRemove[0] = i - 1;
+                    pdpVerifier.scheduleRemovals(testSetId, toRemove, empty);
+                }
+            } else {
+                // Add sequentially then remove sequentially
+                if (i < numOperations / 2) {
+                    PDPVerifier.RootData[] memory root = new PDPVerifier.RootData[](1);
+                    root[0] = PDPVerifier.RootData(
+                        Cids.Cid(abi.encodePacked("seq", i)),
+                        ((i + 1) * 10) * pdpVerifier.LEAF_SIZE()
+                    );
+                    pdpVerifier.addRoots(testSetId, root, empty);
+                } else {
+                    uint256[] memory toRemove = new uint256[](1);
+                    toRemove[0] = i - (numOperations / 2);
+                    pdpVerifier.scheduleRemovals(testSetId, toRemove, empty);
+                }
+            }
+            pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+            assertSumTreeInvariant(testSetId);
+        }
+    }
+
+    function assertSumTreeInvariant(uint256 setId) internal view {
+        uint256 nextRootId = pdpVerifier.getNextRootId(setId);
+        for (uint256 index = 0; index < nextRootId; index++) {
+            uint256 height = pdpVerifier.getTestHeightFromIndex(index);
+            uint256 range = 1 << height;
+
+            if (index + 1 < range) {
+                continue; // skip to avoid underflow
+            }
+
+            uint256 expectedSum = 0;
+            for (uint256 j = index + 1 - range; j <= index; j++) {
+                expectedSum += pdpVerifier.getRootLeafCount(setId, j);
+            }
+
+            uint256 actualSum = pdpVerifier.getSumTreeCounts(setId, index);
+            assertEq(
+                actualSum,
+                expectedSum,
+                string(abi.encodePacked("SumTree invariant failed at index ", vm.toString(index)))
+            );
+        }
+    }
+
+    function testSumTreeWithValues(uint256[3] memory values) internal {
+        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            Cids.Cid memory cid = Cids.Cid(abi.encodePacked("edge", i));
+            roots[i] = PDPVerifier.RootData(cid, values[i] * pdpVerifier.LEAF_SIZE());
+        }
+        pdpVerifier.addRoots(testSetId, roots, empty);
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+        assertSumTreeInvariant(testSetId);
     }
 }
