@@ -37,9 +37,19 @@ make build
 make test
 ```
 ## Deploy
+To deploy on devnet, run:
+```
+make deploy-devnet
+```
+
 To deploy on calibrationnet, run:
 ```
-make deploy-calibrationnet
+make deploy-calibnet
+```
+
+To deploy on mainnet, run:
+```
+make deploy-mainnet
 ```
 
 ## Design Documentation

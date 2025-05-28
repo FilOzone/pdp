@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.20;
 
 import {BitOps} from "./BitOps.sol";
@@ -141,6 +141,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
+    }
+
+    string public constant VERSION = "1.1.0";
+    event ContractUpgraded(string version, address implementation);
+
+    function migrate() external onlyOwner reinitializer(2) {
+        emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -466,7 +473,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
+    function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public returns (uint256) {
         uint256 rawSize = 32 * challengeRange[setId];
         (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
 
@@ -712,16 +719,24 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return BitOps.ctz(index + 1);
     }
 
+    event PriceOracleFailure(bytes reason);
+
     // Add function to get FIL/USD price
-    function getFILUSDPrice() public view returns (uint64, int32) {
+    function getFILUSDPrice() public returns (uint64, int32) {
         // Get FIL/USD price no older than 1 day
-        PythStructs.Price memory priceData = PYTH.getPriceNoOlderThan(
+        try PYTH.getPriceNoOlderThan(
             FIL_USD_PRICE_FEED_ID,
             SECONDS_IN_DAY
-        );
-        require(priceData.price > 0, "failed to validate: price must be greater than 0");
-
-        // Return the price and exponent representing USD per FIL
-        return (uint64(priceData.price), priceData.expo);
+        ) returns (PythStructs.Price memory priceData) {
+            require(priceData.price > 0, "failed to validate: price must be greater than 0");
+            // Return the price and exponent representing USD per FIL
+            return (uint64(priceData.price), priceData.expo);
+        }   catch (bytes memory reason) {
+            // Log issue and fallback on latest unsafe price data
+            emit PriceOracleFailure(reason); 
+            PythStructs.Price memory priceData = PYTH.getPriceUnsafe(FIL_USD_PRICE_FEED_ID);
+            require(priceData.price > 0, "failed to validate: price must be greater than 0");
+            return (uint64(priceData.price), priceData.expo);
+        }
     }
 }
