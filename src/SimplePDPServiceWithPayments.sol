@@ -22,6 +22,14 @@ contract SimplePDPServiceWithPayments is
     UUPSUpgradeable,
     OwnableUpgradeable
 {
+    // Authentication operations enum
+    enum Operation {
+        CreateProofSet,
+        AddRoots,
+        ScheduleRemovals,
+        DeleteProofSet
+    }
+
     event FaultRecord(
         uint256 indexed proofSetId,
         uint256 periodsFaulted,
@@ -67,6 +75,8 @@ contract SimplePDPServiceWithPayments is
     // Commission rate in basis points (100 = 1%)
     uint256 public operatorCommissionBps;
 
+    // Mapping from client address to clientDataSetId
+    mapping(address => uint256) public clientDataSetIDs;
     // Storage for proof set payment information
     struct ProofSetInfo {
         uint256 railId; // ID of the payment rail
@@ -82,6 +92,7 @@ contract SimplePDPServiceWithPayments is
     struct ProofSetCreateData {
         string metadata;
         address payer;
+        bytes signature; // Authentication signature
     }
 
     // Mappings
@@ -241,14 +252,14 @@ contract SimplePDPServiceWithPayments is
      * @dev Called by the PDPVerifier contract when a new proof set is created
      * @param proofSetId The ID of the newly created proof set
      * @param creator The address that created the proof set and will receive payments
-     * @param extraData Encoded data containing metadata and payer information
+     * @param extraData Encoded data containing metadata, payer information, and signature
      */
     function proofSetCreated(
         uint256 proofSetId,
         address creator,
         bytes calldata extraData
     ) external {
-        // Decode the extra data to get the metadata and payer address
+        // Decode the extra data to get the metadata, payer address, and signature
         require(
             extraData.length > 0,
             "Extra data required for proof set creation"
@@ -260,7 +271,19 @@ contract SimplePDPServiceWithPayments is
         // Validate the addresses
         require(createData.payer != address(0), "Payer address cannot be zero");
         require(creator != address(0), "Creator address cannot be zero");
-
+        
+        // Generate a new client dataset ID
+        uint256 clientDataSetId = clientDataSetIDs[createData.payer]++;
+        
+        // Verify the client's signature
+        require(
+            verifyCreateProofSetSignature(
+                createData.payer,
+                clientDataSetId,
+                createData.signature
+            ),
+            "Invalid signature for proof set creation"
+        );
         // Initialize the ProofSetInfo struct
         ProofSetInfo storage info = proofSetInfo[proofSetId];
         info.payer = createData.payer;
@@ -306,12 +329,39 @@ contract SimplePDPServiceWithPayments is
         emit ProofSetRailCreated(proofSetId, railId, createData.payer, creator);
     }
 
-    // TODO: Payment rail termination; not needed in MVP
+    /**
+     * @notice Handles proof set deletion and terminates the payment rail
+     * @dev Called by the PDPVerifier contract when a proof set is deleted
+     * @param proofSetId The ID of the proof set being deleted
+     * @param deletedLeafCount The number of leaves deleted
+     * @param extraData Signature for authentication
+     */
     function proofSetDeleted(
         uint256 proofSetId,
         uint256 deletedLeafCount,
-        bytes calldata
-    ) external {}
+        bytes calldata extraData
+    ) external {
+        // Verify the proof set exists in our mapping
+        require(
+            proofSetInfo[proofSetId].railId != 0,
+            "Proof set not registered with payment system"
+        );
+        bytes memory signature = abi.decode(extraData, (bytes));
+        
+        // Get the payer address for this proof set
+        address payer = proofSetInfo[proofSetId].payer;
+        
+        // Verify the client's signature
+        require(
+            verifyDeleteProofSetSignature(
+                payer,
+                proofSetId,
+                signature
+            ),
+            "Not authorized to delete proof set"
+        );
+        // TODO Proofset deletion logic         
+    }
 
     /**
      * @notice Handles roots being added to a proof set and stores associated metadata
@@ -319,7 +369,7 @@ contract SimplePDPServiceWithPayments is
      * @param proofSetId The ID of the proof set
      * @param firstAdded The ID of the first root added
      * @param rootData Array of root data objects
-     * @param extraData Encoded metadata string for the roots
+     * @param extraData Encoded metadata, and signature
      */
     function rootsAdded(
         uint256 proofSetId,
@@ -332,12 +382,24 @@ contract SimplePDPServiceWithPayments is
             proofSetInfo[proofSetId].railId != 0,
             "Proof set not registered with payment system"
         );
-
-        // Get the metadata from extra data (simple string in this case)
-        string memory metadata = "";
-        if (extraData.length > 0) {
-            metadata = abi.decode(extraData, (string));
-        }
+        
+        // Get the payer address for this proof set
+        address payer = proofSetInfo[proofSetId].payer;
+        require(extraData.length > 0, "Extra data required for adding roots");
+        // Decode the extra data
+        (bytes memory signature, string memory metadata) =  abi.decode(extraData, (bytes, string));
+        
+        // Verify the signature
+        require(
+            verifyAddRootsSignature(
+                payer,
+                proofSetId,
+                rootData,
+                firstAdded,
+                signature
+            ),
+            "Invalid signature for adding roots"
+        );
 
         // Store metadata for each new root
         ProofSetInfo storage info = proofSetInfo[proofSetId];
@@ -351,8 +413,34 @@ contract SimplePDPServiceWithPayments is
     function rootsScheduledRemove(
         uint256 proofSetId,
         uint256[] memory rootIds,
-        bytes calldata
-    ) external {}
+        bytes calldata extraData
+    ) external {
+        // Verify the proof set exists in our mapping
+        require(
+            proofSetInfo[proofSetId].railId != 0,
+            "Proof set not registered with payment system"
+        );
+        
+        // Get the payer address for this proof set
+        address payer = proofSetInfo[proofSetId].payer;
+        
+        // Decode the signature from extraData
+        require(extraData.length > 0, "Extra data required for scheduling removals");
+        bytes memory signature = abi.decode(extraData, (bytes));
+        
+        // Verify the signature
+        require(
+            verifyScheduleRemovalsSignature(
+                payer,
+                proofSetId,
+                rootIds,
+                signature
+            ),
+            "Invalid signature for scheduling root removals"
+        );
+        
+        // Additional logic for scheduling removals can be added here
+    }
 
     // possession proven checks for correct challenge count and reverts if too low
     // it also checks that proofs are not late and emits a fault record if so
@@ -693,6 +781,161 @@ contract SimplePDPServiceWithPayments is
         uint256 rootId
     ) external view returns (string memory) {
         return proofSetInfo[proofSetId].rootIdToMetadata[rootId];
+    }
+
+    /**
+     * @notice Verifies a signature for the CreateProofSet operation
+     * @param payer The address of the payer who should have signed the message
+     * @param clientDataSetId The unique ID for the client's dataset
+     * @param signature The signature bytes (v, r, s)
+     * @return True if the signature is valid, false otherwise
+     */
+    function verifyCreateProofSetSignature(
+        address payer,
+        uint256 clientDataSetId,
+        bytes memory signature
+    ) internal view returns (bool) {
+        // Prepare the message hash that was signed
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                address(this),                          // ServiceContractAddr
+                uint8(Operation.CreateProofSet),        // OpEnum
+                clientDataSetId                         // ClientDataSetID
+            )
+        );
+        
+        // Recover signer address from the signature
+        address recoveredSigner = recoverSigner(messageHash, signature);
+        
+        // Check if the recovered signer matches the expected payer
+        return recoveredSigner == payer;
+    }
+    
+    /**
+     * @notice Verifies a signature for the AddRoots operation
+     * @param payer The address of the payer who should have signed the message
+     * @param proofSetId The ID of the proof set
+     * @param rootDataArray Array of RootSignatureData structures
+     * @param signature The signature bytes (v, r, s)
+     * @return True if the signature is valid, false otherwise
+     */
+    function verifyAddRootsSignature(
+        address payer,
+        uint256 proofSetId,
+        PDPVerifier.RootData[] memory rootDataArray,
+        uint256 firstAdded,
+        bytes memory signature
+    ) internal view returns (bool) {
+        // Create a dynamic bytes array to build our message
+        bytes memory message = abi.encodePacked(
+            address(this),                      // ServiceContractAddr
+            uint8(Operation.AddRoots),          // OpEnum
+            proofSetId,                         // ProofSetID
+            firstAdded,                         // FirstAdded
+            abi.encode(rootDataArray)           // Array of rootData
+        );
+
+        // Create the message hash
+        bytes32 messageHash = keccak256(message);
+        
+        // Recover signer address from the signature
+        address recoveredSigner = recoverSigner(messageHash, signature);
+        
+        // Check if the recovered signer matches the expected payer
+        return recoveredSigner == payer;
+    }
+    
+    /**
+     * @notice Verifies a signature for the ScheduleRemovals operation
+     * @param payer The address of the payer who should have signed the message
+     * @param proofSetId The ID of the proof set
+     * @param rootIds Array of root IDs to be removed
+     * @param signature The signature bytes (v, r, s)
+     * @return True if the signature is valid, false otherwise
+     */
+    function verifyScheduleRemovalsSignature(
+        address payer,
+        uint256 proofSetId,
+        uint256[] memory rootIds,
+        bytes memory signature
+    ) internal view returns (bool) {
+        // Prepare the message hash that was signed
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                address(this),                          // ServiceContractAddr
+                uint8(Operation.ScheduleRemovals),      // OpEnum
+                proofSetId,                             // ProofSetID
+                abi.encode(rootIds)                     // Array of rootIds
+            )
+        );
+        
+        // Recover signer address from the signature
+        address recoveredSigner = recoverSigner(messageHash, signature);
+        
+        // Check if the recovered signer matches the expected payer
+        return recoveredSigner == payer;
+    }
+    
+    /**
+     * @notice Verifies a signature for the DeleteProofSet operation
+     * @param payer The address of the payer who should have signed the message
+     * @param proofSetId The ID of the proof set
+     * @param signature The signature bytes (v, r, s)
+     * @return True if the signature is valid, false otherwise
+     */
+    function verifyDeleteProofSetSignature(
+        address payer,
+        uint256 proofSetId,
+        bytes memory signature
+    ) internal view returns (bool) {
+        // Prepare the message hash that was signed
+        bytes32 messageHash = keccak256(
+            abi.encodePacked(
+                address(this),                          // ServiceContractAddr
+                uint8(Operation.DeleteProofSet),        // OpEnum
+                proofSetId                              // ProofSetID
+            )
+        );
+        
+        // Recover signer address from the signature
+        address recoveredSigner = recoverSigner(messageHash, signature);
+        
+        // Check if the recovered signer matches the expected payer
+        return recoveredSigner == payer;
+    }
+    
+    /**
+     * @notice Recover the signer address from a signature
+     * @param ethSignedMessageHash The Ethereum signed message hash
+     * @param signature The signature bytes (v, r, s)
+     * @return The address that signed the message
+     */
+    function recoverSigner(
+        bytes32 messageHash,
+        bytes memory signature
+    ) internal pure returns (address) {
+        require(signature.length == 65, "Invalid signature length");
+        
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        
+        // Extract r, s, v from the signature
+        assembly {
+            r := mload(add(signature, 32))
+            s := mload(add(signature, 64))
+            v := byte(0, mload(add(signature, 96)))
+        }
+        
+        // If v is not 27 or 28, adjust it (for some wallets)
+        if (v < 27) {
+            v += 27;
+        }
+        
+        require(v == 27 || v == 28, "Invalid signature 'v' value");
+        
+        // Recover and return the address
+        return ecrecover(messageHash, v, r, s);
     }
 
     /**
