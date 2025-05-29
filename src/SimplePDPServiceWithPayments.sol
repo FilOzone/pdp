@@ -108,6 +108,12 @@ contract SimplePDPServiceWithPayments is
     // Track when proving was first activated for each proof set
     mapping(uint256 => uint256) public provingActivationEpoch;
 
+    // Modifier to ensure only the PDP verifier contract can call certain functions
+    modifier onlyPDPVerifier() {
+        require(msg.sender == pdpVerifierAddress, "Caller is not the PDP verifier");
+        _;
+    }
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -247,7 +253,7 @@ contract SimplePDPServiceWithPayments is
         uint256 proofSetId,
         address creator,
         bytes calldata extraData
-    ) external {
+    ) external onlyPDPVerifier {
         // Decode the extra data to get the metadata and payer address
         require(
             extraData.length > 0,
@@ -311,7 +317,7 @@ contract SimplePDPServiceWithPayments is
         uint256 proofSetId,
         uint256 deletedLeafCount,
         bytes calldata
-    ) external {}
+    ) external onlyPDPVerifier {}
 
     /**
      * @notice Handles roots being added to a proof set and stores associated metadata
@@ -326,7 +332,7 @@ contract SimplePDPServiceWithPayments is
         uint256 firstAdded,
         PDPVerifier.RootData[] memory rootData,
         bytes calldata extraData
-    ) external {
+    ) external onlyPDPVerifier {
         // Verify the proof set exists in our mapping
         require(
             proofSetInfo[proofSetId].railId != 0,
@@ -352,7 +358,7 @@ contract SimplePDPServiceWithPayments is
         uint256 proofSetId,
         uint256[] memory rootIds,
         bytes calldata
-    ) external {}
+    ) external onlyPDPVerifier {}
 
     // possession proven checks for correct challenge count and reverts if too low
     // it also checks that proofs are not late and emits a fault record if so
@@ -361,7 +367,7 @@ contract SimplePDPServiceWithPayments is
         uint256 /*challengedLeafCount*/,
         uint256 /*seed*/,
         uint256 challengeCount
-    ) external {
+    ) external onlyPDPVerifier {
         if (provenThisPeriod[proofSetId]) {
             revert(
                 "Only one proof of possession allowed per proving period. Open a new proving period."
@@ -401,7 +407,7 @@ contract SimplePDPServiceWithPayments is
         uint256 challengeEpoch,
         uint256 leafCount,
         bytes calldata
-    ) external {
+    ) external onlyPDPVerifier {
         // initialize state for new proofset
         if (provingDeadlines[proofSetId] == NO_PROVING_DEADLINE) {
             uint256 firstDeadline = block.number + getMaxProvingPeriod();
