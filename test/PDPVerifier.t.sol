@@ -260,7 +260,7 @@ contract PDPVerifierProofSetMutateTest is Test {
         roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.RootsAdded(setId, new uint256[](0));
+        emit PDPVerifier.RootsAdded(setId, new uint256[](0), new Cids.Cid[](0));
         uint256 rootId = pdpVerifier.addRoots(setId, roots, empty);
         assertEq(pdpVerifier.getChallengeRange(setId), 0);
        
@@ -293,7 +293,10 @@ contract PDPVerifierProofSetMutateTest is Test {
         uint256[] memory rootIds = new uint256[](2);
         rootIds[0] = 0;
         rootIds[1] = 1;
-        emit PDPVerifier.RootsAdded(setId, rootIds);
+        Cids.Cid[] memory rootCids = new Cids.Cid[](2);
+        rootCids[0] = roots[0].root;
+        rootCids[1] = roots[1].root;
+        emit PDPVerifier.RootsAdded(setId, rootIds, rootCids);
         uint256 firstId = pdpVerifier.addRoots(setId, roots, empty);
         assertEq(firstId, 0);
         // flush add
