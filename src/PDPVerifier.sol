@@ -48,7 +48,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event ProofSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event ProofSetEmpty(uint256 indexed setId);
 
-    event RootsAdded(uint256 indexed setId, uint256[] rootIds);
+    event RootsAdded(uint256 indexed setId, uint256[] rootIds, Cids.Cid[] rootCids);
     event RootsRemoved(uint256 indexed setId, uint256[] rootIds);
 
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
@@ -339,13 +339,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(proofSetOwner[setId] == msg.sender, "Only the owner can add roots");
         uint256 firstAdded = nextRootId[setId];
         uint256[] memory rootIds = new uint256[](rootData.length);
-
+        Cids.Cid[] memory rootCidsAdded = new Cids.Cid[](rootData.length);
 
         for (uint256 i = 0; i < nRoots; i++) {
             addOneRoot(setId, i, rootData[i].root, rootData[i].rawSize);
             rootIds[i] = firstAdded + i;
+            rootCidsAdded[i] = rootCids[setId][firstAdded + i];
         }
-        emit RootsAdded(setId, rootIds);
+        emit RootsAdded(setId, rootIds, rootCidsAdded);
 
         address listenerAddr = proofSetListener[setId];
         if (listenerAddr != address(0)) {
