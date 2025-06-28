@@ -1,0 +1,43 @@
+name: Publish ABIs
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+        
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Install Dependencies
+        run: |
+          forge install
+          npm ci
+
+      - name: Build & extract ABIs
+        run: |
+          make build
+          make extract-abis
+
+      - name: Upload ABI assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: abi/*.abi.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
