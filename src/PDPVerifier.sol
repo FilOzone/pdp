@@ -10,6 +10,8 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgr
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
+import {IPDPEvents} from "./interfaces/IPDPEvents.sol";
 
 /// @title PDPListener
 /// @notice Interface for PDP Service applications managing data storage.
@@ -18,7 +20,7 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 interface PDPListener {
     function proofSetCreated(uint256 proofSetId, address creator, bytes calldata extraData) external;
     function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount, bytes calldata extraData) external;
-    function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] memory rootData, bytes calldata extraData) external;
+    function rootsAdded(uint256 proofSetId, uint256 firstAdded, IPDPTypes.RootData[] memory rootData, bytes calldata extraData) external;
     function rootsScheduledRemove(uint256 proofSetId, uint256[] memory rootIds, bytes calldata extraData) external;
     // Note: extraData not included as proving messages conceptually always originate from the SP
     function possessionProven(uint256 proofSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external;
@@ -56,7 +58,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
 
 
-    event PossessionProven(uint256 indexed setId, RootIdAndOffset[] challenges);
+    event PossessionProven(uint256 indexed setId, IPDPTypes.RootIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
 
     // Types
@@ -183,7 +185,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns false if the root is not live or if the root id is not yet in challenge range
     function rootChallengable(uint256 setId, uint256 rootId) public view returns (bool) {
         uint256 top = 256 - BitOps.clz(nextRootId[setId]);
-        RootIdAndOffset memory ret = findOneRootId(setId, challengeRange[setId]-1, top);
+        IPDPTypes.RootIdAndOffset memory ret = findOneRootId(setId, challengeRange[setId]-1, top);
         require(ret.offset == rootLeafCounts[setId][ret.rootId] - 1, "challengeRange -1 should align with the very last leaf of a root");
         return rootLive(setId, rootId) && rootId <= ret.rootId;
     }
@@ -328,16 +330,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit ProofSetDeleted(setId, deletedLeafCount);
     }
 
-    // Struct for tracking root data
-    struct RootData {
-        Cids.Cid root;
-        uint256 rawSize;
-    }
-
     // Appends new roots to the collection managed by a proof set.
     // These roots won't be challenged until the next proving period is
     // started by calling nextProvingPeriod.
-    function addRoots(uint256 setId, RootData[] calldata rootData, bytes calldata extraData) public returns (uint256) {
+    function addRoots(uint256 setId, IPDPTypes.RootData[] calldata rootData, bytes calldata extraData) public returns (uint256) {
         uint256 nRoots = rootData.length;
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(proofSetLive(setId), "Proof set not live");
@@ -402,15 +398,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    struct Proof {
-        bytes32 leaf;
-        bytes32[] proof;
-    }
-
     // Verifies and records that the provider proved possession of the
     // proof set Merkle roots at some epoch. The challenge seed is determined
     // by the epoch of the previous proof of possession.
-    function provePossession(uint256 setId, Proof[] calldata proofs) public payable {
+    function provePossession(uint256 setId, IPDPTypes.Proof[] calldata proofs) public payable {
         uint256 initialGas = gasleft();
         uint256 nProofs = proofs.length;
         require(msg.sender == proofSetOwner[setId], "Only the owner can prove possession");
@@ -421,7 +412,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             require(challengeEpoch != NO_CHALLENGE_SCHEDULED, "no challenge scheduled");
         }
 
-        RootIdAndOffset[] memory challenges = new RootIdAndOffset[](proofs.length);
+        IPDPTypes.RootIdAndOffset[] memory challenges = new IPDPTypes.RootIdAndOffset[](proofs.length);
 
         uint256 seed = drawChallengeSeed(setId);
         {
@@ -510,7 +501,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return msg.value - proofFee; // burnFee asserts that proofFee <= msg.value;
     }
 
-    function calculateCallDataSize(Proof[] calldata proofs) internal pure returns (uint256) {
+    function calculateCallDataSize(IPDPTypes.Proof[] calldata proofs) internal pure returns (uint256) {
         uint256 callDataSize = 0;
         for (uint256 i = 0; i < proofs.length; i++) {
             // 64 for the (leaf + abi encoding overhead ) + each element in the proof is 32 bytes
@@ -669,13 +660,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    struct RootIdAndOffset {
-        uint256 rootId;
-        uint256 offset;
-    }
-
     // Perform sumtree find
-    function findOneRootId(uint256 setId, uint256 leafIndex, uint256 top) internal view returns (RootIdAndOffset memory) {
+    function findOneRootId(uint256 setId, uint256 leafIndex, uint256 top) internal view returns (IPDPTypes.RootIdAndOffset memory) {
         require(leafIndex < proofSetLeafCount[setId], "Leaf index out of bounds");
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
@@ -703,16 +689,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         candidate = acc + sumTreeCounts[setId][searchPtr];
         if (candidate <= leafIndex) {
             // Choose right
-            return RootIdAndOffset(searchPtr + 1, leafIndex - candidate);
+            return IPDPTypes.RootIdAndOffset(searchPtr + 1, leafIndex - candidate);
         } // Choose left
-        return RootIdAndOffset(searchPtr, leafIndex - acc);
+        return IPDPTypes.RootIdAndOffset(searchPtr, leafIndex - acc);
     }
 
     // findRootIds is a batched version of findOneRootId
-    function findRootIds(uint256 setId, uint256[] calldata leafIndexs) public view returns (RootIdAndOffset[] memory) {
+    function findRootIds(uint256 setId, uint256[] calldata leafIndexs) public view returns (IPDPTypes.RootIdAndOffset[] memory) {
         // The top of the sumtree is the largest power of 2 less than the number of roots
         uint256 top = 256 - BitOps.clz(nextRootId[setId]);
-        RootIdAndOffset[] memory result = new RootIdAndOffset[](leafIndexs.length);
+        IPDPTypes.RootIdAndOffset[] memory result = new IPDPTypes.RootIdAndOffset[](leafIndexs.length);
         for (uint256 i = 0; i < leafIndexs.length; i++) {
             result[i] = findOneRootId(setId, leafIndexs[i], top);
         }

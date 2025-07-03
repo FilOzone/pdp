@@ -9,6 +9,8 @@ import {MerkleProve} from "../src/Proofs.sol";
 import {ProofUtil} from "./ProofUtil.sol";
 import {PDPFees} from "../src/Fees.sol";
 import {SimplePDPService, PDPRecordKeeper} from "../src/SimplePDPService.sol";
+import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
+import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 
 contract PDPVerifierProofSetCreateDeleteTest is Test {
     TestingRecordKeeperService listener;
@@ -31,7 +33,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
         Cids.Cid memory zeroRoot;
 
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetCreated(0, address(this));
+        emit IPDPEvents.ProofSetCreated(0, address(this));
 
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         assertEq(setId, 0, "First proof set ID should be 0");
@@ -51,10 +53,10 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
 
     function testDeleteProofSet() public {
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetCreated(0, address(this));
+        emit IPDPEvents.ProofSetCreated(0, address(this));
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetDeleted(setId, 0);
+        emit IPDPEvents.ProofSetDeleted(setId, 0);
         pdpVerifier.deleteProofSet(setId, empty);
         vm.expectRevert("Proof set not live");
         pdpVerifier.getProofSetLeafCount(setId);
@@ -62,7 +64,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
 
     function testOnlyOwnerCanDeleteProofSet() public {
          vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetCreated(0, address(this));
+        emit IPDPEvents.ProofSetCreated(0, address(this));
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         // Create a new address to act as a non-owner
         address nonOwner = address(0x1234);
@@ -73,7 +75,7 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
 
         // Now verify the owner can delete the proof set
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetDeleted(setId, 0);
+        emit IPDPEvents.ProofSetDeleted(setId, 0);
         pdpVerifier.deleteProofSet(setId, empty);
         vm.expectRevert("Proof set not live");
         pdpVerifier.getProofSetOwner(setId);
@@ -87,11 +89,11 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
 
     function testMethodsOnDeletedProofSetFails() public {
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetCreated(0, address(this));
+        emit IPDPEvents.ProofSetCreated(0, address(this));
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetDeleted(setId, 0);
+        emit IPDPEvents.ProofSetDeleted(setId, 0);
         pdpVerifier.deleteProofSet(setId, empty);
         vm.expectRevert("Only the owner can delete proof sets");
         pdpVerifier.deleteProofSet(setId, empty );
@@ -108,15 +110,15 @@ contract PDPVerifierProofSetCreateDeleteTest is Test {
         vm.expectRevert("Proof set not live");
         pdpVerifier.getNextChallengeEpoch(setId);
         vm.expectRevert("Proof set not live");
-        pdpVerifier.addRoots(setId, new PDPVerifier.RootData[](0), empty);
+        pdpVerifier.addRoots(setId, new IPDPTypes.RootData[](0), empty);
     }
 
     function testGetProofSetID() public {
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetCreated(0, address(this));
+        emit IPDPEvents.ProofSetCreated(0, address(this));
         pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetCreated(1, address(this));
+        emit IPDPEvents.ProofSetCreated(1, address(this));
         pdpVerifier.createProofSet{value: PDPFees.sybilFee()} (address(listener), empty);
         assertEq(2, pdpVerifier.getNextProofSetId(), "Next proof set ID should be 2");
         assertEq(2, pdpVerifier.getNextProofSetId(), "Next proof set ID should be 2");
@@ -182,7 +184,7 @@ contract PDPVerifierOwnershipTest is Test {
         vm.prank(nextOwner);
 
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetOwnerChanged(setId, owner, nextOwner);
+        emit IPDPEvents.ProofSetOwnerChanged(setId, owner, nextOwner);
         pdpVerifier.claimProofSetOwnership(setId, empty);
         (address ownerEnd, address proposedOwnerEnd) = pdpVerifier.getProofSetOwner(setId);
         assertEq(ownerEnd, nextOwner, "Proof set owner should be the next owner");
@@ -220,8 +222,8 @@ contract PDPVerifierOwnershipTest is Test {
     function testScheduleRemoveRootsOnlyOwner() public {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
-        PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](1);
-        rootDataArray[0] = PDPVerifier.RootData(testCid, 100 * pdpVerifier.LEAF_SIZE());
+        IPDPTypes.RootData[] memory rootDataArray = new IPDPTypes.RootData[](1);
+        rootDataArray[0] = IPDPTypes.RootData(testCid, 100 * pdpVerifier.LEAF_SIZE());
         pdpVerifier.addRoots(setId, rootDataArray, empty);
 
         uint256[] memory rootIdsToRemove = new uint256[](1);
@@ -253,20 +255,20 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testAddRoot() public {
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetCreated(0, address(this));
+        emit IPDPEvents.ProofSetCreated(0, address(this));
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
     
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.RootsAdded(setId, new uint256[](0));
+        emit IPDPEvents.RootsAdded(setId, new uint256[](0));
         uint256 rootId = pdpVerifier.addRoots(setId, roots, empty);
         assertEq(pdpVerifier.getChallengeRange(setId), 0);
        
         // flush add
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 2);
+        emit IPDPEvents.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 2);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
         uint256 leafCount = roots[0].rawSize / 32;
@@ -283,22 +285,22 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testAddMultipleRoots() public {
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.ProofSetCreated(0, address(this));
+        emit IPDPEvents.ProofSetCreated(0, address(this));
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](2);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
-        roots[1] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test2")), 128);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](2);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
+        roots[1] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test2")), 128);
 
         vm.expectEmit(true, true, false, false);
         uint256[] memory rootIds = new uint256[](2);
         rootIds[0] = 0;
         rootIds[1] = 1;
-        emit PDPVerifier.RootsAdded(setId, rootIds);
+        emit IPDPEvents.RootsAdded(setId, rootIds);
         uint256 firstId = pdpVerifier.addRoots(setId, roots, empty);
         assertEq(firstId, 0);
         // flush add
         vm.expectEmit(true, true, true, false);
-        emit PDPVerifier.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 6);
+        emit IPDPEvents.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 6);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
         uint256 expectedLeafCount = roots[0].rawSize / 32 + roots[1].rawSize / 32;
@@ -321,30 +323,30 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testAddBadRoot() public {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
 
         // Fail when root size is not a multiple of 32
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 63);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 63);
         expectIndexedError(0, "Size must be a multiple of 32");
         pdpVerifier.addRoots(setId, roots, empty);
 
         // Fail when root size is zero
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 0);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 0);
         expectIndexedError(0, "Size must be greater than 0");
         pdpVerifier.addRoots(setId, roots, empty);
 
         // Fail when root size is too large
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), pdpVerifier.MAX_ROOT_SIZE() + 32);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), pdpVerifier.MAX_ROOT_SIZE() + 32);
         expectIndexedError(0, "Root size must be less than 2^50");
         pdpVerifier.addRoots(setId, roots, empty);
 
         // Fail when not adding any roots;
-        PDPVerifier.RootData[] memory emptyRoots = new PDPVerifier.RootData[](0);
+        IPDPTypes.RootData[] memory emptyRoots = new IPDPTypes.RootData[](0);
         vm.expectRevert("Must add at least one root");
         pdpVerifier.addRoots(setId, emptyRoots, empty);
 
         // Fail when proof set is no longer live
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         pdpVerifier.deleteProofSet(setId, empty);
         vm.expectRevert("Proof set not live");
         pdpVerifier.addRoots(setId, roots, empty);
@@ -353,17 +355,17 @@ contract PDPVerifierProofSetMutateTest is Test {
     function testAddBadRootsBatched() public {
         // Add one bad root, message fails on bad index
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](4);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
-        roots[1] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
-        roots[2] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
-        roots[3] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 31);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](4);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        roots[1] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        roots[2] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        roots[3] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 31);
 
         expectIndexedError(3, "Size must be a multiple of 32");
         pdpVerifier.addRoots(setId, roots, empty);
 
         // Add multiple bad roots, message fails on first bad index
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 63);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 63);
         expectIndexedError(0, "Size must be a multiple of 32");
         pdpVerifier.addRoots(setId, roots, empty);
     }
@@ -371,8 +373,8 @@ contract PDPVerifierProofSetMutateTest is Test {
     function testRemoveRoot() public {
         // Add one root
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots, empty);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED()); // Not updated on first add anymore
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
@@ -385,7 +387,7 @@ contract PDPVerifierProofSetMutateTest is Test {
         pdpVerifier.scheduleRemovals(setId, toRemove, empty);
 
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.RootsRemoved(setId, toRemove);
+        emit IPDPEvents.RootsRemoved(setId, toRemove);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // flush
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED());
@@ -403,8 +405,8 @@ contract PDPVerifierProofSetMutateTest is Test {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         
         // Add a root to the proof set
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots, empty);
         
         // Delete the proof set
@@ -419,10 +421,10 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testRemoveRootBatch() public {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](3);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
-        roots[1] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test2")), 64);
-        roots[2] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](3);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test1")), 64);
+        roots[1] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test2")), 64);
+        roots[2] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots, empty);
         uint256[] memory toRemove = new uint256[](2);
         toRemove[0] = 0;
@@ -430,7 +432,7 @@ contract PDPVerifierProofSetMutateTest is Test {
         pdpVerifier.scheduleRemovals(setId, toRemove, empty);
 
         vm.expectEmit(true, true, false, false);
-        emit PDPVerifier.RootsRemoved(setId, toRemove);
+        emit IPDPEvents.RootsRemoved(setId, toRemove);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // flush
 
         assertEq(pdpVerifier.rootLive(setId, 0), false);
@@ -454,8 +456,8 @@ contract PDPVerifierProofSetMutateTest is Test {
 
     function testRemoveFutureRoots() public {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots, empty);
         assertEq(true, pdpVerifier.rootLive(setId, 0));
         assertEq(false, pdpVerifier.rootLive(setId, 1));
@@ -503,10 +505,10 @@ contract PDPVerifierProofSetMutateTest is Test {
 
         // Now create proofset 
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
         
         // Test addRoots with too large extra data
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         vm.expectRevert("Extra data too large");
         pdpVerifier.addRoots(setId, roots, tooLargeExtraData);
 
@@ -531,8 +533,8 @@ contract PDPVerifierProofSetMutateTest is Test {
     function testOnlyOwnerCanModifyProofSet() public {
         // Setup a root we can add
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         
         // First add a root as the owner so we can test removal
         pdpVerifier.addRoots(setId, roots, empty);
@@ -557,8 +559,8 @@ contract PDPVerifierProofSetMutateTest is Test {
 
         // Try to provePossession as non-owner
         vm.prank(nonOwner);
-        PDPVerifier.Proof[] memory proofs = new PDPVerifier.Proof[](1);
-        proofs[0] = PDPVerifier.Proof(bytes32(abi.encodePacked("test")), new bytes32[](0));
+        IPDPTypes.Proof[] memory proofs = new IPDPTypes.Proof[](1);
+        proofs[0] = IPDPTypes.Proof(bytes32(abi.encodePacked("test")), new bytes32[](0));
         vm.expectRevert("Only the owner can prove possession");
         pdpVerifier.provePossession(setId, proofs);
         
@@ -571,8 +573,8 @@ contract PDPVerifierProofSetMutateTest is Test {
     function testNextProvingPeriodChallengeEpochTooSoon() public {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         // Add a root to the proof set (otherwise nextProvingPeriod fails waiting for leaves)
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots, empty);
         
         // Current block number
@@ -635,8 +637,8 @@ contract PDPVerifierProofSetMutateTest is Test {
         // Create a proof set with one root
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
         
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots, empty);
 
         // Schedule root for removal
@@ -646,7 +648,7 @@ contract PDPVerifierProofSetMutateTest is Test {
 
         // Expect ProofSetEmpty event when calling nextProvingPeriod
         vm.expectEmit(true, false, false, false);
-        emit PDPVerifier.ProofSetEmpty(setId);
+        emit IPDPEvents.ProofSetEmpty(setId);
         
         // Call nextProvingPeriod which should remove the root and emit the event
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
@@ -660,7 +662,7 @@ contract PDPVerifierProofSetMutateTest is Test {
 
 contract ProofBuilderHelper is Test {
     // Builds a proof of possession for a proof set
-    function buildProofs(PDPVerifier pdpVerifier, uint256 setId, uint challengeCount, bytes32[][][] memory trees, uint[] memory leafCounts) internal view returns (PDPVerifier.Proof[] memory) {
+    function buildProofs(PDPVerifier pdpVerifier, uint256 setId, uint challengeCount, bytes32[][][] memory trees, uint[] memory leafCounts) internal view returns (IPDPTypes.Proof[] memory) {
         uint256 challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         uint256 seed = challengeEpoch; // Seed is (temporarily) the challenge epoch
         uint totalLeafCount = 0;
@@ -668,7 +670,7 @@ contract ProofBuilderHelper is Test {
             totalLeafCount += leafCounts[i];
         }
 
-        PDPVerifier.Proof[] memory proofs = new PDPVerifier.Proof[](challengeCount);
+        IPDPTypes.Proof[] memory proofs = new IPDPTypes.Proof[](challengeCount);
         for (uint challengeIdx = 0; challengeIdx < challengeCount; challengeIdx++) {
             // Compute challenge index
             bytes memory payload = abi.encodePacked(seed, setId, uint64(challengeIdx));
@@ -688,7 +690,7 @@ contract ProofBuilderHelper is Test {
 
             bytes32[][] memory tree = trees[treeIdx];
             bytes32[] memory path = MerkleProve.buildProof(tree, treeOffset);
-            proofs[challengeIdx] = PDPVerifier.Proof(tree[tree.length - 1][treeOffset], path);
+            proofs[challengeIdx] = IPDPTypes.Proof(tree[tree.length - 1][treeOffset], path);
 
             // console.log("Leaf", vm.toString(proofs[0].leaf));
             // console.log("Proof");
@@ -716,7 +718,7 @@ contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
         receiveProofSetEvent(proofSetId, PDPRecordKeeper.OperationType.DELETE, abi.encode(deletedLeafCount));
     }
 
-    function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] calldata rootData, bytes calldata) external override {
+    function rootsAdded(uint256 proofSetId, uint256 firstAdded, IPDPTypes.RootData[] calldata rootData, bytes calldata) external override {
         receiveProofSetEvent(proofSetId, PDPRecordKeeper.OperationType.ADD, abi.encode(firstAdded, rootData));
     }
 
@@ -784,16 +786,16 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Build a proof with  multiple challenges to single tree.
         uint challengeCount = 3;
-        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
+        IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Submit proof.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
         vm.expectEmit(true, true, false, false);
-        PDPVerifier.RootIdAndOffset[] memory challenges = new PDPVerifier.RootIdAndOffset[](challengeCount);
+        IPDPTypes.RootIdAndOffset[] memory challenges = new IPDPTypes.RootIdAndOffset[](challengeCount);
         for (uint i = 0; i < challengeCount; i++) {
-            challenges[i] = PDPVerifier.RootIdAndOffset(0, 0);
+            challenges[i] = IPDPTypes.RootIdAndOffset(0, 0);
         }
-        emit PDPVerifier.PossessionProven(setId, challenges);
+        emit IPDPEvents.PossessionProven(setId, challenges);
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
 
 
@@ -832,7 +834,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Build a proof with multiple challenges to single tree.
         uint challengeCount = 3;
-        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
+        IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Mock block.number to 2881
         vm.roll(2881);
@@ -869,8 +871,8 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         uint256 blockNumber = 2881;
         vm.roll(blockNumber);
         // Add a root and verify lastProvenEpoch is set to current block number
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
 
 
         pdpVerifier.addRoots(setId, roots, empty);
@@ -901,7 +903,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         vm.roll(challengeEpoch + 100);
 
         // Build a proof.
-        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
+        IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
@@ -917,7 +919,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         vm.roll(challengeEpoch - 1);
 
         // Build a proof.
-        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
+        IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof.
         vm.expectRevert();
@@ -926,14 +928,14 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
     function testProvePossessionFailsWithNoScheduledChallenge() public {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 64);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 64);
         pdpVerifier.addRoots(setId, roots, empty);
 
         // Don't sample challenge (i.e. call nextProvingPeriod)
 
         // Create a dummy proof
-        PDPVerifier.Proof[] memory proofs = new PDPVerifier.Proof[](1);
+        IPDPTypes.Proof[] memory proofs = new IPDPTypes.Proof[](1);
         proofs[0].leaf = bytes32(0);
         proofs[0].proof = new bytes32[](1);
         proofs[0].proof[0] = bytes32(0);
@@ -947,7 +949,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
     function testEmptyProofRejected() public {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        PDPVerifier.Proof[] memory emptyProof = new PDPVerifier.Proof[](0);
+        IPDPTypes.Proof[] memory emptyProof = new IPDPTypes.Proof[](0);
 
         // Rejected with no roots
         vm.expectRevert();
@@ -967,7 +969,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // Make a proof that's good for this challenge epoch.
         uint256 challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch);
-        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
+        IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof successfully, advancing the proof set to a new challenge epoch.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
@@ -1011,7 +1013,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // Make a proof that's good for the single root.
         uint256 challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch);
-        PDPVerifier.Proof[] memory proofsOneRoot = buildProofsForSingleton(setId, 3, trees[0], leafCounts[0]);
+        IPDPTypes.Proof[] memory proofsOneRoot = buildProofsForSingleton(setId, 3, trees[0], leafCounts[0]);
 
         // The proof for one root should be invalid against the set with two.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
@@ -1028,7 +1030,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // Make a new proof that is valid with two roots
         challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch);
-        PDPVerifier.Proof[] memory proofsTwoRoots = buildProofs(pdpVerifier, setId, 10, trees, leafCounts);
+        IPDPTypes.Proof[] memory proofsTwoRoots = buildProofs(pdpVerifier, setId, 10, trees, leafCounts);
 
         // A proof for two roots should be invalid against the set with one.
         proofsTwoRoots = buildProofs(pdpVerifier, setId, 10, trees, leafCounts); // regen as removal forced resampling challenge seed
@@ -1061,7 +1063,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         // Build a proof with multiple challenges to span the roots.
         uint challengeCount = 11;
-        PDPVerifier.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
+        IPDPTypes.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
         // Submit proof.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
@@ -1089,7 +1091,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // Verify we can still prove possession at the new block
         vm.roll(nearerBlock);
 
-        PDPVerifier.Proof[] memory proofs = buildProofsForSingleton(setId, 5, tree, 10);
+        IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 5, tree, 10);
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)));
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
     }
@@ -1109,16 +1111,16 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 
         uint challengeCount = 3;
         // build fake proofs
-        PDPVerifier.Proof[] memory proofs = new PDPVerifier.Proof[](5);
+        IPDPTypes.Proof[] memory proofs = new IPDPTypes.Proof[](5);
         for (uint i = 0; i < 5; i++) {
-            proofs[i] = PDPVerifier.Proof(tree[0][0], new bytes32[](0));
+            proofs[i] = IPDPTypes.Proof(tree[0][0], new bytes32[](0));
         }
 
         // Submit proof.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
-        PDPVerifier.RootIdAndOffset[] memory challenges = new PDPVerifier.RootIdAndOffset[](challengeCount);
+        IPDPTypes.RootIdAndOffset[] memory challenges = new IPDPTypes.RootIdAndOffset[](challengeCount);
         for (uint i = 0; i < challengeCount; i++) {
-            challenges[i] = PDPVerifier.RootIdAndOffset(0, 0);
+            challenges[i] = IPDPTypes.RootIdAndOffset(0, 0);
         }
         vm.expectRevert("proof length does not match tree height");
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
@@ -1130,7 +1132,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     function makeProofSetWithRoots(uint[] memory leafCounts) internal returns (uint256, bytes32[][][]memory) {
         // Create trees and their roots.
         bytes32[][][] memory trees = new bytes32[][][](leafCounts.length);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](leafCounts.length);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](leafCounts.length);
         for (uint i = 0; i < leafCounts.length; i++) {
             // Generate a uniquely-sized tree for each root (up to some small maximum size).
             trees[i] = ProofUtil.makeTree(leafCounts[i]);
@@ -1156,7 +1158,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     // Returns the Merkle tree and root.
     function addOneRoot(uint256 setId, uint leafCount) internal returns (bytes32[][] memory, uint256) {
         bytes32[][] memory tree = ProofUtil.makeTree(leafCount);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
         roots[0] = makeRoot(tree, leafCount);
         uint256 rootId = pdpVerifier.addRoots(setId, roots, empty);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // flush adds
@@ -1164,17 +1166,17 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     }
 
     // Constructs a RootData structure for a Merkle tree.
-    function makeRoot(bytes32[][] memory tree, uint leafCount) internal pure returns (PDPVerifier.RootData memory) {
-        return PDPVerifier.RootData(Cids.cidFromDigest(bytes(cidPrefix), tree[0][0]), leafCount * 32);
+    function makeRoot(bytes32[][] memory tree, uint leafCount) internal pure returns (IPDPTypes.RootData memory) {
+        return IPDPTypes.RootData(Cids.cidFromDigest(bytes(cidPrefix), tree[0][0]), leafCount * 32);
     }
 
     // Builds a proof of posesesion for a proof set with a single root.
-    function buildProofsForSingleton(uint256 setId, uint challengeCount, bytes32[][] memory tree, uint leafCount) internal view returns (PDPVerifier.Proof[] memory) {
+    function buildProofsForSingleton(uint256 setId, uint challengeCount, bytes32[][] memory tree, uint leafCount) internal view returns (IPDPTypes.Proof[] memory) {
         bytes32[][][] memory trees = new bytes32[][][](1);
         trees[0] = tree;
         uint[] memory leafCounts = new uint[](1);
         leafCounts[0] = leafCount;
-        PDPVerifier.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
+        IPDPTypes.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
         return proofs;
     }
 }
@@ -1251,11 +1253,11 @@ contract SumTreeAddTest is Test {
         counts[6] = 21;
         counts[7] = 34;
 
-        PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](8);
+        IPDPTypes.RootData[] memory rootDataArray = new IPDPTypes.RootData[](8);
 
         for (uint256 i = 0; i < counts.length; i++) {
             Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
-            rootDataArray[i] = PDPVerifier.RootData(testCid, counts[i] * pdpVerifier.LEAF_SIZE());
+            rootDataArray[i] = IPDPTypes.RootData(testCid, counts[i] * pdpVerifier.LEAF_SIZE());
         }
         pdpVerifier.addRoots(testSetId, rootDataArray, empty);
         assertEq(pdpVerifier.getProofSetLeafCount(testSetId), 87, "Incorrect final proof set leaf count");
@@ -1296,8 +1298,8 @@ contract SumTreeAddTest is Test {
         // Add all
         for (uint256 i = 0; i < counts.length; i++) {
             Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
-            PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](1);
-            rootDataArray[0] = PDPVerifier.RootData(testCid, counts[i] * pdpVerifier.LEAF_SIZE());
+            IPDPTypes.RootData[] memory rootDataArray = new IPDPTypes.RootData[](1);
+            rootDataArray[0] = IPDPTypes.RootData(testCid, counts[i] * pdpVerifier.LEAF_SIZE());
             pdpVerifier.addRoots(testSetId, rootDataArray, empty);
             // Assert the root was added correctly
             assertEq(pdpVerifier.getRootCid(testSetId, i).data, testCid.data, "Root not added correctly");
@@ -1406,7 +1408,7 @@ contract SumTreeAddTest is Test {
     function assertFindRootAndOffset(uint256 setId, uint256 searchIndex, uint256 expectRootId, uint256 expectOffset) internal view {
         uint256[] memory searchIndices = new uint256[](1);
         searchIndices[0] = searchIndex;
-        PDPVerifier.RootIdAndOffset[] memory result = pdpVerifier.findRootIds(setId, searchIndices);
+        IPDPTypes.RootIdAndOffset[] memory result = pdpVerifier.findRootIds(setId, searchIndices);
         if (result[0].rootId != expectRootId) {
             revert TestingFindError(expectRootId, result[0].rootId, "unexpected root");
         }
@@ -1417,7 +1419,7 @@ contract SumTreeAddTest is Test {
 
     // The batched version of assertFindRootAndOffset
     function assertFindRootsAndOffsets(uint256 setId, uint256[] memory searchIndices, uint256[] memory expectRootIds, uint256[] memory expectOffsets) internal view {
-        PDPVerifier.RootIdAndOffset[] memory result = pdpVerifier.findRootIds(setId, searchIndices);
+        IPDPTypes.RootIdAndOffset[] memory result = pdpVerifier.findRootIds(setId, searchIndices);
         for (uint256 i = 0; i < searchIndices.length; i++) {
             assertEq(result[i].rootId, expectRootIds[i], "unexpected root");
             assertEq(result[i].offset, expectOffsets[i], "unexpected offset");
@@ -1439,8 +1441,8 @@ contract SumTreeAddTest is Test {
 
         for (uint256 i = 0; i < sizes.length; i++) {
             Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
-            PDPVerifier.RootData[] memory rootDataArray = new PDPVerifier.RootData[](1);
-            rootDataArray[0] = PDPVerifier.RootData(testCid, sizes[i] * pdpVerifier.LEAF_SIZE());
+            IPDPTypes.RootData[] memory rootDataArray = new IPDPTypes.RootData[](1);
+            rootDataArray[0] = IPDPTypes.RootData(testCid, sizes[i] * pdpVerifier.LEAF_SIZE());
             pdpVerifier.addRoots(testSetId, rootDataArray, empty);
         }
         pdpVerifier.scheduleRemovals(testSetId, rootIdsToRemove, empty);
@@ -1468,7 +1470,7 @@ contract BadListener is PDPListener {
         receiveProofSetEvent(proofSetId, PDPRecordKeeper.OperationType.DELETE, abi.encode(deletedLeafCount));
     }
 
-    function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] calldata rootData, bytes calldata) external override view {
+    function rootsAdded(uint256 proofSetId, uint256 firstAdded, IPDPTypes.RootData[] calldata rootData, bytes calldata) external override view {
         receiveProofSetEvent(proofSetId, PDPRecordKeeper.OperationType.ADD, abi.encode(firstAdded, rootData));
     }
     function rootsScheduledRemove(uint256 proofSetId, uint256[] calldata rootIds, bytes calldata) external override view {
@@ -1520,8 +1522,8 @@ contract PDPListenerIntegrationTest is Test {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(badListener), empty);
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.ADD);
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         vm.expectRevert("Failing operation");
         pdpVerifier.addRoots(setId, roots, empty);
 
@@ -1556,7 +1558,7 @@ contract ExtraDataListener is PDPListener {
     function proofSetDeleted(uint256 proofSetId, uint256, bytes calldata extraData) external override {
         extraDataBySetId[proofSetId][PDPRecordKeeper.OperationType.DELETE] = extraData;
     }
-    function rootsAdded(uint256 proofSetId, uint256, PDPVerifier.RootData[] calldata, bytes calldata extraData) external override {
+    function rootsAdded(uint256 proofSetId, uint256, IPDPTypes.RootData[] calldata, bytes calldata extraData) external override {
         extraDataBySetId[proofSetId][PDPRecordKeeper.OperationType.ADD] = extraData;
     }
     function rootsScheduledRemove(uint256 proofSetId, uint256[] calldata, bytes calldata extraData) external override {
@@ -1598,8 +1600,8 @@ contract PDPVerifierExtraDataTest is Test {
         );
 
         // Test ADD operation
-        PDPVerifier.RootData[] memory roots = new PDPVerifier.RootData[](1);
-        roots[0] = PDPVerifier.RootData(Cids.Cid(abi.encodePacked("test")), 32);
+        IPDPTypes.RootData[] memory roots = new IPDPTypes.RootData[](1);
+        roots[0] = IPDPTypes.RootData(Cids.Cid(abi.encodePacked("test")), 32);
         pdpVerifier.addRoots(setId, roots, empty);
         assertEq(
             extraDataListener.getExtraData(setId, PDPRecordKeeper.OperationType.ADD),
@@ -1689,7 +1691,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
         vm.mockCall(address(pdpVerifier.PYTH()), pythFallbackCallData, abi.encode(price));
 
         vm.expectEmit(true, false, false, false);
-        emit PDPVerifier.PriceOracleFailure(errorData);
+        emit IPDPEvents.PriceOracleFailure(errorData);
 
         (uint64 priceOut, int32 expoOut) = pdpVerifier.getFILUSDPrice();
         assertEq(priceOut, uint64(6), "Price should be 6");
@@ -1714,9 +1716,9 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
             treesA[i] = ProofUtil.makeTree(leafCountsA[i]);
         }
 
-        PDPVerifier.RootData[] memory rootsPP1 = new PDPVerifier.RootData[](2);
-        rootsPP1[0] = PDPVerifier.RootData(Cids.cidFromDigest("test1", treesA[0][0][0]), leafCountsA[0] * 32);
-        rootsPP1[1] = PDPVerifier.RootData(Cids.cidFromDigest("test2", treesA[1][0][0]), leafCountsA[1] * 32);
+        IPDPTypes.RootData[] memory rootsPP1 = new IPDPTypes.RootData[](2);
+        rootsPP1[0] = IPDPTypes.RootData(Cids.cidFromDigest("test1", treesA[0][0][0]), leafCountsA[0] * 32);
+        rootsPP1[1] = IPDPTypes.RootData(Cids.cidFromDigest("test2", treesA[1][0][0]), leafCountsA[1] * 32);
         pdpVerifier.addRoots(setId, rootsPP1, empty);
         // flush the original addRoots call
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
@@ -1733,9 +1735,9 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
             treesB[i] = ProofUtil.makeTree(leafCountsB[i]);
         }
 
-        PDPVerifier.RootData[] memory rootsPP2 = new PDPVerifier.RootData[](2);
-        rootsPP2[0] = PDPVerifier.RootData(Cids.cidFromDigest("test1", treesB[0][0][0]), leafCountsB[0] * 32);
-        rootsPP2[1] = PDPVerifier.RootData(Cids.cidFromDigest("test2", treesB[1][0][0]), leafCountsB[1]* 32);
+        IPDPTypes.RootData[] memory rootsPP2 = new IPDPTypes.RootData[](2);
+        rootsPP2[0] = IPDPTypes.RootData(Cids.cidFromDigest("test1", treesB[0][0][0]), leafCountsB[0] * 32);
+        rootsPP2[1] = IPDPTypes.RootData(Cids.cidFromDigest("test2", treesB[1][0][0]), leafCountsB[1]* 32);
         pdpVerifier.addRoots(setId, rootsPP2, empty);
 
         assertEq(pdpVerifier.getRootLeafCount(setId, 0), leafCountsA[0], "sanity check: First root leaf count should be correct");
@@ -1759,7 +1761,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
         vm.roll(pdpVerifier.getNextChallengeEpoch(setId));
         // Prepare proofs.
         // Proving trees for PP1 are just treesA
-        PDPVerifier.Proof[] memory proofsPP1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
+        IPDPTypes.Proof[] memory proofsPP1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
 
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)));
 
@@ -1796,7 +1798,7 @@ contract PDPVerifierMigrateTest is Test {
 
     function testMigrate() public {
         vm.expectEmit(true, true, true, true);
-        emit PDPVerifier.ContractUpgraded(newImplementation.VERSION(), address(newImplementation));
+        emit IPDPEvents.ContractUpgraded(newImplementation.VERSION(), address(newImplementation));
         bytes memory migrationCall = abi.encodeWithSelector(PDPVerifier.migrate.selector);
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
         // Second call should fail because reinitializer(2) can only be called once
@@ -1822,7 +1824,7 @@ contract MockOwnerChangedListener is PDPListener {
     }
     function proofSetCreated(uint256, address, bytes calldata) external override {}
     function proofSetDeleted(uint256, uint256, bytes calldata) external override {}
-    function rootsAdded(uint256, uint256, PDPVerifier.RootData[] calldata, bytes calldata) external override {}
+    function rootsAdded(uint256, uint256, IPDPTypes.RootData[] calldata, bytes calldata) external override {}
     function rootsScheduledRemove(uint256, uint256[] calldata, bytes calldata) external override {}
     function possessionProven(uint256, uint256, uint256, uint256) external override {}
     function nextProvingPeriod(uint256, uint256, uint256, bytes calldata) external override {}

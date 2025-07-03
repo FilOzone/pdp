@@ -5,6 +5,8 @@ import {PDPVerifier, PDPListener} from "./PDPVerifier.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
+import {IPDPEvents} from "./interfaces/IPDPEvents.sol";
 
 // PDPRecordKeeper tracks PDP operations.  It is used as a base contract for PDPListeners
 // in order to give users the capability to consume events async.
@@ -168,7 +170,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
 
     function proofSetDeleted(uint256 proofSetId, uint256 deletedLeafCount, bytes calldata) external onlyPDPVerifier {}
 
-    function rootsAdded(uint256 proofSetId, uint256 firstAdded, PDPVerifier.RootData[] memory rootData, bytes calldata) external onlyPDPVerifier {}
+    function rootsAdded(uint256 proofSetId, uint256 firstAdded, IPDPTypes.RootData[] memory rootData, bytes calldata) external onlyPDPVerifier {}
 
     function rootsScheduledRemove(uint256 proofSetId, uint256[] memory rootIds, bytes calldata) external onlyPDPVerifier {}
 
