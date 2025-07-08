@@ -1,0 +1,19 @@
+name: Add issues and PRs to FS project board
+
+on:
+  issues:
+    types:
+      - opened
+  pull_request:
+    types:
+      - opened
+
+jobs:
+  add-to-project:
+    name: Add all issues and prs to project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/orgs/FilOzone/projects/14
+          github-token: ${{ secrets.FILOZZY_CI_ADD_TO_PROJECT }}
