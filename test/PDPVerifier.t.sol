@@ -660,6 +660,200 @@ contract PDPVerifierProofSetMutateTest is Test {
     }
 }
 
+contract PDPVerifierPaginationTest is Test {
+    PDPVerifier pdpVerifier;
+    TestingRecordKeeperService listener;
+    bytes empty = new bytes(0);
+
+    function setUp() public {
+        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        uint256 challengeFinality = 2;
+        bytes memory initializeData = abi.encodeWithSelector(
+            PDPVerifier.initialize.selector,
+            challengeFinality
+        );
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
+        pdpVerifier = PDPVerifier(address(proxy));
+        listener = new TestingRecordKeeperService();
+    }
+
+
+    function testGetActiveRootsEmpty() public {
+        // Create empty proof set and test
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+
+        (Cids.Cid[] memory roots, uint256[] memory ids,
+         uint256[] memory sizes, uint256 total) = pdpVerifier.getActiveRoots(setId, 0, 10);
+
+        assertEq(roots.length, 0, "Should return empty array for empty proof set");
+        assertEq(ids.length, 0, "Should return empty IDs array");
+        assertEq(sizes.length, 0, "Should return empty sizes array");
+        assertEq(total, 0, "Total active should be 0");
+    }
+
+    function testGetActiveRootsPagination() public {
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+
+        // Add 15 roots
+        IPDPTypes.RootData[] memory testRoots = new IPDPTypes.RootData[](15);
+        for (uint i = 0; i < 15; i++) {
+            testRoots[i] = IPDPTypes.RootData({
+                root: Cids.Cid(abi.encodePacked("test", i)),
+                rawSize: 1024 * (i + 1)
+            });
+        }
+
+        uint256 firstRootId = pdpVerifier.addRoots(setId, testRoots, empty);
+        assertEq(firstRootId, 0, "First root ID should be 0");
+
+        // Test first page
+        (Cids.Cid[] memory roots1, uint256[] memory ids1, uint256[] memory sizes1, uint256 total1) =
+            pdpVerifier.getActiveRoots(setId, 0, 5);
+        assertEq(roots1.length, 5, "First page should have 5 roots");
+        assertEq(ids1.length, 5, "First page should have 5 IDs");
+        assertEq(sizes1.length, 5, "First page should have 5 sizes");
+        assertEq(total1, 15, "Total should be 15");
+        assertEq(sizes1[0], 1024, "First root size should be 1024");
+        assertEq(ids1[0], 0, "First root ID should be 0");
+
+        // Test second page
+        (Cids.Cid[] memory roots2, uint256[] memory ids2, uint256[] memory sizes2, uint256 total2) =
+            pdpVerifier.getActiveRoots(setId, 5, 5);
+        assertEq(roots2.length, 5, "Second page should have 5 roots");
+        assertEq(total2, 15, "Total should still be 15");
+        assertEq(ids2[0], 5, "First root ID on second page should be 5");
+        assertEq(sizes2[0], 6144, "First root size on second page should be 6144 (1024 * 6)");
+
+        // Test last page
+        (Cids.Cid[] memory roots3, uint256[] memory ids3, uint256[] memory sizes3, uint256 total3) =
+            pdpVerifier.getActiveRoots(setId, 10, 5);
+        assertEq(roots3.length, 5, "Last page should have 5 roots");
+        assertEq(total3, 15, "Total should still be 15");
+        assertEq(ids3[0], 10, "First root ID on last page should be 10");
+    }
+
+    function testGetActiveRootsWithDeleted() public {
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+
+        // Add roots
+        IPDPTypes.RootData[] memory testRoots = new IPDPTypes.RootData[](10);
+        for (uint i = 0; i < 10; i++) {
+            testRoots[i] = IPDPTypes.RootData({
+                root: Cids.Cid(abi.encodePacked("test", i)),
+                rawSize: 1024
+            });
+        }
+        uint256 firstRootId = pdpVerifier.addRoots(setId, testRoots, empty);
+
+        // Schedule removal of roots 2, 4, 6 (indices 1, 3, 5)
+        uint256[] memory toRemove = new uint256[](3);
+        toRemove[0] = firstRootId + 1;  // Root at index 1
+        toRemove[1] = firstRootId + 3;  // Root at index 3
+        toRemove[2] = firstRootId + 5;  // Root at index 5
+        pdpVerifier.scheduleRemovals(setId, toRemove, empty);
+
+        // Move to next proving period to make removals effective
+        uint256 challengeFinalityDelay = pdpVerifier.getChallengeFinality();
+        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+
+        // Should return only 7 active roots
+        (Cids.Cid[] memory roots, uint256[] memory ids, uint256[] memory sizes, uint256 total) =
+            pdpVerifier.getActiveRoots(setId, 0, 10);
+        assertEq(roots.length, 7, "Should have 7 active roots after deletions");
+        assertEq(total, 7, "Total active should be 7");
+
+        // Verify the correct roots are returned (0, 2, 4, 6, 7, 8, 9)
+        assertEq(ids[0], 0, "First active root should be 0");
+        assertEq(ids[1], 2, "Second active root should be 2");
+        assertEq(ids[2], 4, "Third active root should be 4");
+        assertEq(ids[3], 6, "Fourth active root should be 6");
+        assertEq(ids[4], 7, "Fifth active root should be 7");
+    }
+
+    function testGetActiveRootsEdgeCases() public {
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+
+        // Add 5 roots
+        IPDPTypes.RootData[] memory testRoots = new IPDPTypes.RootData[](5);
+        for (uint i = 0; i < 5; i++) {
+            testRoots[i] = IPDPTypes.RootData({
+                root: Cids.Cid(abi.encodePacked("test", i)),
+                rawSize: 1024
+            });
+        }
+        pdpVerifier.addRoots(setId, testRoots, empty);
+
+        // Test offset beyond range
+        (Cids.Cid[] memory roots1, uint256[] memory ids1, uint256[] memory sizes1, uint256 total1) =
+            pdpVerifier.getActiveRoots(setId, 10, 5);
+        assertEq(roots1.length, 0, "Should return empty when offset beyond range");
+        assertEq(total1, 5, "Total should still be 5");
+
+        // Test limit 0
+        (Cids.Cid[] memory roots2, uint256[] memory ids2, uint256[] memory sizes2, uint256 total2) =
+            pdpVerifier.getActiveRoots(setId, 0, 0);
+        assertEq(roots2.length, 0, "Should return empty when limit is 0");
+        assertEq(total2, 5, "Total should still be 5");
+
+        // Test limit exceeding available
+        (Cids.Cid[] memory roots3, uint256[] memory ids3, uint256[] memory sizes3, uint256 total3) =
+            pdpVerifier.getActiveRoots(setId, 3, 10);
+        assertEq(roots3.length, 2, "Should return only 2 roots from offset 3");
+        assertEq(total3, 5, "Total should still be 5");
+        assertEq(ids3[0], 3, "First ID should be 3");
+        assertEq(ids3[1], 4, "Second ID should be 4");
+    }
+
+    function testGetActiveRootsNotLive() public {
+        // Test with invalid proof set ID
+        vm.expectRevert("Proof set not live");
+        pdpVerifier.getActiveRoots(999, 0, 10);
+    }
+
+    function testGetActiveRootsLargeSet() public {
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+
+        // Add 100 roots
+        IPDPTypes.RootData[] memory testRoots = new IPDPTypes.RootData[](100);
+        for (uint i = 0; i < 100; i++) {
+            testRoots[i] = IPDPTypes.RootData({
+                root: Cids.Cid(abi.encodePacked("test", i)),
+                rawSize: 1024 * (i + 1)
+            });
+        }
+        pdpVerifier.addRoots(setId, testRoots, empty);
+
+        // Test pagination through the entire set
+        uint256 totalRetrieved = 0;
+        uint256 offset = 0;
+        uint256 pageSize = 20;
+
+        while (offset < 100) {
+            (Cids.Cid[] memory roots, uint256[] memory ids, uint256[] memory sizes, uint256 total) =
+                pdpVerifier.getActiveRoots(setId, offset, pageSize);
+
+            assertEq(total, 100, "Total should always be 100");
+
+            if (offset + pageSize <= 100) {
+                assertEq(roots.length, pageSize, "Should return full page");
+            } else {
+                assertEq(roots.length, 100 - offset, "Should return remaining roots");
+            }
+
+            // Verify IDs are sequential
+            for (uint i = 0; i < roots.length; i++) {
+                assertEq(ids[i], offset + i, "IDs should be sequential");
+                assertEq(sizes[i], 1024 * (offset + i + 1), "Sizes should match pattern");
+            }
+
+            totalRetrieved += roots.length;
+            offset += pageSize;
+        }
+
+        assertEq(totalRetrieved, 100, "Should have retrieved all 100 roots");
+    }
+}
+
 contract ProofBuilderHelper is Test {
     // Builds a proof of possession for a proof set
     function buildProofs(PDPVerifier pdpVerifier, uint256 setId, uint challengeCount, bytes32[][][] memory trees, uint[] memory leafCounts) internal view returns (IPDPTypes.Proof[] memory) {

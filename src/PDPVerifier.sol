@@ -254,6 +254,69 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return result;
     }
 
+    /**
+     * @notice Returns active roots (non-zero leaf count) for a proof set with pagination
+     * @param setId The proof set ID
+     * @param offset Starting index for pagination (0-based)
+     * @param limit Maximum number of roots to return
+     * @return roots Array of active root CIDs
+     * @return rootIds Array of corresponding root IDs
+     * @return rawSizes Array of raw sizes for each root (in bytes)
+     * @return totalActive Total count of active roots in the proof set
+     */
+    function getActiveRoots(
+        uint256 setId,
+        uint256 offset,
+        uint256 limit
+    ) public view returns (
+        Cids.Cid[] memory roots,
+        uint256[] memory rootIds,
+        uint256[] memory rawSizes,
+        uint256 totalActive
+    ) {
+        require(proofSetLive(setId), "Proof set not live");
+
+        // First pass: count total active roots
+        uint256 maxRootId = nextRootId[setId];
+        for (uint256 i = 0; i < maxRootId; i++) {
+            if (rootLeafCounts[setId][i] > 0) {
+                totalActive++;
+            }
+        }
+
+        // Handle edge cases
+        if (offset >= totalActive || limit == 0) {
+            return (new Cids.Cid[](0), new uint256[](0), new uint256[](0), totalActive);
+        }
+
+        // Calculate actual items to return
+        uint256 itemsToReturn = limit;
+        if (offset + limit > totalActive) {
+            itemsToReturn = totalActive - offset;
+        }
+
+        // Initialize return arrays
+        roots = new Cids.Cid[](itemsToReturn);
+        rootIds = new uint256[](itemsToReturn);
+        rawSizes = new uint256[](itemsToReturn);
+
+        // Second pass: collect the paginated results
+        uint256 activeCount = 0;
+        uint256 resultIndex = 0;
+
+        for (uint256 i = 0; i < maxRootId && resultIndex < itemsToReturn; i++) {
+            if (rootLeafCounts[setId][i] > 0) {
+                if (activeCount >= offset) {
+                    roots[resultIndex] = rootCids[setId][i];
+                    rootIds[resultIndex] = i;
+                    rawSizes[resultIndex] = rootLeafCounts[setId][i] * 32; // leafCount * 32 bytes
+                    resultIndex++;
+                }
+                activeCount++;
+            }
+        }
+    }
+
     // owner proposes new owner.  If the owner proposes themself delete any outstanding proposed owner
     function proposeProofSetOwner(uint256 setId, address newOwner) public {
         require(proofSetLive(setId), "Proof set not live");
