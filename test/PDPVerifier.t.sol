@@ -683,12 +683,12 @@ contract PDPVerifierPaginationTest is Test {
         uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         (Cids.Cid[] memory roots, uint256[] memory ids,
-         uint256[] memory sizes, uint256 total) = pdpVerifier.getActiveRoots(setId, 0, 10);
+         uint256[] memory sizes, bool hasMore) = pdpVerifier.getActiveRoots(setId, 0, 10);
 
         assertEq(roots.length, 0, "Should return empty array for empty proof set");
         assertEq(ids.length, 0, "Should return empty IDs array");
         assertEq(sizes.length, 0, "Should return empty sizes array");
-        assertEq(total, 0, "Total active should be 0");
+        assertEq(hasMore, false, "Should not have more items");
     }
 
     function testGetActiveRootsPagination() public {
@@ -707,28 +707,28 @@ contract PDPVerifierPaginationTest is Test {
         assertEq(firstRootId, 0, "First root ID should be 0");
 
         // Test first page
-        (Cids.Cid[] memory roots1, uint256[] memory ids1, uint256[] memory sizes1, uint256 total1) =
+        (Cids.Cid[] memory roots1, uint256[] memory ids1, uint256[] memory sizes1, bool hasMore1) =
             pdpVerifier.getActiveRoots(setId, 0, 5);
         assertEq(roots1.length, 5, "First page should have 5 roots");
         assertEq(ids1.length, 5, "First page should have 5 IDs");
         assertEq(sizes1.length, 5, "First page should have 5 sizes");
-        assertEq(total1, 15, "Total should be 15");
+        assertEq(hasMore1, true, "Should have more items after first page");
         assertEq(sizes1[0], 1024, "First root size should be 1024");
         assertEq(ids1[0], 0, "First root ID should be 0");
 
         // Test second page
-        (Cids.Cid[] memory roots2, uint256[] memory ids2, uint256[] memory sizes2, uint256 total2) =
+        (Cids.Cid[] memory roots2, uint256[] memory ids2, uint256[] memory sizes2, bool hasMore2) =
             pdpVerifier.getActiveRoots(setId, 5, 5);
         assertEq(roots2.length, 5, "Second page should have 5 roots");
-        assertEq(total2, 15, "Total should still be 15");
+        assertEq(hasMore2, true, "Should have more items after second page");
         assertEq(ids2[0], 5, "First root ID on second page should be 5");
         assertEq(sizes2[0], 6144, "First root size on second page should be 6144 (1024 * 6)");
 
         // Test last page
-        (Cids.Cid[] memory roots3, uint256[] memory ids3, uint256[] memory sizes3, uint256 total3) =
+        (Cids.Cid[] memory roots3, uint256[] memory ids3, uint256[] memory sizes3, bool hasMore3) =
             pdpVerifier.getActiveRoots(setId, 10, 5);
         assertEq(roots3.length, 5, "Last page should have 5 roots");
-        assertEq(total3, 15, "Total should still be 15");
+        assertEq(hasMore3, false, "Should not have more items after last page");
         assertEq(ids3[0], 10, "First root ID on last page should be 10");
     }
 
@@ -757,10 +757,10 @@ contract PDPVerifierPaginationTest is Test {
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
         // Should return only 7 active roots
-        (Cids.Cid[] memory roots, uint256[] memory ids, uint256[] memory sizes, uint256 total) =
+        (Cids.Cid[] memory roots, uint256[] memory ids, uint256[] memory sizes, bool hasMore) =
             pdpVerifier.getActiveRoots(setId, 0, 10);
         assertEq(roots.length, 7, "Should have 7 active roots after deletions");
-        assertEq(total, 7, "Total active should be 7");
+        assertEq(hasMore, false, "Should not have more items");
 
         // Verify the correct roots are returned (0, 2, 4, 6, 7, 8, 9)
         assertEq(ids[0], 0, "First active root should be 0");
@@ -784,22 +784,20 @@ contract PDPVerifierPaginationTest is Test {
         pdpVerifier.addRoots(setId, testRoots, empty);
 
         // Test offset beyond range
-        (Cids.Cid[] memory roots1, uint256[] memory ids1, uint256[] memory sizes1, uint256 total1) =
+        (Cids.Cid[] memory roots1, uint256[] memory ids1, uint256[] memory sizes1, bool hasMore1) =
             pdpVerifier.getActiveRoots(setId, 10, 5);
         assertEq(roots1.length, 0, "Should return empty when offset beyond range");
-        assertEq(total1, 5, "Total should still be 5");
+        assertEq(hasMore1, false, "Should not have more items");
 
-        // Test limit 0
-        (Cids.Cid[] memory roots2, uint256[] memory ids2, uint256[] memory sizes2, uint256 total2) =
-            pdpVerifier.getActiveRoots(setId, 0, 0);
-        assertEq(roots2.length, 0, "Should return empty when limit is 0");
-        assertEq(total2, 5, "Total should still be 5");
+        // Test limit 0 - should revert now
+        vm.expectRevert("Limit must be greater than 0");
+        pdpVerifier.getActiveRoots(setId, 0, 0);
 
         // Test limit exceeding available
-        (Cids.Cid[] memory roots3, uint256[] memory ids3, uint256[] memory sizes3, uint256 total3) =
+        (Cids.Cid[] memory roots3, uint256[] memory ids3, uint256[] memory sizes3, bool hasMore3) =
             pdpVerifier.getActiveRoots(setId, 3, 10);
         assertEq(roots3.length, 2, "Should return only 2 roots from offset 3");
-        assertEq(total3, 5, "Total should still be 5");
+        assertEq(hasMore3, false, "Should not have more items");
         assertEq(ids3[0], 3, "First ID should be 3");
         assertEq(ids3[1], 4, "Second ID should be 4");
     }
@@ -808,6 +806,36 @@ contract PDPVerifierPaginationTest is Test {
         // Test with invalid proof set ID
         vm.expectRevert("Proof set not live");
         pdpVerifier.getActiveRoots(999, 0, 10);
+    }
+
+    function testGetActiveRootsHasMore() public {
+        uint256 setId = pdpVerifier.createProofSet{value: PDPFees.sybilFee()}(address(listener), empty);
+
+        // Add exactly 10 roots
+        IPDPTypes.RootData[] memory testRoots = new IPDPTypes.RootData[](10);
+        for (uint i = 0; i < 10; i++) {
+            testRoots[i] = IPDPTypes.RootData({
+                root: Cids.Cid(abi.encodePacked("test", i)),
+                rawSize: 1024
+            });
+        }
+        pdpVerifier.addRoots(setId, testRoots, empty);
+
+        // Test exact boundary - requesting exactly all items
+        (,,, bool hasMore1) = pdpVerifier.getActiveRoots(setId, 0, 10);
+        assertEq(hasMore1, false, "Should not have more when requesting exactly all items");
+
+        // Test one less than total - should have more
+        (,,, bool hasMore2) = pdpVerifier.getActiveRoots(setId, 0, 9);
+        assertEq(hasMore2, true, "Should have more when requesting less than total");
+
+        // Test at offset with remaining items
+        (,,, bool hasMore3) = pdpVerifier.getActiveRoots(setId, 5, 4);
+        assertEq(hasMore3, true, "Should have more when 1 item remains");
+
+        // Test at offset with no remaining items
+        (,,, bool hasMore4) = pdpVerifier.getActiveRoots(setId, 5, 5);
+        assertEq(hasMore4, false, "Should not have more when requesting exactly remaining items");
     }
 
     function testGetActiveRootsLargeSet() public {
@@ -829,14 +857,14 @@ contract PDPVerifierPaginationTest is Test {
         uint256 pageSize = 20;
 
         while (offset < 100) {
-            (Cids.Cid[] memory roots, uint256[] memory ids, uint256[] memory sizes, uint256 total) =
+            (Cids.Cid[] memory roots, uint256[] memory ids, uint256[] memory sizes, bool hasMore) =
                 pdpVerifier.getActiveRoots(setId, offset, pageSize);
 
-            assertEq(total, 100, "Total should always be 100");
-
-            if (offset + pageSize <= 100) {
+            if (offset + pageSize < 100) {
+                assertEq(hasMore, true, "Should have more pages");
                 assertEq(roots.length, pageSize, "Should return full page");
             } else {
+                assertEq(hasMore, false, "Should not have more pages");
                 assertEq(roots.length, 100 - offset, "Should return remaining roots");
             }
 

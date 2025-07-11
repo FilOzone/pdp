@@ -262,7 +262,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @return roots Array of active root CIDs
      * @return rootIds Array of corresponding root IDs
      * @return rawSizes Array of raw sizes for each root (in bytes)
-     * @return totalActive Total count of active roots in the proof set
+     * @return hasMore True if there are more roots beyond this page
      */
     function getActiveRoots(
         uint256 setId,
@@ -272,48 +272,58 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         Cids.Cid[] memory roots,
         uint256[] memory rootIds,
         uint256[] memory rawSizes,
-        uint256 totalActive
+        bool hasMore
     ) {
         require(proofSetLive(setId), "Proof set not live");
+        require(limit > 0, "Limit must be greater than 0");
 
-        // First pass: count total active roots
+        // Single pass: collect data and check for more
         uint256 maxRootId = nextRootId[setId];
-        for (uint256 i = 0; i < maxRootId; i++) {
-            if (rootLeafCounts[setId][i] > 0) {
-                totalActive++;
-            }
-        }
 
-        // Handle edge cases
-        if (offset >= totalActive || limit == 0) {
-            return (new Cids.Cid[](0), new uint256[](0), new uint256[](0), totalActive);
-        }
+        // Over-allocate arrays to limit size
+        Cids.Cid[] memory tempRoots = new Cids.Cid[](limit);
+        uint256[] memory tempRootIds = new uint256[](limit);
+        uint256[] memory tempRawSizes = new uint256[](limit);
 
-        // Calculate actual items to return
-        uint256 itemsToReturn = limit;
-        if (offset + limit > totalActive) {
-            itemsToReturn = totalActive - offset;
-        }
-
-        // Initialize return arrays
-        roots = new Cids.Cid[](itemsToReturn);
-        rootIds = new uint256[](itemsToReturn);
-        rawSizes = new uint256[](itemsToReturn);
-
-        // Second pass: collect the paginated results
         uint256 activeCount = 0;
         uint256 resultIndex = 0;
 
-        for (uint256 i = 0; i < maxRootId && resultIndex < itemsToReturn; i++) {
+        for (uint256 i = 0; i < maxRootId; i++) {
             if (rootLeafCounts[setId][i] > 0) {
-                if (activeCount >= offset) {
-                    roots[resultIndex] = rootCids[setId][i];
-                    rootIds[resultIndex] = i;
-                    rawSizes[resultIndex] = rootLeafCounts[setId][i] * 32; // leafCount * 32 bytes
+                if (activeCount >= offset && resultIndex < limit) {
+                    tempRoots[resultIndex] = rootCids[setId][i];
+                    tempRootIds[resultIndex] = i;
+                    tempRawSizes[resultIndex] = rootLeafCounts[setId][i] * 32;
                     resultIndex++;
+                } else if (activeCount >= offset + limit) {
+                    // Found at least one more active root beyond our limit
+                    hasMore = true;
+                    break;
                 }
                 activeCount++;
             }
+        }
+
+        // Handle case where we found fewer items than limit
+        if (resultIndex == 0) {
+            // No items found
+            return (new Cids.Cid[](0), new uint256[](0), new uint256[](0), false);
+        } else if (resultIndex < limit) {
+            // Found fewer items than limit - need to resize arrays
+            roots = new Cids.Cid[](resultIndex);
+            rootIds = new uint256[](resultIndex);
+            rawSizes = new uint256[](resultIndex);
+
+            for (uint256 i = 0; i < resultIndex; i++) {
+                roots[i] = tempRoots[i];
+                rootIds[i] = tempRootIds[i];
+                rawSizes[i] = tempRawSizes[i];
+            }
+        } else {
+            // Found exactly limit items - use temp arrays directly
+            roots = tempRoots;
+            rootIds = tempRootIds;
+            rawSizes = tempRawSizes;
         }
     }
 
