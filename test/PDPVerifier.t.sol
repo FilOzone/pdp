@@ -689,6 +689,9 @@ contract PDPVerifierPaginationTest is Test {
         assertEq(ids.length, 0, "Should return empty IDs array");
         assertEq(sizes.length, 0, "Should return empty sizes array");
         assertEq(hasMore, false, "Should not have more items");
+
+        // Also verify with getActiveRootCount
+        assertEq(pdpVerifier.getActiveRootCount(setId), 0, "Empty proof set should have 0 active roots");
     }
 
     function testGetActiveRootsPagination() public {
@@ -705,6 +708,9 @@ contract PDPVerifierPaginationTest is Test {
 
         uint256 firstRootId = pdpVerifier.addRoots(setId, testRoots, empty);
         assertEq(firstRootId, 0, "First root ID should be 0");
+
+        // Verify total count
+        assertEq(pdpVerifier.getActiveRootCount(setId), 15, "Should have 15 active roots");
 
         // Test first page
         (Cids.Cid[] memory roots1, uint256[] memory ids1, uint256[] memory sizes1, bool hasMore1) =
@@ -762,6 +768,9 @@ contract PDPVerifierPaginationTest is Test {
         assertEq(roots.length, 7, "Should have 7 active roots after deletions");
         assertEq(hasMore, false, "Should not have more items");
 
+        // Verify count matches
+        assertEq(pdpVerifier.getActiveRootCount(setId), 7, "Should have 7 active roots count");
+
         // Verify the correct roots are returned (0, 2, 4, 6, 7, 8, 9)
         assertEq(ids[0], 0, "First active root should be 0");
         assertEq(ids[1], 2, "Second active root should be 2");
@@ -782,6 +791,9 @@ contract PDPVerifierPaginationTest is Test {
             });
         }
         pdpVerifier.addRoots(setId, testRoots, empty);
+
+        // Verify count
+        assertEq(pdpVerifier.getActiveRootCount(setId), 5, "Should have 5 active roots");
 
         // Test offset beyond range
         (Cids.Cid[] memory roots1, uint256[] memory ids1, uint256[] memory sizes1, bool hasMore1) =
@@ -806,6 +818,10 @@ contract PDPVerifierPaginationTest is Test {
         // Test with invalid proof set ID
         vm.expectRevert("Proof set not live");
         pdpVerifier.getActiveRoots(999, 0, 10);
+
+        // Also test getActiveRootCount
+        vm.expectRevert("Proof set not live");
+        pdpVerifier.getActiveRootCount(999);
     }
 
     function testGetActiveRootsHasMore() public {
@@ -850,6 +866,9 @@ contract PDPVerifierPaginationTest is Test {
             });
         }
         pdpVerifier.addRoots(setId, testRoots, empty);
+
+        // Verify total count
+        assertEq(pdpVerifier.getActiveRootCount(setId), 100, "Should have 100 active roots");
 
         // Test pagination through the entire set
         uint256 totalRetrieved = 0;

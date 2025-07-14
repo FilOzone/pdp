@@ -255,6 +255,22 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /**
+     * @notice Returns the count of active roots (non-zero leaf count) for a proof set
+     * @param setId The proof set ID
+     * @return activeCount The number of active roots in the proof set
+     */
+    function getActiveRootCount(uint256 setId) public view returns (uint256 activeCount) {
+        require(proofSetLive(setId), "Proof set not live");
+
+        uint256 maxRootId = nextRootId[setId];
+        for (uint256 i = 0; i < maxRootId; i++) {
+            if (rootLeafCounts[setId][i] > 0) {
+                activeCount++;
+            }
+        }
+    }
+
+    /**
      * @notice Returns active roots (non-zero leaf count) for a proof set with pagination
      * @param setId The proof set ID
      * @param offset Starting index for pagination (0-based)
