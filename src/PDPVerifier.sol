@@ -254,6 +254,95 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return result;
     }
 
+    /**
+     * @notice Returns the count of active roots (non-zero leaf count) for a proof set
+     * @param setId The proof set ID
+     * @return activeCount The number of active roots in the proof set
+     */
+    function getActiveRootCount(uint256 setId) public view returns (uint256 activeCount) {
+        require(proofSetLive(setId), "Proof set not live");
+
+        uint256 maxRootId = nextRootId[setId];
+        for (uint256 i = 0; i < maxRootId; i++) {
+            if (rootLeafCounts[setId][i] > 0) {
+                activeCount++;
+            }
+        }
+    }
+
+    /**
+     * @notice Returns active roots (non-zero leaf count) for a proof set with pagination
+     * @param setId The proof set ID
+     * @param offset Starting index for pagination (0-based)
+     * @param limit Maximum number of roots to return
+     * @return roots Array of active root CIDs
+     * @return rootIds Array of corresponding root IDs
+     * @return rawSizes Array of raw sizes for each root (in bytes)
+     * @return hasMore True if there are more roots beyond this page
+     */
+    function getActiveRoots(
+        uint256 setId,
+        uint256 offset,
+        uint256 limit
+    ) public view returns (
+        Cids.Cid[] memory roots,
+        uint256[] memory rootIds,
+        uint256[] memory rawSizes,
+        bool hasMore
+    ) {
+        require(proofSetLive(setId), "Proof set not live");
+        require(limit > 0, "Limit must be greater than 0");
+
+        // Single pass: collect data and check for more
+        uint256 maxRootId = nextRootId[setId];
+
+        // Over-allocate arrays to limit size
+        Cids.Cid[] memory tempRoots = new Cids.Cid[](limit);
+        uint256[] memory tempRootIds = new uint256[](limit);
+        uint256[] memory tempRawSizes = new uint256[](limit);
+
+        uint256 activeCount = 0;
+        uint256 resultIndex = 0;
+
+        for (uint256 i = 0; i < maxRootId; i++) {
+            if (rootLeafCounts[setId][i] > 0) {
+                if (activeCount >= offset && resultIndex < limit) {
+                    tempRoots[resultIndex] = rootCids[setId][i];
+                    tempRootIds[resultIndex] = i;
+                    tempRawSizes[resultIndex] = rootLeafCounts[setId][i] * 32;
+                    resultIndex++;
+                } else if (activeCount >= offset + limit) {
+                    // Found at least one more active root beyond our limit
+                    hasMore = true;
+                    break;
+                }
+                activeCount++;
+            }
+        }
+
+        // Handle case where we found fewer items than limit
+        if (resultIndex == 0) {
+            // No items found
+            return (new Cids.Cid[](0), new uint256[](0), new uint256[](0), false);
+        } else if (resultIndex < limit) {
+            // Found fewer items than limit - need to resize arrays
+            roots = new Cids.Cid[](resultIndex);
+            rootIds = new uint256[](resultIndex);
+            rawSizes = new uint256[](resultIndex);
+
+            for (uint256 i = 0; i < resultIndex; i++) {
+                roots[i] = tempRoots[i];
+                rootIds[i] = tempRootIds[i];
+                rawSizes[i] = tempRawSizes[i];
+            }
+        } else {
+            // Found exactly limit items - use temp arrays directly
+            roots = tempRoots;
+            rootIds = tempRootIds;
+            rawSizes = tempRawSizes;
+        }
+    }
+
     // owner proposes new owner.  If the owner proposes themself delete any outstanding proposed owner
     function proposeProofSetOwner(uint256 setId, address newOwner) public {
         require(proofSetLive(setId), "Proof set not live");
