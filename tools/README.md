@@ -9,7 +9,7 @@ This script deploys the PDP service contract to a local filecoin devnet.  It ass
 We have some scripts for interacting with the PDP service contract through ETH RPC API: 
 - add.sh
 - remove.sh
-- createproofset.sh
+- createdataset.sh
 - find.sh 
 - size.sh
 

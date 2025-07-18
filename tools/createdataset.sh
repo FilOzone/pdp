@@ -1,5 +1,5 @@
 #! /bin/bash
-# Usage: ./createproofset.sh <contract-address>
+# Usage: ./createdataset.sh <contract-address>
 
 # Check if required environment variables are set
 if [ -z "$RPC_URL" ] || [ -z "$KEYSTORE" ] ; then
@@ -15,8 +15,8 @@ fi
 
 CONTRACT_ADDRESS=$1
 
-# Create the calldata for createProofSet()
-CALLDATA=$(cast calldata "createProofSet(address)(uint256)" $2)
+# Create the calldata for createDataSet()
+CALLDATA=$(cast calldata "createDataSet(address)(uint256)" $2)
 
 # Send the transaction
 cast send --keystore $KEYSTORE --password "$PASSWORD" --rpc-url $RPC_URL $CONTRACT_ADDRESS $CALLDATA
