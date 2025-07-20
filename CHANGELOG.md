@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-## [2.0.0] - 2025-01-20
+## [2.0.0] - 2025-07-20
 ### Changed
 - **BREAKING**: Renamed core terminology throughout the codebase for better clarity
   - `proofSet` → `dataSet` (all functions, variables, events, and parameters)
@@ -42,6 +42,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
     - `rootCids` → `pieceCids`
     - `rootLeafCounts` → `pieceLeafCounts`
     - `nextRootId` → `nextPieceId`
+
+### Deprecated
+- **SimplePDPService**: No longer actively maintained or deployed by default
+  - Removed from default deployment scripts (`deploy-mainnet.sh`, `deploy-calibnet.sh`, `deploy-devnet.sh`)
+  - Added optional deployment script (`deploy-simple-pdp-service.sh`) for community use
+  - Remains available as reference integration in `src/SimplePDPService.sol`. Proper Filecoin Service with PDP can be found in https://github.com/FilOzone/filecoin-services/tree/main/service_contracts/src
 
 
 ## [1.1.0] - 2025-01-20
