@@ -5,6 +5,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [2.0.0] - 2025-01-20
+### Changed
+- **BREAKING**: Renamed core terminology throughout the codebase for better clarity
+  - `proofSet` → `dataSet` (all functions, variables, events, and parameters)
+  - `root` → `piece` (all functions, variables, events, and parameters)
+  - `rootId` → `pieceId` (all functions, variables, events, and parameters)
+  - Function renames:
+    - `createProofSet()` → `createDataSet()`
+    - `deleteProofSet()` → `deleteDataSet()`
+    - `getProofSet*()` → `getDataSet*()`
+    - `getNextProofSetId()` → `getNextDataSetId()`
+    - `proofSetLive()` → `dataSetLive()`
+    - `getProofSetLeafCount()` → `getDataSetLeafCount()`
+    - `getNextRootId()` → `getNextPieceId()`
+    - `rootLive()` → `pieceLive()`
+    - `rootChallengable()` → `pieceChallengable()`
+    - `getRootMetadata()` → `getPieceMetadata()`
+    - And many more...
+  - Event renames:
+    - `ProofSetCreated` → `DataSetCreated`
+    - `ProofSetDeleted` → `DataSetDeleted`
+    - `ProofSetEmpty` → `DataSetEmpty`
+    - `ProofSetOwnerChanged` → `StorageProviderChanged`
+    - `RootsAdded` → `PiecesAdded`
+    - `RootsRemoved` → `PiecesRemoved`
+    - `RootMetadataAdded` → `PieceMetadataAdded`
+  - Interface updates:
+    - `PDPListener` interface methods updated with new parameter names
+    - `IPDPTypes.RootData` → `IPDPTypes.PieceData` (note: struct field remains `piece`)
+  - Variable and mapping renames:
+    - `nextProofSetId` → `nextDataSetId`
+    - `proofSetLeafCount` → `dataSetLeafCount`
+    - `proofSetListener` → `dataSetListener`
+    - `proofSetOwner` → `storageProvider`
+    - `rootCids` → `pieceCids`
+    - `rootLeafCounts` → `pieceLeafCounts`
+    - `nextRootId` → `nextPieceId`
+
+
+## [1.1.0] - 2025-01-20
+### Added
+- Contract migration functionality
+- Enhanced upgrade mechanisms
+
 ## [1.0.0] - 2025-04-17
 ### Added
 - Initial release of PDPVerifier and SimplePDPService contracts
@@ -45,5 +89,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/filozone/pdp/compare/v1.1.0...v2.0.0
+[1.1.0]: https://github.com/filozone/pdp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/filozone/pdp/releases/tag/v1.0.0

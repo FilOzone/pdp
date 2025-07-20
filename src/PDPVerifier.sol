@@ -147,7 +147,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         challengeFinality = _challengeFinality;
     }
 
-    string public constant VERSION = "1.1.0";
+    string public constant VERSION = "2.0.0";
     event ContractUpgraded(string version, address implementation);
 
     function migrate() external onlyOwner reinitializer(2) {
