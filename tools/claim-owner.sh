@@ -24,7 +24,7 @@ CLAIMER_ADDRESS=$(cast wallet address --keystore "$KEYSTORE")
 echo "New owner address (claiming ownership): $CLAIMER_ADDRESS"
 
 # Construct calldata using cast calldata
-CALLDATA=$(cast calldata "claimDataSetOwnership(uint256)" "$DATASET_ID")
+CALLDATA=$(cast calldata "claimDataSetStorageProvider(uint256,bytes)" "$DATASET_ID" "0x")
 
 echo "Sending transaction..."
 

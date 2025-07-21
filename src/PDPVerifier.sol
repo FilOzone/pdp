@@ -48,7 +48,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Events
     event DataSetCreated(uint256 indexed setId, address indexed storageProvider);
-    event StorageProviderChanged(uint256 indexed setId, address indexed oldOwner, address indexed newOwner);
+    event StorageProviderChanged(uint256 indexed setId, address indexed oldStorageProvider, address indexed newStorageProvider);
     event DataSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event DataSetEmpty(uint256 indexed setId);
 

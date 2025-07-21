@@ -26,7 +26,7 @@ SENDER_ADDRESS=$(cast wallet address --keystore "$KEYSTORE")
 echo "Current owner address: $SENDER_ADDRESS"
 
 # Construct calldata using cast calldata
-CALLDATA=$(cast calldata "proposeDataSetOwner(uint256,address)" "$DATASET_ID" "$NEW_OWNER_ADDRESS")
+CALLDATA=$(cast calldata "proposeDataSetStorageProvider(uint256,address)" "$DATASET_ID" "$NEW_OWNER_ADDRESS")
 
 echo "Sending transaction..."
 

@@ -39,9 +39,9 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         assertEq(setId, 0, "First data set ID should be 0");
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0, "Data set leaf count should be 0");
 
-        (address owner, address proposedOwner) = pdpVerifier.getDataSetStorageProvider(setId);
-        assertEq(owner, address(this), "Data set owner should be the constructor sender");
-        assertEq(proposedOwner, address(0), "Data set proposed owner should be initialized to zero address");
+        (address currentStorageProvider, address proposedStorageProvider) = pdpVerifier.getDataSetStorageProvider(setId);
+        assertEq(currentStorageProvider, address(this), "Data set storage provider should be the constructor sender");
+        assertEq(proposedStorageProvider, address(0), "Data set proposed storage provider should be initialized to zero address");
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), 0, "Data set challenge epoch should be zero");
         assertEq(pdpVerifier.pieceLive(setId, 0), false, "Data set piece should not be live");
@@ -62,14 +62,14 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         pdpVerifier.getDataSetLeafCount(setId);
     }
 
-    function testOnlyOwnerCanDeleteDataSet() public {
+    function testOnlyStorageProviderCanDeleteDataSet() public {
          vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(0, address(this));
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         // Create a new address to act as a non-storage-provider
-        address nonOwner = address(0x1234);
+        address nonStorageProvider = address(0x1234);
         // Expect revert when non-storage-provider tries to delete the data set
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         vm.expectRevert("Only the storage provider can delete data sets");
         pdpVerifier.deleteDataSet(setId, empty);
 
@@ -145,18 +145,18 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
 
         // Additional checks to ensure the data set was created correctly
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0, "Data set leaf count should be 0");
-        (address owner, address proposedOwner) = pdpVerifier.getDataSetStorageProvider(setId);
-        assertEq(owner, address(this), "Data set owner should be the constructor sender");
-        assertEq(proposedOwner, address(0), "Data set proposed owner should be initialized to zero address");
+        (address currentStorageProvider, address proposedStorageProvider) = pdpVerifier.getDataSetStorageProvider(setId);
+        assertEq(currentStorageProvider, address(this), "Data set storage provider should be the constructor sender");
+        assertEq(proposedStorageProvider, address(0), "Data set proposed storage provider should be initialized to zero address");
     }
 }
 
-contract PDPVerifierOwnershipTest is Test {
+contract PDPVerifierStorageProviderTest is Test {
     PDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
-    address public owner;
-    address public nextOwner;
-    address public nonOwner;
+    address public storageProvider;
+    address public nextStorageProvider;
+    address public nonStorageProvider;
     bytes empty = new bytes(0);
 
 
@@ -170,56 +170,56 @@ contract PDPVerifierOwnershipTest is Test {
         pdpVerifier = PDPVerifier(address(proxy));
         listener = new TestingRecordKeeperService();
 
-        owner = address(this);
-        nextOwner = address(0x1234);
-        nonOwner = address(0xffff);
+        storageProvider = address(this);
+        nextStorageProvider = address(0x1234);
+        nonStorageProvider = address(0xffff);
     }
 
-    function testOwnershipTransfer() public {
+    function testStorageProviderTransfer() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        pdpVerifier.proposeDataSetStorageProvider(setId, nextOwner);
-        (address ownerStart, address proposedOwnerStart) = pdpVerifier.getDataSetStorageProvider(setId);
-        assertEq(ownerStart, owner, "Data set owner should be the constructor sender");
-        assertEq(proposedOwnerStart, nextOwner, "Data set proposed owner should make the one proposed");
-        vm.prank(nextOwner);
+        pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
+        (address currentStorageProviderStart, address proposedStorageProviderStart) = pdpVerifier.getDataSetStorageProvider(setId);
+        assertEq(currentStorageProviderStart, storageProvider, "Data set storage provider should be the constructor sender");
+        assertEq(proposedStorageProviderStart, nextStorageProvider, "Data set proposed storage provider should make the one proposed");
+        vm.prank(nextStorageProvider);
 
         vm.expectEmit(true, true, false, false);
-        emit IPDPEvents.StorageProviderChanged(setId, owner, nextOwner);
+        emit IPDPEvents.StorageProviderChanged(setId, storageProvider, nextStorageProvider);
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
-        (address ownerEnd, address proposedOwnerEnd) = pdpVerifier.getDataSetStorageProvider(setId);
-        assertEq(ownerEnd, nextOwner, "Data set owner should be the next owner");
-        assertEq(proposedOwnerEnd, address(0), "Data set proposed owner should be zero address");
+        (address currentStorageProviderEnd, address proposedStorageProviderEnd) = pdpVerifier.getDataSetStorageProvider(setId);
+        assertEq(currentStorageProviderEnd, nextStorageProvider, "Data set storage provider should be the next provider");
+        assertEq(proposedStorageProviderEnd, address(0), "Data set proposed storage provider should be zero address");
     }
 
-    function testOwnershipProposalReset() public {
+    function testStorageProviderProposalReset() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        pdpVerifier.proposeDataSetStorageProvider(setId, nextOwner);
-        pdpVerifier.proposeDataSetStorageProvider(setId, owner);
-        (address ownerEnd, address proposedOwnerEnd) = pdpVerifier.getDataSetStorageProvider(setId);
-        assertEq(ownerEnd, owner, "Data set owner should be the constructor sender");
-        assertEq(proposedOwnerEnd, address(0), "Data set proposed owner should be zero address");
+        pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
+        pdpVerifier.proposeDataSetStorageProvider(setId, storageProvider);
+        (address currentStorageProviderEnd, address proposedStorageProviderEnd) = pdpVerifier.getDataSetStorageProvider(setId);
+        assertEq(currentStorageProviderEnd, storageProvider, "Data set storage provider should be the constructor sender");
+        assertEq(proposedStorageProviderEnd, address(0), "Data set proposed storage provider should be zero address");
     }
 
-    function testOwnershipPermissionsRequired() public {
+    function testStorageProviderPermissionsRequired() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         vm.expectRevert("Only the current storage provider can propose a new storage provider");
-        pdpVerifier.proposeDataSetStorageProvider(setId, nextOwner);
+        pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
 
         // Now send proposal from actual storage provider
-        pdpVerifier.proposeDataSetStorageProvider(setId, nextOwner);
+        pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
 
         // Proposed storage provider has no extra permissions
-        vm.prank(nextOwner);
+        vm.prank(nextStorageProvider);
         vm.expectRevert("Only the current storage provider can propose a new storage provider");
-        pdpVerifier.proposeDataSetStorageProvider(setId, nonOwner);
+        pdpVerifier.proposeDataSetStorageProvider(setId, nonStorageProvider);
 
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         vm.expectRevert("Only the proposed storage provider can claim storage provider role");
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
     }
 
-    function testScheduleRemovePiecesOnlyOwner() public {
+    function testScheduleRemovePiecesOnlyStorageProvider() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         IPDPTypes.PieceData[] memory pieceDataArray = new IPDPTypes.PieceData[](1);
@@ -229,7 +229,7 @@ contract PDPVerifierOwnershipTest is Test {
         uint256[] memory pieceIdsToRemove = new uint256[](1);
         pieceIdsToRemove[0] = 0;
 
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         vm.expectRevert("Only the storage provider can schedule removal of pieces");
         pdpVerifier.schedulePieceDeletions(setId, pieceIdsToRemove, empty);
     }
@@ -530,7 +530,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         pdpVerifier.deleteDataSet(setId, tooLargeExtraData);
     }
         
-    function testOnlyOwnerCanModifyDataSet() public {
+    function testOnlyStorageProviderCanModifyDataSet() public {
         // Setup a piece we can add
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
@@ -539,33 +539,33 @@ contract PDPVerifierDataSetMutateTest is Test {
         // First add a piece as the storage provider so we can test removal
         pdpVerifier.addPieces(setId, pieces, empty);
         
-        address nonOwner = address(0xC0FFEE);
+        address nonStorageProvider = address(0xC0FFEE);
         // Try to add pieces as non-storage-provider
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         vm.expectRevert("Only the storage provider can add pieces");
         pdpVerifier.addPieces(setId, pieces, empty);
         
         // Try to delete data set as non-storage-provider
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         vm.expectRevert("Only the storage provider can delete data sets");
         pdpVerifier.deleteDataSet(setId, empty);
         
         // Try to schedule removals as non-storage-provider
         uint256[] memory pieceIds = new uint256[](1);
         pieceIds[0] = 0;
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         vm.expectRevert("Only the storage provider can schedule removal of pieces");
         pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
 
         // Try to provePossession as non-storage-provider
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         IPDPTypes.Proof[] memory proofs = new IPDPTypes.Proof[](1);
         proofs[0] = IPDPTypes.Proof(bytes32(abi.encodePacked("test")), new bytes32[](0));
         vm.expectRevert("Only the storage provider can prove possession");
         pdpVerifier.provePossession(setId, proofs);
         
         // Try to call nextProvingPeriod as non-storage-provider
-        vm.prank(nonOwner);
+        vm.prank(nonStorageProvider);
         vm.expectRevert("only the storage provider can move to next proving period");
         pdpVerifier.nextProvingPeriod(setId, block.number + 10, empty);
     }
@@ -948,7 +948,7 @@ contract ProofBuilderHelper is Test {
 // to help with more flexible testing.
 contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
     // Implement the new ownerChanged hook
-    /// @notice Called when data set ownership is changed in PDPVerifier.
+    /// @notice Called when data set storage provider role is changed in PDPVerifier.
     function ownerChanged(uint256, address, address, bytes calldata) external override {}
 
     function dataSetCreated(uint256 dataSetId, address creator, bytes calldata) external override {
@@ -2049,18 +2049,18 @@ contract PDPVerifierMigrateTest is Test {
 }
 contract MockOwnerChangedListener is PDPListener {
     uint256 public lastDataSetId;
-    address public lastOldOwner;
-    address public lastNewOwner;
+    address public lastOldStorageProvider;
+    address public lastNewStorageProvider;
     bytes public lastExtraData;
     bool public shouldRevert;
 
     function setShouldRevert(bool value) external { shouldRevert = value; }
 
-    function ownerChanged(uint256 dataSetId, address oldOwner, address newOwner, bytes calldata extraData) external override {
+    function ownerChanged(uint256 dataSetId, address oldStorageProvider, address newStorageProvider, bytes calldata extraData) external override {
         if (shouldRevert) revert("MockOwnerChangedListener: forced revert");
         lastDataSetId = dataSetId;
-        lastOldOwner = oldOwner;
-        lastNewOwner = newOwner;
+        lastOldStorageProvider = oldStorageProvider;
+        lastNewStorageProvider = newStorageProvider;
         lastExtraData = extraData;
     }
     function dataSetCreated(uint256, address, bytes calldata) external override {}
@@ -2071,12 +2071,12 @@ contract MockOwnerChangedListener is PDPListener {
     function nextProvingPeriod(uint256, uint256, uint256, bytes calldata) external override {}
 }
 
-contract PDPVerifierOwnershipListenerTest is Test {
+contract PDPVerifierStorageProviderListenerTest is Test {
     PDPVerifier pdpVerifier;
     MockOwnerChangedListener listener;
-    address public owner;
-    address public nextOwner;
-    address public nonOwner;
+    address public storageProvider;
+    address public nextStorageProvider;
+    address public nonStorageProvider;
     bytes empty = new bytes(0);
 
     function setUp() public {
@@ -2088,34 +2088,34 @@ contract PDPVerifierOwnershipListenerTest is Test {
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         listener = new MockOwnerChangedListener();
-        owner = address(this);
-        nextOwner = address(0x1234);
-        nonOwner = address(0xffff);
+        storageProvider = address(this);
+        nextStorageProvider = address(0x1234);
+        nonStorageProvider = address(0xffff);
     }
 
-    function testOwnerChangedCalledOnOwnershipTransfer() public {
+    function testOwnerChangedCalledOnStorageProviderTransfer() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        pdpVerifier.proposeDataSetStorageProvider(setId, nextOwner);
-        vm.prank(nextOwner);
+        pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
+        vm.prank(nextStorageProvider);
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
         assertEq(listener.lastDataSetId(), setId, "Data set ID mismatch");
-        assertEq(listener.lastOldOwner(), owner, "Old owner mismatch");
-        assertEq(listener.lastNewOwner(), nextOwner, "New owner mismatch");
+        assertEq(listener.lastOldStorageProvider(), storageProvider, "Old storage provider mismatch");
+        assertEq(listener.lastNewStorageProvider(), nextStorageProvider, "New storage provider mismatch");
     }
 
     function testNoListenerNoRevert() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(0), empty);
-        pdpVerifier.proposeDataSetStorageProvider(setId, nextOwner);
-        vm.prank(nextOwner);
+        pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
+        vm.prank(nextStorageProvider);
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
       // No assertion needed, test passes if no revert
     }
 
     function testListenerRevertDoesNotRevertMainTx() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        pdpVerifier.proposeDataSetStorageProvider(setId, nextOwner);
+        pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         listener.setShouldRevert(true);
-        vm.prank(nextOwner);
+        vm.prank(nextStorageProvider);
         vm.expectRevert("MockOwnerChangedListener: forced revert");
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
     }

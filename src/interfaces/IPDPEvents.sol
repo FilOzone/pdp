@@ -7,7 +7,7 @@ import "./IPDPTypes.sol";
 /// @notice Shared events for PDP contracts and consumers
 interface IPDPEvents {
     event DataSetCreated(uint256 indexed setId, address indexed storageProvider);
-    event StorageProviderChanged(uint256 indexed setId, address indexed oldOwner, address indexed newOwner);
+    event StorageProviderChanged(uint256 indexed setId, address indexed oldStorageProvider, address indexed newStorageProvider);
     event DataSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event DataSetEmpty(uint256 indexed setId);
     event PiecesAdded(uint256 indexed setId, uint256[] pieceIds);
