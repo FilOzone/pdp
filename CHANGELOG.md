@@ -5,6 +5,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [2.1.0] - 2025-07-21
+### Changed
+- **BREAKING**: Completed terminology updates from PR #180 feedback
+  - Function renames:
+    - `scheduleRemovals()` → `schedulePieceDeletions()` - Better describes the action of deleting pieces
+    - `MAX_ROOT_SIZE` → `MAX_PIECE_SIZE` - Consistent with piece terminology
+  - Event parameter renames:
+    - `StorageProviderChanged` event: `oldOwner`/`newOwner` → `oldStorageProvider`/`newStorageProvider`
+  - Test updates:
+    - All test classes, functions, and variables updated from "owner/ownership" to "storage provider" terminology
+    - Consistent use of full "StorageProvider" naming (not abbreviated as "Provider")
+  - Documentation and comment updates:
+    - All instances of "proof set" → "data set" (two words in documentation)
+    - All instances of "dataset" → "data set" (two words in documentation)
+    - Remaining "root" references in gas benchmarks updated to "piece"
+  - Script updates:
+    - `claimDataSetOwnership()` → `claimDataSetStorageProvider()` in claim-owner.sh
+    - `proposeDataSetOwner()` → `proposeDataSetStorageProvider()` in propose-owner.sh
+
+### Fixed
+- Gas benchmark documentation and CSV files now use consistent "DataSet" and "Piece" terminology
+- All comments and documentation now consistently use "data set" as two words
+
 ## [2.0.0] - 2025-07-20
 ### Changed
 - **BREAKING**: Renamed core terminology throughout the codebase for better clarity
