@@ -86,7 +86,7 @@ contract SimplePDPServiceTest is Test {
         pdpService.possessionProven(dataSetId, leafCount, seed, 5);
     }
 
-    function testInactivateProofSetHappyPath() public {
+    function testInactivateDataSetHappyPath() public {
         // Setup initial state
         pdpService.piecesAdded(dataSetId, 0, new IPDPTypes.PieceData[](0), empty);
         pdpService.nextProvingPeriod(dataSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
@@ -95,7 +95,7 @@ contract SimplePDPServiceTest is Test {
         vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
         pdpService.possessionProven(dataSetId, leafCount, seed, 5);
 
-        // Inactivate the proof set
+        // Inactivate the data set
         pdpService.nextProvingPeriod(dataSetId, pdpService.NO_CHALLENGE_SCHEDULED(), leafCount, empty);
 
         assertEq(

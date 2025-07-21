@@ -231,7 +231,7 @@ contract PDPVerifierOwnershipTest is Test {
 
         vm.prank(nonOwner);
         vm.expectRevert("Only the storage provider can schedule removal of pieces");
-        pdpVerifier.scheduleRemovals(setId, pieceIdsToRemove, empty);
+        pdpVerifier.schedulePieceDeletions(setId, pieceIdsToRemove, empty);
     }
 }
 
@@ -321,7 +321,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         vm.expectRevert(abi.encodeWithSelector(PDPVerifier.IndexedError.selector, index, expectedMessage));
     }
 
-    function testAddBadRoot() public {
+    function testAddBadPiece() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
 
@@ -336,14 +336,14 @@ contract PDPVerifierDataSetMutateTest is Test {
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Fail when piece size is too large
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), pdpVerifier.MAX_ROOT_SIZE() + 32);
+        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), pdpVerifier.MAX_PIECE_SIZE() + 32);
         expectIndexedError(0, "Piece size must be less than 2^50");
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Fail when not adding any pieces;
-        IPDPTypes.PieceData[] memory emptyRoots = new IPDPTypes.PieceData[](0);
+        IPDPTypes.PieceData[] memory emptyPieces = new IPDPTypes.PieceData[](0);
         vm.expectRevert("Must add at least one piece");
-        pdpVerifier.addPieces(setId, emptyRoots, empty);
+        pdpVerifier.addPieces(setId, emptyPieces, empty);
 
         // Fail when data set is no longer live
         pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 32);
@@ -352,7 +352,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         pdpVerifier.addPieces(setId, pieces, empty);
     }
 
-    function testAddBadRootsBatched() public {
+    function testAddBadPiecesBatched() public {
         // Add one bad piece, message fails on bad index
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](4);
@@ -370,7 +370,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         pdpVerifier.addPieces(setId, pieces, empty);
     }
 
-    function testRemoveRoot() public {
+    function testRemovePiece() public {
         // Add one piece
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
@@ -384,7 +384,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         // Remove piece
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 0;
-        pdpVerifier.scheduleRemovals(setId, toRemove, empty);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.PiecesRemoved(setId, toRemove);
@@ -416,10 +416,10 @@ contract PDPVerifierDataSetMutateTest is Test {
         uint256[] memory pieceIds = new uint256[](1);
         pieceIds[0] = 0;
         vm.expectRevert("Data set not live");
-        pdpVerifier.scheduleRemovals(setId, pieceIds, empty);
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
     }
 
-    function testRemoveRootBatch() public {
+    function testRemovePieceBatch() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](3);
         pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test1")), 64);
@@ -429,7 +429,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         uint256[] memory toRemove = new uint256[](2);
         toRemove[0] = 0;
         toRemove[1] = 2;
-        pdpVerifier.scheduleRemovals(setId, toRemove, empty);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.PiecesRemoved(setId, toRemove);
@@ -454,7 +454,7 @@ contract PDPVerifierDataSetMutateTest is Test {
 
     }
 
-    function testRemoveFutureRoots() public {
+    function testRemoveFuturePieces() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
         pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
@@ -467,7 +467,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         toRemove[0] = 0; // current piece
         toRemove[1] = 1; // future piece
         vm.expectRevert("Can only schedule removal of existing pieces");
-        pdpVerifier.scheduleRemovals(setId, toRemove, empty);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
         // Actual removal does not fail
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
@@ -485,7 +485,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         // only piece 0 is challengeable
         assertEq(true, pdpVerifier.pieceChallengable(setId, 0));
         assertEq(false, pdpVerifier.pieceChallengable(setId, 1));
-        pdpVerifier.scheduleRemovals(setId, toRemove2, empty);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove2, empty);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
         assertEq(false, pdpVerifier.pieceLive(setId, 0));
@@ -503,7 +503,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         vm.expectRevert("Extra data too large");
         pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), tooLargeExtraData);
 
-        // Now create dataset 
+        // Now create data set 
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
         
@@ -515,11 +515,11 @@ contract PDPVerifierDataSetMutateTest is Test {
         // Now actually add piece id 0
         pdpVerifier.addPieces(setId, pieces, empty);
         
-        // Test scheduleRemovals with too large extra data
+        // Test schedulePieceDeletions with too large extra data
         uint256[] memory pieceIds = new uint256[](1);
         pieceIds[0] = 0;
         vm.expectRevert("Extra data too large");
-        pdpVerifier.scheduleRemovals(setId, pieceIds, tooLargeExtraData);
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, tooLargeExtraData);
         
         // Test nextProvingPeriod with too large extra data
         vm.expectRevert("Extra data too large");
@@ -555,7 +555,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         pieceIds[0] = 0;
         vm.prank(nonOwner);
         vm.expectRevert("Only the storage provider can schedule removal of pieces");
-        pdpVerifier.scheduleRemovals(setId, pieceIds, empty);
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
 
         // Try to provePossession as non-storage-provider
         vm.prank(nonOwner);
@@ -644,7 +644,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         // Schedule piece for removal
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 0;
-        pdpVerifier.scheduleRemovals(setId, toRemove, empty);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
         // Expect DataSetEmpty event when calling nextProvingPeriod
         vm.expectEmit(true, false, false, false);
@@ -678,7 +678,7 @@ contract PDPVerifierPaginationTest is Test {
     }
 
 
-    function testGetActiveRootsEmpty() public {
+    function testGetActivePiecesEmpty() public {
         // Create empty data set and test
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
@@ -694,7 +694,7 @@ contract PDPVerifierPaginationTest is Test {
         assertEq(pdpVerifier.getActivePieceCount(setId), 0, "Empty data set should have 0 active pieces");
     }
 
-    function testGetActiveRootsPagination() public {
+    function testGetActivePiecesPagination() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         // Add 15 pieces
@@ -738,7 +738,7 @@ contract PDPVerifierPaginationTest is Test {
         assertEq(ids3[0], 10, "First piece ID on last page should be 10");
     }
 
-    function testGetActiveRootsWithDeleted() public {
+    function testGetActivePiecesWithDeleted() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         // Add pieces
@@ -756,7 +756,7 @@ contract PDPVerifierPaginationTest is Test {
         toRemove[0] = firstPieceId + 1;  // Piece at index 1
         toRemove[1] = firstPieceId + 3;  // Piece at index 3
         toRemove[2] = firstPieceId + 5;  // Piece at index 5
-        pdpVerifier.scheduleRemovals(setId, toRemove, empty);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
         // Move to next proving period to make removals effective
         uint256 challengeFinalityDelay = pdpVerifier.getChallengeFinality();
@@ -779,7 +779,7 @@ contract PDPVerifierPaginationTest is Test {
         assertEq(ids[4], 7, "Fifth active piece should be 7");
     }
 
-    function testGetActiveRootsEdgeCases() public {
+    function testGetActivePiecesEdgeCases() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         // Add 5 pieces
@@ -814,7 +814,7 @@ contract PDPVerifierPaginationTest is Test {
         assertEq(ids3[1], 4, "Second ID should be 4");
     }
 
-    function testGetActiveRootsNotLive() public {
+    function testGetActivePiecesNotLive() public {
         // Test with invalid data set ID
         vm.expectRevert("Data set not live");
         pdpVerifier.getActivePieces(999, 0, 10);
@@ -824,7 +824,7 @@ contract PDPVerifierPaginationTest is Test {
         pdpVerifier.getActivePieceCount(999);
     }
 
-    function testGetActiveRootsHasMore() public {
+    function testGetActivePiecesHasMore() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         // Add exactly 10 pieces
@@ -854,7 +854,7 @@ contract PDPVerifierPaginationTest is Test {
         assertEq(hasMore4, false, "Should not have more when requesting exactly remaining items");
     }
 
-    function testGetActiveRootsLargeSet() public {
+    function testGetActivePiecesLargeSet() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         // Add 100 pieces
@@ -1013,7 +1013,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         return (pythCallData, price);
     }
 
-    function testProveSingleRoot() public {
+    function testProveSinglePiece() public {
         // Mock Pyth oracle call to return $5 USD/FIL
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
@@ -1123,7 +1123,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // Schedule piece removal
         uint256[] memory piecesToRemove = new uint256[](1);
         piecesToRemove[0] = 0;
-        pdpVerifier.scheduleRemovals(setId, piecesToRemove, empty);
+        pdpVerifier.schedulePieceDeletions(setId, piecesToRemove, empty);
 
 
         // Call nextProvingPeriod and verify lastProvenEpoch is reset to 0
@@ -1230,7 +1230,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
     }
 
-    function testBadRootsRejected() public {
+    function testBadPiecesRejected() public {
         // Mock Pyth oracle call to return $5 USD/FIL
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
@@ -1264,7 +1264,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         // Remove a piece and resample
         uint256[] memory removePieces = new uint256[](1);
         removePieces[0] = newPieceId;
-        pdpVerifier.scheduleRemovals(setId, removePieces, empty);
+        pdpVerifier.schedulePieceDeletions(setId, removePieces, empty);
         // flush removes
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
@@ -1285,7 +1285,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         pdpVerifier.provePossession{value: 1e18}(setId, proofsOneRoot);
     }
 
-    function testProveManyRoots() public {
+    function testProveManyPieces() public {
         // Mock Pyth oracle call to return $5 USD/FIL
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
@@ -1548,7 +1548,7 @@ contract SumTreeAddTest is Test {
 
         // Delete some
         // Remove pieces in batch
-        pdpVerifier.scheduleRemovals(testSetId, pieceIdsToRemove, empty);
+        pdpVerifier.schedulePieceDeletions(testSetId, pieceIdsToRemove, empty);
         // flush adds and removals
         pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
         for (uint256 i = 0; i < pieceIdsToRemove.length; i++) {
@@ -1569,10 +1569,10 @@ contract SumTreeAddTest is Test {
         assertEq(pdpVerifier.getDataSetLeafCount(testSetId), 820, "Incorrect final data set leaf count");
     }
 
-    function testFindRootId() public {
+    function testFindPieceId() public {
         setUpTestingArray();
 
-        // Test findRootId for various positions
+        // Test findPieceId for various positions
         assertFindPieceAndOffset(testSetId, 0, 0, 0);
         assertFindPieceAndOffset(testSetId, 199, 0, 199);
         assertFindPieceAndOffset(testSetId, 200, 1, 0);
@@ -1597,7 +1597,7 @@ contract SumTreeAddTest is Test {
         pdpVerifier.findPieceIds(testSetId, outOfBounds);
     }
 
-    function testBatchFindRootId() public {
+    function testBatchFindPieceId() public {
         setUpTestingArray();
         uint256[] memory searchIndexes = new uint256[](12);
         searchIndexes[0] = 0;
@@ -1658,7 +1658,7 @@ contract SumTreeAddTest is Test {
         }
     }
 
-    // The batched version of assertFindRootAndOffset
+    // The batched version of assertFindPieceAndOffset
     function assertFindPiecesAndOffsets(uint256 setId, uint256[] memory searchIndices, uint256[] memory expectPieceIds, uint256[] memory expectOffsets) internal view {
         IPDPTypes.PieceIdAndOffset[] memory result = pdpVerifier.findPieceIds(setId, searchIndices);
         for (uint256 i = 0; i < searchIndices.length; i++) {
@@ -1667,7 +1667,7 @@ contract SumTreeAddTest is Test {
         }
     }
 
-    function testFindRootIdTraverseOffTheEdgeAndBack() public {
+    function testFindPieceIdTraverseOffTheEdgeAndBack() public {
         uint256[] memory sizes = new uint256[](5);
         sizes[0] = 1; // Remove
         sizes[1] = 1; // Remove
@@ -1686,7 +1686,7 @@ contract SumTreeAddTest is Test {
             pieceDataArray[0] = IPDPTypes.PieceData(testCid, sizes[i] * pdpVerifier.LEAF_SIZE());
             pdpVerifier.addPieces(testSetId, pieceDataArray, empty);
         }
-        pdpVerifier.scheduleRemovals(testSetId, pieceIdsToRemove, empty);
+        pdpVerifier.schedulePieceDeletions(testSetId, pieceIdsToRemove, empty);
         pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty); //flush removals
 
         assertFindPieceAndOffset(testSetId, 0, 3, 0);
@@ -1775,10 +1775,10 @@ contract PDPListenerIntegrationTest is Test {
         uint256[] memory pieceIds = new uint256[](1);
         pieceIds[0] = 0;
         vm.expectRevert("Failing operation");
-        pdpVerifier.scheduleRemovals(setId, pieceIds, empty);
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NONE);
-        pdpVerifier.scheduleRemovals(setId, pieceIds, empty);
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD);
         vm.expectRevert("Failing operation");
@@ -1853,7 +1853,7 @@ contract PDPVerifierExtraDataTest is Test {
         // Test REMOVE_SCHEDULED operation
         uint256[] memory pieceIds = new uint256[](1);
         pieceIds[0] = 0;
-        pdpVerifier.scheduleRemovals(setId, pieceIds, empty);
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
         assertEq(
             extraDataListener.getExtraData(setId, PDPRecordKeeper.OperationType.REMOVE_SCHEDULED),
             empty,
@@ -1994,7 +1994,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
         uint256[] memory piecesToRemove = new uint256[](2);
         piecesToRemove[0] = 1; // Remove the second piece from first proving period
         piecesToRemove[1] = 3; // Remove the second piece from second proving period
-        pdpVerifier.scheduleRemovals(setId, piecesToRemove, empty);
+        pdpVerifier.schedulePieceDeletions(setId, piecesToRemove, empty);
         assertEq(pdpVerifier.getScheduledRemovals(setId), piecesToRemove, "Scheduled removals should match piecesToRemove");
 
         // Step 7: complete proving period 1.

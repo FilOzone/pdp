@@ -76,7 +76,7 @@ contract PDPRecordKeeper {
 /// @notice A default implementation of a PDP Listener.
 /// @dev This contract only supports one PDP service caller, set in the constructor,
 /// The primary purpose of this contract is to 
-/// 1. Enforce a proof count of 5 proofs per proof set proving period.
+/// 1. Enforce a proof count of 5 proofs per data set proving period.
 /// 2. Provide a reliable way to report faults to users.
 contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event FaultRecord(uint256 indexed dataSetId, uint256 periodsFaulted, uint256 deadline);
@@ -157,7 +157,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         return thisChallengeWindowStart(setId);
     }
 
-    // Challenges / merkle inclusion proofs provided per proof set
+    // Challenges / merkle inclusion proofs provided per data set
     function getChallengesPerProof() public pure returns (uint64) {
         return 5;
     }
@@ -205,7 +205,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     // 2. Next challenge epoch must fall within the challenge window in the last challengeWindow()
     //    epochs of the proving period.
     function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 /*leafCount*/, bytes calldata) external onlyPDPVerifier {
-        // initialize state for new dataset
+        // initialize state for new data set
         if (provingDeadlines[dataSetId] == NO_PROVING_DEADLINE) {
             uint256 firstDeadline = block.number + getMaxProvingPeriod();
             if (challengeEpoch < firstDeadline - challengeWindow() || challengeEpoch > firstDeadline) {
@@ -232,7 +232,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         }
 
         uint256 nextDeadline;
-        // the dataset has become empty and provingDeadline is set inactive
+        // the data set has become empty and provingDeadline is set inactive
         if (challengeEpoch == NO_CHALLENGE_SCHEDULED) {
             nextDeadline = NO_PROVING_DEADLINE;
         } else {

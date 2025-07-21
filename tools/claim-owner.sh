@@ -1,5 +1,5 @@
 #!/bin/bash
-# claim_ownership.sh - Script for claiming ownership of a dataset
+# claim_ownership.sh - Script for claiming ownership of a data set
 
 # Check if correct number of arguments provided
 if [ "$#" -ne 1 ]; then
@@ -17,7 +17,7 @@ if [ -z "$PASSWORD" ] || [ -z "$KEYSTORE" ] || [ -z "$RPC_URL" ] || [ -z "$CONTR
   exit 1
 fi
 
-echo "Claiming ownership of dataset ID: $DATASET_ID"
+echo "Claiming ownership of data set ID: $DATASET_ID"
 
 # Get claimer's address from keystore
 CLAIMER_ADDRESS=$(cast wallet address --keystore "$KEYSTORE")
@@ -36,4 +36,4 @@ TX_HASH=$(cast send --rpc-url "$RPC_URL" \
   "$CALLDATA")
 
 echo "Transaction sent! Hash: $TX_HASH"
-echo "Successfully claimed ownership of dataset $DATASET_ID"
+echo "Successfully claimed ownership of data set $DATASET_ID"

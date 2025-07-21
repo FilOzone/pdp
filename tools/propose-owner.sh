@@ -1,5 +1,5 @@
 #!/bin/bash
-# propose_owner.sh - Script for proposing a new owner for a dataset
+# propose_owner.sh - Script for proposing a new owner for a data set
 
 # Check if correct number of arguments provided
 if [ "$#" -ne 2 ]; then
@@ -18,7 +18,7 @@ if [ -z "$PASSWORD" ] || [ -z "$KEYSTORE" ] || [ -z "$RPC_URL" ] || [ -z "$CONTR
   exit 1
 fi
 
-echo "Proposing new owner for dataset ID: $DATASET_ID"
+echo "Proposing new owner for data set ID: $DATASET_ID"
 echo "New owner address: $NEW_OWNER_ADDRESS"
 
 # Get sender's address from keystore
@@ -38,4 +38,4 @@ TX_HASH=$(cast send --rpc-url "$RPC_URL" \
   "$CALLDATA")
 
 echo "Transaction sent! Hash: $TX_HASH"
-echo "Successfully proposed $NEW_OWNER_ADDRESS as new owner for dataset $DATASET_ID"
+echo "Successfully proposed $NEW_OWNER_ADDRESS as new owner for data set $DATASET_ID"

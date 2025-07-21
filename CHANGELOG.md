@@ -58,9 +58,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ## [1.0.0] - 2025-04-17
 ### Added
 - Initial release of PDPVerifier and SimplePDPService contracts
-- Proof set management functionality, ownership and programmability
-- Grinding secure root addition and removal capabilities
-- Useful events emitted from PDPVerifier during proof set operations
+- Data set management functionality, ownership and programmability
+- Grinding secure piece addition and removal capabilities
+- Useful events emitted from PDPVerifier during data set operations
 - Extensible PDPListener architecture
 - Possession proving mechanism 
 - Challenge generation through integration filecoin randomness precompile 

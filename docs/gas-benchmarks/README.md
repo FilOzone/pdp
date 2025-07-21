@@ -31,12 +31,12 @@ Below is a summary of gas costs by operation type and data characteristics:
 ## Observations
 
 - **ProvePossession** operations are the most gas-intensive, with costs influenced by a combination of dataset size and piece count. The correlation isn't as strong because costs are influenced by a linear combination of two different logarithmic functions: log(# pieces) + log(data set size).
-- **NextProvingPeriod** operations have relatively consistent gas costs regardless of dataset characteristics.
+- **NextProvingPeriod** operations have relatively consistent gas costs regardless of data set characteristics.
 - **AddPieces** operations show a clear correlation between piece count and gas cost, with costs scaling logarithmically with the number of pieces.
 
-![ProvePossession Gas for DataSet Size](ProvePosession%20Gas%20by%20ProofSet%20Size.png)
+![ProvePossession Gas for DataSet Size](ProvePosession%20Gas%20by%20DataSet%20Size.png)
 
-![AddPieces Gas by DataSet Size](AddRoots%20Gas%20by%20ProofSet%20Size.png)
+![AddPieces Gas by DataSet Size](AddPieces%20Gas%20by%20DataSet%20Size.png)
 
 ## Raw Data
 

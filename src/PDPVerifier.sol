@@ -33,7 +33,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
     uint256 public constant LEAF_SIZE = 32;
-    uint256 public constant MAX_ROOT_SIZE = 1 << 50;
+    uint256 public constant MAX_PIECE_SIZE = 1 << 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
@@ -64,34 +64,34 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Types
     // State fields
     /*
-    A proof set is the metadata required for tracking data for proof of possession.
+    A data set is the metadata required for tracking data for proof of possession.
     It maintains a list of CIDs of data to be proven and metadata needed to
     add and remove data to the set and prove possession efficiently.
 
-    ** logical structure of the proof set**
+    ** logical structure of the data set**
     /*
-    struct ProofSet {
-        Cid[] roots;
+    struct DataSet {
+        Cid[] pieces;
         uint256[] leafCounts;
         uint256[] sumTree;
         uint256 leafCount;
         address storageProvider;
         address proposed storageProvider;
-        nextRootID uint64;
+        nextPieceID uint64;
         nextChallengeEpoch: uint64;
         listenerAddress: address;
         challengeRange: uint256
         enqueuedRemovals: uint256[]
     }
-    ** PDP Verifier contract tracks many possible proof sets **
-    []ProofSet proofsets
+    ** PDP Verifier contract tracks many possible data sets **
+    []DataSet datasets
 
     To implement this logical structure in the solidity data model we have
     arrays tracking the singleton fields and two dimensional arrays
-    tracking linear proof set data.  The first index is the proof set id
+    tracking linear data set data.  The first index is the data set id
     and the second index if any is the index of the data in the array.
 
-    Invariant: rootCids.length == rootLeafCount.length == sumTreeCounts.length
+    Invariant: pieceCids.length == pieceLeafCount.length == sumTreeCounts.length
     */
 
     // Network epoch delay between last proof of possession and next
@@ -455,7 +455,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (rawSize == 0) {
             revert IndexedError(callIdx, "Size must be greater than 0");
         }
-        if (rawSize > MAX_ROOT_SIZE) {
+        if (rawSize > MAX_PIECE_SIZE) {
             revert IndexedError(callIdx, "Piece size must be less than 2^50");
         }
 
@@ -468,9 +468,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return pieceId;
     }
 
-    // scheduleRemovals schedules removal of a batch of pieces from a data set for the start of the next
+    // schedulePieceDeletions schedules deletion of a batch of pieces from a data set for the start of the next
     // proving period. It must be called by the storage provider.
-    function scheduleRemovals(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
+    function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(dataSetLive(setId), "Data set not live");
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
@@ -512,7 +512,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 // Note -- there is a slight deviation here from the uniform distribution.
                 // Some leaves are challenged with probability p and some have probability p + deviation.
                 // This deviation is bounded by leafCount / 2^256 given a 256 bit hash.
-                // Deviation grows with dataset leaf count.
+                // Deviation grows with data set leaf count.
                 // Assuming a 1000EiB = 1 ZiB network size ~ 2^70 bytes of data or 2^65 leaves
                 // This deviation is bounded by 2^65 / 2^256 = 2^-191 which is negligible.
                 //   If modifying this code to use a hash function with smaller output size
@@ -699,7 +699,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     A sumtree is a variant of a Fenwick or binary indexed tree.  It is a binary
     tree where each node is the sum of its children. It is designed to support
     efficient query and update operations on a base array of integers. Here
-    the base array is the roots leaf count array.  Asymptotically the sum tree
+    the base array is the pieces leaf count array.  Asymptotically the sum tree
     has logarithmic search and update functions.  Each slot of the sum tree is
     logically a node in a binary tree.
 
