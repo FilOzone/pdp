@@ -28,7 +28,7 @@ Deploys, upgrades, and transfers ownership of PDPVerifier on Calibration testnet
 We have some scripts for interacting with the PDP service contract through ETH RPC API: 
 - add.sh
 - remove.sh
-- createdataset.sh
+- create_data_set.sh
 - find.sh 
 - size.sh
 

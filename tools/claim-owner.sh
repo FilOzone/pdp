@@ -3,12 +3,12 @@
 
 # Check if correct number of arguments provided
 if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <dataset_id>"
+  echo "Usage: $0 <data_set_id>"
   exit 1
 fi
 
 # Get argument
-DATASET_ID=$1
+DATA_SET_ID=$1
 
 # Check required environment variables
 if [ -z "$PASSWORD" ] || [ -z "$KEYSTORE" ] || [ -z "$RPC_URL" ] || [ -z "$CONTRACT_ADDRESS" ]; then
@@ -17,14 +17,14 @@ if [ -z "$PASSWORD" ] || [ -z "$KEYSTORE" ] || [ -z "$RPC_URL" ] || [ -z "$CONTR
   exit 1
 fi
 
-echo "Claiming ownership of data set ID: $DATASET_ID"
+echo "Claiming ownership of data set ID: $DATA_SET_ID"
 
 # Get claimer's address from keystore
 CLAIMER_ADDRESS=$(cast wallet address --keystore "$KEYSTORE")
 echo "New owner address (claiming ownership): $CLAIMER_ADDRESS"
 
 # Construct calldata using cast calldata
-CALLDATA=$(cast calldata "claimDataSetStorageProvider(uint256,bytes)" "$DATASET_ID" "0x")
+CALLDATA=$(cast calldata "claimDataSetStorageProvider(uint256,bytes)" "$DATA_SET_ID" "0x")
 
 echo "Sending transaction..."
 
@@ -36,4 +36,4 @@ TX_HASH=$(cast send --rpc-url "$RPC_URL" \
   "$CALLDATA")
 
 echo "Transaction sent! Hash: $TX_HASH"
-echo "Successfully claimed ownership of data set $DATASET_ID"
+echo "Successfully claimed ownership of data set $DATA_SET_ID"

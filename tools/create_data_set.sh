@@ -1,5 +1,5 @@
 #! /bin/bash
-# Usage: ./createdataset.sh <contract-address>
+# Usage: ./create_data_set.sh <contract-address>
 
 # Check if required environment variables are set
 if [ -z "$RPC_URL" ] || [ -z "$KEYSTORE" ] ; then

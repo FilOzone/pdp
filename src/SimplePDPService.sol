@@ -174,7 +174,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
 
     function piecesScheduledRemove(uint256 dataSetId, uint256[] memory pieceIds, bytes calldata) external onlyPDPVerifier {}
 
-    function ownerChanged(uint256, address, address, bytes calldata) external override onlyPDPVerifier { }
+    function storageProviderChanged(uint256, address, address, bytes calldata) external override onlyPDPVerifier { }
 
     // possession proven checks for correct challenge count and reverts if too low
     // it also checks that proofs are not late and emits a fault record if so

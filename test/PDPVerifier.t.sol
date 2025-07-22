@@ -947,9 +947,9 @@ contract ProofBuilderHelper is Test {
 // TestingRecordKeeperService is a PDPListener that allows any amount of proof challenges
 // to help with more flexible testing.
 contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
-    // Implement the new ownerChanged hook
+    // Implement the new storageProviderChanged hook
     /// @notice Called when data set storage provider role is changed in PDPVerifier.
-    function ownerChanged(uint256, address, address, bytes calldata) external override {}
+    function storageProviderChanged(uint256, address, address, bytes calldata) external override {}
 
     function dataSetCreated(uint256 dataSetId, address creator, bytes calldata) external override {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.CREATE, abi.encode(creator));
@@ -1701,7 +1701,7 @@ contract BadListener is PDPListener {
         badOperation = operationType;
     }
 
-    function ownerChanged(uint256, address, address, bytes calldata) external override {}
+    function storageProviderChanged(uint256, address, address, bytes calldata) external override {}
 
     function dataSetCreated(uint256 dataSetId, address creator, bytes calldata) external override view {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.CREATE, abi.encode(creator));
@@ -1792,7 +1792,7 @@ contract PDPListenerIntegrationTest is Test {
 contract ExtraDataListener is PDPListener {
     mapping(uint256 => mapping(PDPRecordKeeper.OperationType => bytes)) public extraDataBySetId;
 
-    function ownerChanged(uint256, address, address, bytes calldata) external override {}
+    function storageProviderChanged(uint256, address, address, bytes calldata) external override {}
     function dataSetCreated(uint256 dataSetId, address, bytes calldata extraData) external override {
         extraDataBySetId[dataSetId][PDPRecordKeeper.OperationType.CREATE] = extraData;
     }
@@ -2056,7 +2056,7 @@ contract MockOwnerChangedListener is PDPListener {
 
     function setShouldRevert(bool value) external { shouldRevert = value; }
 
-    function ownerChanged(uint256 dataSetId, address oldStorageProvider, address newStorageProvider, bytes calldata extraData) external override {
+    function storageProviderChanged(uint256 dataSetId, address oldStorageProvider, address newStorageProvider, bytes calldata extraData) external override {
         if (shouldRevert) revert("MockOwnerChangedListener: forced revert");
         lastDataSetId = dataSetId;
         lastOldStorageProvider = oldStorageProvider;

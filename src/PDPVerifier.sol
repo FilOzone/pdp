@@ -26,7 +26,7 @@ interface PDPListener {
     function possessionProven(uint256 dataSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external;
     function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata extraData) external;
     /// @notice Called when data set storage provider is changed in PDPVerifier.
-    function ownerChanged(uint256 dataSetId, address oldStorageProvider, address newStorageProvider, bytes calldata extraData) external;
+    function storageProviderChanged(uint256 dataSetId, address oldStorageProvider, address newStorageProvider, bytes calldata extraData) external;
 }
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -84,7 +84,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         enqueuedRemovals: uint256[]
     }
     ** PDP Verifier contract tracks many possible data sets **
-    []DataSet datasets
+    []DataSet dataSets
 
     To implement this logical structure in the solidity data model we have
     arrays tracking the singleton fields and two dimensional arrays
@@ -365,7 +365,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit StorageProviderChanged(setId, oldStorageProvider, msg.sender);
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).ownerChanged(setId, oldStorageProvider, msg.sender, extraData);
+            PDPListener(listenerAddr).storageProviderChanged(setId, oldStorageProvider, msg.sender, extraData);
         }
     }
 
@@ -518,7 +518,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 //   If modifying this code to use a hash function with smaller output size
                 //   this deviation will increase and caution is advised.
                 // To remove this deviation we could use the standard solution of rejection sampling
-                //   This is complicated and slightly more costly at one more hash on average for maximally misaligned datasets
+                //   This is complicated and slightly more costly at one more hash on average for maximally misaligned data sets
                 //   and comes at no practical benefit given how small the deviation is.
                 bytes memory payload = abi.encodePacked(seed, setId, i);
                 uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;

@@ -5,73 +5,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-## [2.1.0] - 2025-07-21
-### Changed
-- **BREAKING**: Completed terminology updates from PR #180 feedback
-  - Function renames:
-    - `scheduleRemovals()` → `schedulePieceDeletions()` - Better describes the action of deleting pieces
-    - `MAX_ROOT_SIZE` → `MAX_PIECE_SIZE` - Consistent with piece terminology
-  - Event parameter renames:
-    - `StorageProviderChanged` event: `oldOwner`/`newOwner` → `oldStorageProvider`/`newStorageProvider`
-  - Test updates:
-    - All test classes, functions, and variables updated from "owner/ownership" to "storage provider" terminology
-    - Consistent use of full "StorageProvider" naming (not abbreviated as "Provider")
-  - Documentation and comment updates:
-    - All instances of "proof set" → "data set" (two words in documentation)
-    - All instances of "dataset" → "data set" (two words in documentation)
-    - Remaining "root" references in gas benchmarks updated to "piece"
-  - Script updates:
-    - `claimDataSetOwnership()` → `claimDataSetStorageProvider()` in claim-owner.sh
-    - `proposeDataSetOwner()` → `proposeDataSetStorageProvider()` in propose-owner.sh
-
-### Fixed
-- Gas benchmark documentation and CSV files now use consistent "DataSet" and "Piece" terminology
-- All comments and documentation now consistently use "data set" as two words
-
 ## [2.0.0] - 2025-07-20
 ### Changed
-- **BREAKING**: Renamed core terminology throughout the codebase for better clarity
-  - `proofSet` → `dataSet` (all functions, variables, events, and parameters)
-  - `root` → `piece` (all functions, variables, events, and parameters)
-  - `rootId` → `pieceId` (all functions, variables, events, and parameters)
+- **BREAKING**: Renamed core terminology throughout the codebase for better clarity, for each of the following, all functions, variables, events, and parameters have been changed.
+  - `proofSet` → `dataSet` ("proof set" becomes "data set")
+  - `root` → `piece`
+  - `rootId` → `pieceId`
+  - `owner` → `storageProvider`
   - Function renames:
     - `createProofSet()` → `createDataSet()`
     - `deleteProofSet()` → `deleteDataSet()`
-    - `getProofSet*()` → `getDataSet*()`
     - `getNextProofSetId()` → `getNextDataSetId()`
     - `proofSetLive()` → `dataSetLive()`
     - `getProofSetLeafCount()` → `getDataSetLeafCount()`
+    - `getProofSetListener()` → `getDataSetListener()`
+    - `getProofSetLastProvenEpoch()` → `getDataSetLastProvenEpoch()`
+    - `getProofSetOwner()` → `getDataSetStorageProvider()`
+    - `proposeProofSetOwner()` → `proposeDataSetStorageProvider()`
+    - `claimProofSetOwnership()` → `claimDataSetStorageProvider()`
+    - `addRoots()` → `addPieces()`
     - `getNextRootId()` → `getNextPieceId()`
     - `rootLive()` → `pieceLive()`
     - `rootChallengable()` → `pieceChallengable()`
-    - `getRootMetadata()` → `getPieceMetadata()`
-    - And many more...
+    - `getRootCid()` → `getPieceCid()`
+    - `getRootLeafCount()` → `getPieceLeafCount()`
+    - `findRootIds()` → `findPieceIds()`
+    - `scheduleRemovals()` → `schedulePieceDeletions()`
+    - `getActiveRootCount()` → `getActivePieceCount()`
   - Event renames:
-    - `ProofSetCreated` → `DataSetCreated`
+    - `ProofSetCreated` → `DataSetCreated` (parameter change: `owner` → `storageProvider`)
     - `ProofSetDeleted` → `DataSetDeleted`
     - `ProofSetEmpty` → `DataSetEmpty`
-    - `ProofSetOwnerChanged` → `StorageProviderChanged`
-    - `RootsAdded` → `PiecesAdded`
-    - `RootsRemoved` → `PiecesRemoved`
-    - `RootMetadataAdded` → `PieceMetadataAdded`
+    - `ProofSetOwnerChanged` → `StorageProviderChanged` (parameters: `oldOwner`/`newOwner` → `oldStorageProvider`/`newStorageProvider`)
+    - `RootsAdded` → `PiecesAdded` (parameter change: `rootIds` → `pieceIds`)
+    - `RootsRemoved` → `PiecesRemoved` (parameter change: `rootIds` → `pieceIds`)
+    - `PossessionProven` event updated: `IPDPTypes.RootIdAndOffset[]` → `IPDPTypes.PieceIdAndOffset[]`
   - Interface updates:
-    - `PDPListener` interface methods updated with new parameter names
+    - `PDPListener` interface method renames:
+      - `proofSetCreated()` → `dataSetCreated()` (parameter change: `proofSetId` → `dataSetId`)
+      - `proofSetDeleted()` → `dataSetDeleted()` (parameter change: `proofSetId` → `dataSetId`)
+      - `rootsAdded()` → `piecesAdded()` (parameter changes: `proofSetId` → `dataSetId`, `IPDPTypes.RootData[]` → `IPDPTypes.PieceData[]`)
+      - `rootsScheduledRemove()` → `piecesScheduledRemove()` (parameter changes: `proofSetId` → `dataSetId`, `rootIds` → `pieceIds`)
+      - `possessionProven()` → unchanged name (parameter change: `proofSetId` → `dataSetId`)
+      - `nextProvingPeriod()` → unchanged name (parameter change: `proofSetId` → `dataSetId`)
+      - `ownerChanged()` → `storageProviderChanged()` (parameters: `proofSetId` → `dataSetId`, `oldOwner`/`newOwner` → `oldStorageProvider`/`newStorageProvider`)
     - `IPDPTypes.RootData` → `IPDPTypes.PieceData` (note: struct field remains `piece`)
-  - Variable and mapping renames:
-    - `nextProofSetId` → `nextDataSetId`
-    - `proofSetLeafCount` → `dataSetLeafCount`
-    - `proofSetListener` → `dataSetListener`
-    - `proofSetOwner` → `storageProvider`
-    - `rootCids` → `pieceCids`
-    - `rootLeafCounts` → `pieceLeafCounts`
-    - `nextRootId` → `nextPieceId`
+  - Storage renames:
+    - Constants:
+      - `MAX_ROOT_SIZE` → `MAX_PIECE_SIZE`
+      - `VERSION = "1.1.0"` → `VERSION = "2.0.0"` (to reflect this release)
+    - State variables:
+      - `nextProofSetId` → `nextDataSetId` (uint64)
+    - Mappings:
+      - `nextRootId` → `nextPieceId`
+      - `proofSetLeafCount` → `dataSetLeafCount`
+      - `proofSetListener` → `dataSetListener`
+      - `proofSetLastProvenEpoch` → `dataSetLastProvenEpoch`
+      - `proofSetOwner` → `storageProvider`
+      - `proofSetProposedOwner` → `dataSetProposedStorageProvider`
+      - `rootCids` → `pieceCids`
+      - `rootLeafCounts` → `pieceLeafCounts`
 
 ### Deprecated
 - **SimplePDPService**: No longer actively maintained or deployed by default
   - Removed from default deployment scripts (`deploy-mainnet.sh`, `deploy-calibnet.sh`, `deploy-devnet.sh`)
   - Added optional deployment script (`deploy-simple-pdp-service.sh`) for community use
   - Remains available as reference integration in `src/SimplePDPService.sol`. Proper Filecoin Service with PDP can be found in https://github.com/FilOzone/filecoin-services/tree/main/service_contracts/src
-
 
 ## [1.1.0] - 2025-01-20
 ### Added
