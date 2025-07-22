@@ -2047,7 +2047,7 @@ contract PDPVerifierMigrateTest is Test {
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
     }
 }
-contract MockOwnerChangedListener is PDPListener {
+contract MockStorageProviderChangedListener is PDPListener {
     uint256 public lastDataSetId;
     address public lastOldStorageProvider;
     address public lastNewStorageProvider;
@@ -2057,7 +2057,7 @@ contract MockOwnerChangedListener is PDPListener {
     function setShouldRevert(bool value) external { shouldRevert = value; }
 
     function storageProviderChanged(uint256 dataSetId, address oldStorageProvider, address newStorageProvider, bytes calldata extraData) external override {
-        if (shouldRevert) revert("MockOwnerChangedListener: forced revert");
+        if (shouldRevert) revert("MockStorageProviderChangedListener: forced revert");
         lastDataSetId = dataSetId;
         lastOldStorageProvider = oldStorageProvider;
         lastNewStorageProvider = newStorageProvider;
@@ -2073,7 +2073,7 @@ contract MockOwnerChangedListener is PDPListener {
 
 contract PDPVerifierStorageProviderListenerTest is Test {
     PDPVerifier pdpVerifier;
-    MockOwnerChangedListener listener;
+    MockStorageProviderChangedListener listener;
     address public storageProvider;
     address public nextStorageProvider;
     address public nonStorageProvider;
@@ -2087,13 +2087,13 @@ contract PDPVerifierStorageProviderListenerTest is Test {
         );
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
-        listener = new MockOwnerChangedListener();
+        listener = new MockStorageProviderChangedListener();
         storageProvider = address(this);
         nextStorageProvider = address(0x1234);
         nonStorageProvider = address(0xffff);
     }
 
-    function testOwnerChangedCalledOnStorageProviderTransfer() public {
+    function testStorageProviderChangedCalledOnStorageProviderTransfer() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         vm.prank(nextStorageProvider);
@@ -2116,7 +2116,7 @@ contract PDPVerifierStorageProviderListenerTest is Test {
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         listener.setShouldRevert(true);
         vm.prank(nextStorageProvider);
-        vm.expectRevert("MockOwnerChangedListener: forced revert");
+        vm.expectRevert("MockStorageProviderChangedListener: forced revert");
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
     }
 }
