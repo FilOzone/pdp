@@ -8,7 +8,6 @@ import {Cids} from "../Cids.sol";
 interface IPDPTypes {
     struct PieceData {
         Cids.Cid piece;
-        uint256 rawSize;
     }
 
     struct Proof {
@@ -20,4 +19,4 @@ interface IPDPTypes {
         uint256 pieceId;
         uint256 offset;
     }
-} 
+}

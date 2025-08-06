@@ -49,10 +49,30 @@ library Cids {
         (padding, offset) = _readUvarint(cid.data, offset);
 
         height = uint8(cid.data[offset]);
+        if (padding >= 1<<height) {
+            revert("Too much CommPv2 padding");
+        }
         offset++;
 
         return (padding, height, offset);
     }
+
+    // pieceSize resturns the size of the data defined by amount of padding and height of the tree
+    // this is after the Fr32 expansion, if 1 bit of actual data spills into padding byte, the whole byte is counted as data
+    // as the padding is specified as before expansion
+    function pieceSize(uint256 padding, uint8 height) internal pure returns (uint256) {
+        // 2^height * 32 - padding
+        // we can fold the 32 into height
+        return (1 << (uint256(height)+5)) - (128*padding)/127;
+    }
+
+    function leafCount(uint256 padding, uint8 height) internal pure returns (uint256) {
+        // the number of leaves that are fully padding
+        uint256 paddingLeafs = (128*padding)/127 >> 5;
+        return 1 << uint256(height) - paddingLeafs;
+    }
+
+
 
     // Creates a CommPv2 CID from a raw size and hash digest according to FRC-0069.
     // The CID uses the Raw codec (0x55) and fr32-sha2-256-trunc254-padded-binary-tree multihash (0x1011).

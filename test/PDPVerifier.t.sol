@@ -235,6 +235,7 @@ contract PDPVerifierStorageProviderTest is Test {
     }
 }
 
+
 contract PDPVerifierDataSetMutateTest is Test {
     uint256 constant challengeFinalityDelay = 2;
 
@@ -1420,11 +1421,17 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
 // Constructs a PieceData structure for a Merkle tree.
 function makePiece(bytes32[][] memory tree, uint leafCount) pure returns (IPDPTypes.PieceData memory) {
     // height is log2 of leaf count, use clz
-
     uint8 height = uint8(256 - BitOps.clz(leafCount - 1) + 1);
-
-    return IPDPTypes.PieceData(Cids.commpV2FromDigest(0, height, tree[0][0]), leafCount * 32);
+    uint256 paddingLeafs = 1<<height - leafCount;
+    return IPDPTypes.PieceData(Cids.commpV2FromDigest( height, tree[0][0]), leafCount * 32);
 }
+
+function makeSamplePiece(uint leafCount) pure returns (IPDPTypes.PieceData memory) {
+    bytes32[][] memory tree = ProofUtil.makeTree(leafCount);
+    return makePiece(tree, leafCount);
+}
+
+
 
 
 contract SumTreeInternalTestPDPVerifier is PDPVerifier {

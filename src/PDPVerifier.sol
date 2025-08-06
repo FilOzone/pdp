@@ -33,7 +33,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
     uint256 public constant LEAF_SIZE = 32;
-    uint256 public constant MAX_PIECE_SIZE = 1 << 50;
+    uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
@@ -433,7 +433,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
 
         for (uint256 i = 0; i < nPieces; i++) {
-            addOnePiece(setId, i, pieceData[i].piece, pieceData[i].rawSize);
+            addOnePiece(setId, i, pieceData[i].piece);
             pieceIds[i] = firstAdded + i;
         }
         emit PiecesAdded(setId, pieceIds);
@@ -448,18 +448,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     error IndexedError(uint256 idx, string msg);
 
-    function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece, uint256 rawSize) internal returns (uint256) {
-        if (rawSize % LEAF_SIZE != 0) {
-            revert IndexedError(callIdx, "Size must be a multiple of 32");
-        }
-        if (rawSize == 0) {
-            revert IndexedError(callIdx, "Size must be greater than 0");
-        }
-        if (rawSize > MAX_PIECE_SIZE) {
+    function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
+        (uint256 padding, uint8 height, uint256 digestOffset) = Cids.validateCommPv2(piece);
+        if (height > MAX_PIECE_SIZE_LOG2) {
             revert IndexedError(callIdx, "Piece size must be less than 2^50");
         }
 
-        uint256 leafCount = rawSize / LEAF_SIZE;
+        uint256 leafCount = Cids.leafCount(padding, height);
         uint256 pieceId = nextPieceId[setId]++;
         sumTreeAdd(setId, leafCount, pieceId);
         pieceCids[setId][pieceId] = piece;
@@ -814,7 +809,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             return (uint64(priceData.price), priceData.expo);
         }   catch (bytes memory reason) {
             // Log issue and fallback on latest unsafe price data
-            emit PriceOracleFailure(reason); 
+            emit PriceOracleFailure(reason);
             PythStructs.Price memory priceData = PYTH.getPriceUnsafe(FIL_USD_PRICE_FEED_ID);
             require(priceData.price > 0, "failed to validate: price must be greater than 0");
             return (uint64(priceData.price), priceData.expo);
