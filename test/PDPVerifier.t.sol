@@ -11,6 +11,9 @@ import {PDPFees} from "../src/Fees.sol";
 import {SimplePDPService, PDPRecordKeeper} from "../src/SimplePDPService.sol";
 import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
+import {PieceHelper} from "./PieceHelper.t.sol";
+
+
 
 contract PDPVerifierDataSetCreateDeleteTest is Test {
     TestingRecordKeeperService listener;
@@ -151,7 +154,7 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
     }
 }
 
-contract PDPVerifierStorageProviderTest is Test {
+contract PDPVerifierStorageProviderTest is Test, PieceHelper {
     PDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
     address public storageProvider;
@@ -223,7 +226,7 @@ contract PDPVerifierStorageProviderTest is Test {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         IPDPTypes.PieceData[] memory pieceDataArray = new IPDPTypes.PieceData[](1);
-        pieceDataArray[0] = IPDPTypes.PieceData(testCid, 100 * pdpVerifier.LEAF_SIZE());
+        pieceDataArray[0] = makeSamplePiece(100);
         pdpVerifier.addPieces(setId, pieceDataArray, empty);
 
         uint256[] memory pieceIdsToRemove = new uint256[](1);
@@ -236,7 +239,7 @@ contract PDPVerifierStorageProviderTest is Test {
 }
 
 
-contract PDPVerifierDataSetMutateTest is Test {
+contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
     uint256 constant challengeFinalityDelay = 2;
 
     PDPVerifier pdpVerifier;
@@ -260,7 +263,8 @@ contract PDPVerifierDataSetMutateTest is Test {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        uint256 leafCount = 64;
+        pieces[0] = makeSamplePiece(leafCount);
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.PiecesAdded(setId, new uint256[](0));
@@ -272,7 +276,6 @@ contract PDPVerifierDataSetMutateTest is Test {
         emit IPDPEvents.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 2);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
-        uint256 leafCount = pieces[0].rawSize / 32;
         assertEq(pdpVerifier.getDataSetLeafCount(setId), leafCount);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
         assertEq(pdpVerifier.getChallengeRange(setId), leafCount);
@@ -289,8 +292,8 @@ contract PDPVerifierDataSetMutateTest is Test {
         emit IPDPEvents.DataSetCreated(0, address(this));
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](2);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test1")), 64);
-        pieces[1] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test2")), 128);
+        pieces[0] = makeSamplePiece(64);
+        pieces[1] = makeSamplePiece(128);
 
         vm.expectEmit(true, true, false, false);
         uint256[] memory pieceIds = new uint256[](2);
@@ -304,7 +307,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         emit IPDPEvents.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 6);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
-        uint256 expectedLeafCount = pieces[0].rawSize / 32 + pieces[1].rawSize / 32;
+        uint256 expectedLeafCount = 64+128;
         assertEq(pdpVerifier.getDataSetLeafCount(setId), expectedLeafCount);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
 
@@ -313,8 +316,8 @@ contract PDPVerifierDataSetMutateTest is Test {
         assertEq(pdpVerifier.getPieceCid(setId, firstId).data, pieces[0].piece.data);
         assertEq(pdpVerifier.getPieceCid(setId, firstId + 1).data, pieces[1].piece.data);
 
-        assertEq(pdpVerifier.getPieceLeafCount(setId, firstId), pieces[0].rawSize / 32);
-        assertEq(pdpVerifier.getPieceLeafCount(setId, firstId + 1), pieces[1].rawSize / 32);
+        assertEq(pdpVerifier.getPieceLeafCount(setId, firstId), 64);
+        assertEq(pdpVerifier.getPieceLeafCount(setId, firstId + 1), 128);
         assertEq(pdpVerifier.getNextPieceId(setId), 2);
     }
 
@@ -326,18 +329,19 @@ contract PDPVerifierDataSetMutateTest is Test {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
 
+        // TODO(Kubuxu): fix this test
         // Fail when piece size is not a multiple of 32
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 63);
+        pieces[0] = makeSamplePiece(1);
         expectIndexedError(0, "Size must be a multiple of 32");
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Fail when piece size is zero
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 0);
+        pieces[0] = makeSamplePiece(0);
         expectIndexedError(0, "Size must be greater than 0");
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Fail when piece size is too large
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), pdpVerifier.MAX_PIECE_SIZE() + 32);
+        pieces[0] = makeSamplePiece(0);
         expectIndexedError(0, "Piece size must be less than 2^50");
         pdpVerifier.addPieces(setId, pieces, empty);
 
@@ -347,7 +351,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         pdpVerifier.addPieces(setId, emptyPieces, empty);
 
         // Fail when data set is no longer live
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 32);
+        pieces[0] = makeSamplePiece(1);
         pdpVerifier.deleteDataSet(setId, empty);
         vm.expectRevert("Data set not live");
         pdpVerifier.addPieces(setId, pieces, empty);
@@ -357,16 +361,17 @@ contract PDPVerifierDataSetMutateTest is Test {
         // Add one bad piece, message fails on bad index
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](4);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 32);
-        pieces[1] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 32);
-        pieces[2] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 32);
-        pieces[3] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 31);
+        //TODO(Kubuxu): fix this test, last item should be invalid
+        pieces[0] = makeSamplePiece(1);
+        pieces[1] = makeSamplePiece(1);
+        pieces[2] = makeSamplePiece(1);
+        pieces[3] = makeSamplePiece(0);
 
         expectIndexedError(3, "Size must be a multiple of 32");
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Add multiple bad pieces, message fails on first bad index
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 63);
+        pieces[0] = makeSamplePiece(0);
         expectIndexedError(0, "Size must be a multiple of 32");
         pdpVerifier.addPieces(setId, pieces, empty);
     }
@@ -375,7 +380,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         // Add one piece
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, pieces, empty);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED()); // Not updated on first add anymore
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
@@ -407,7 +412,7 @@ contract PDPVerifierDataSetMutateTest is Test {
 
         // Add a piece to the data set
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Delete the data set
@@ -423,9 +428,9 @@ contract PDPVerifierDataSetMutateTest is Test {
     function testRemovePieceBatch() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](3);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test1")), 64);
-        pieces[1] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test2")), 64);
-        pieces[2] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
+        pieces[1] = makeSamplePiece(2);
+        pieces[2] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, pieces, empty);
         uint256[] memory toRemove = new uint256[](2);
         toRemove[0] = 0;
@@ -458,7 +463,7 @@ contract PDPVerifierDataSetMutateTest is Test {
     function testRemoveFuturePieces() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, pieces, empty);
         assertEq(true, pdpVerifier.pieceLive(setId, 0));
         assertEq(false, pdpVerifier.pieceLive(setId, 1));
@@ -509,7 +514,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
 
         // Test addPieces with too large extra data
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
         vm.expectRevert("Extra data too large");
         pdpVerifier.addPieces(setId, pieces, tooLargeExtraData);
 
@@ -535,7 +540,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         // Setup a piece we can add
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
 
         // First add a piece as the storage provider so we can test removal
         pdpVerifier.addPieces(setId, pieces, empty);
@@ -575,7 +580,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         // Add a piece to the data set (otherwise nextProvingPeriod fails waiting for leaves)
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Current block number
@@ -639,7 +644,7 @@ contract PDPVerifierDataSetMutateTest is Test {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Schedule piece for removal
@@ -661,7 +666,7 @@ contract PDPVerifierDataSetMutateTest is Test {
     }
 }
 
-contract PDPVerifierPaginationTest is Test {
+contract PDPVerifierPaginationTest is Test, PieceHelper {
     PDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
     bytes empty = new bytes(0);
@@ -701,10 +706,7 @@ contract PDPVerifierPaginationTest is Test {
         // Add 15 pieces
         IPDPTypes.PieceData[] memory testPieces = new IPDPTypes.PieceData[](15);
         for (uint i = 0; i < 15; i++) {
-            testPieces[i] = IPDPTypes.PieceData({
-                piece: Cids.Cid(abi.encodePacked("test", i)),
-                rawSize: 1024 * (i + 1)
-            });
+            testPieces[i] = makeSamplePiece(1024/32 * (i + 1));
         }
 
         uint256 firstPieceId = pdpVerifier.addPieces(setId, testPieces, empty);
@@ -745,10 +747,7 @@ contract PDPVerifierPaginationTest is Test {
         // Add pieces
         IPDPTypes.PieceData[] memory testPieces = new IPDPTypes.PieceData[](10);
         for (uint i = 0; i < 10; i++) {
-            testPieces[i] = IPDPTypes.PieceData({
-                piece: Cids.Cid(abi.encodePacked("test", i)),
-                rawSize: 1024
-            });
+            testPieces[i] = makeSamplePiece(1024/32);
         }
         uint256 firstPieceId = pdpVerifier.addPieces(setId, testPieces, empty);
 
@@ -786,10 +785,7 @@ contract PDPVerifierPaginationTest is Test {
         // Add 5 pieces
         IPDPTypes.PieceData[] memory testPieces = new IPDPTypes.PieceData[](5);
         for (uint i = 0; i < 5; i++) {
-            testPieces[i] = IPDPTypes.PieceData({
-                piece: Cids.Cid(abi.encodePacked("test", i)),
-                rawSize: 1024
-            });
+            testPieces[i] = makeSamplePiece(1024/32);
         }
         pdpVerifier.addPieces(setId, testPieces, empty);
 
@@ -831,10 +827,7 @@ contract PDPVerifierPaginationTest is Test {
         // Add exactly 10 pieces
         IPDPTypes.PieceData[] memory testPieces = new IPDPTypes.PieceData[](10);
         for (uint i = 0; i < 10; i++) {
-            testPieces[i] = IPDPTypes.PieceData({
-                piece: Cids.Cid(abi.encodePacked("test", i)),
-                rawSize: 1024
-            });
+            testPieces[i] = makeSamplePiece(1024/32);
         }
         pdpVerifier.addPieces(setId, testPieces, empty);
 
@@ -861,10 +854,7 @@ contract PDPVerifierPaginationTest is Test {
         // Add 100 pieces
         IPDPTypes.PieceData[] memory testPieces = new IPDPTypes.PieceData[](100);
         for (uint i = 0; i < 100; i++) {
-            testPieces[i] = IPDPTypes.PieceData({
-                piece: Cids.Cid(abi.encodePacked("test", i)),
-                rawSize: 1024 * (i + 1)
-            });
+            testPieces[i] = makeSamplePiece(1024/32 * (i + 1));
         }
         pdpVerifier.addPieces(setId, testPieces, empty);
 
@@ -977,7 +967,7 @@ contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
     }
 }
 
-contract PDPVerifierProofTest is Test, ProofBuilderHelper {
+contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     uint256 constant challengeFinalityDelay = 2;
     string constant cidPrefix = "CID";
     bytes empty = new bytes(0);
@@ -1114,7 +1104,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
         vm.roll(blockNumber);
         // Add a piece and verify lastProvenEpoch is set to current block number
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
 
 
         pdpVerifier.addPieces(setId, pieces, empty);
@@ -1171,7 +1161,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     function testProvePossessionFailsWithNoScheduledChallenge() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 64);
+        pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Don't sample challenge (i.e. call nextProvingPeriod)
@@ -1418,22 +1408,6 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper {
     }
 }
 
-// Constructs a PieceData structure for a Merkle tree.
-function makePiece(bytes32[][] memory tree, uint leafCount) pure returns (IPDPTypes.PieceData memory) {
-    // height is log2 of leaf count, use clz
-    uint8 height = uint8(256 - BitOps.clz(leafCount - 1) + 1);
-    uint256 paddingLeafs = 1<<height - leafCount;
-    return IPDPTypes.PieceData(Cids.commpV2FromDigest( height, tree[0][0]), leafCount * 32);
-}
-
-function makeSamplePiece(uint leafCount) pure returns (IPDPTypes.PieceData memory) {
-    bytes32[][] memory tree = ProofUtil.makeTree(leafCount);
-    return makePiece(tree, leafCount);
-}
-
-
-
-
 contract SumTreeInternalTestPDPVerifier is PDPVerifier {
     constructor() {
     }
@@ -1476,7 +1450,7 @@ contract SumTreeHeightTest is Test {
 import "forge-std/Test.sol";
 import "../src/PDPVerifier.sol";
 
-contract SumTreeAddTest is Test {
+contract SumTreeAddTest is Test, PieceHelper {
     SumTreeInternalTestPDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
     uint256 testSetId;
@@ -1509,8 +1483,7 @@ contract SumTreeAddTest is Test {
         IPDPTypes.PieceData[] memory pieceDataArray = new IPDPTypes.PieceData[](8);
 
         for (uint256 i = 0; i < counts.length; i++) {
-            Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
-            pieceDataArray[i] = IPDPTypes.PieceData(testCid, counts[i] * pdpVerifier.LEAF_SIZE());
+            pieceDataArray[i] = makeSamplePiece(counts[i]);
         }
         pdpVerifier.addPieces(testSetId, pieceDataArray, empty);
         assertEq(pdpVerifier.getDataSetLeafCount(testSetId), 87, "Incorrect final data set leaf count");
@@ -1550,12 +1523,11 @@ contract SumTreeAddTest is Test {
 
         // Add all
         for (uint256 i = 0; i < counts.length; i++) {
-            Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
             IPDPTypes.PieceData[] memory pieceDataArray = new IPDPTypes.PieceData[](1);
-            pieceDataArray[0] = IPDPTypes.PieceData(testCid, counts[i] * pdpVerifier.LEAF_SIZE());
+            pieceDataArray[0] = makeSamplePiece(counts[i]);
             pdpVerifier.addPieces(testSetId, pieceDataArray, empty);
             // Assert the piece was added correctly
-            assertEq(pdpVerifier.getPieceCid(testSetId, i).data, testCid.data, "Piece not added correctly");
+            assertEq(pdpVerifier.getPieceCid(testSetId, i).data, pieceDataArray[0].piece.data, "Piece not added correctly");
         }
 
         // Delete some
@@ -1695,7 +1667,7 @@ contract SumTreeAddTest is Test {
         for (uint256 i = 0; i < sizes.length; i++) {
             Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
             IPDPTypes.PieceData[] memory pieceDataArray = new IPDPTypes.PieceData[](1);
-            pieceDataArray[0] = IPDPTypes.PieceData(testCid, sizes[i] * pdpVerifier.LEAF_SIZE());
+            pieceDataArray[0] = makeSamplePiece(sizes[i]);
             pdpVerifier.addPieces(testSetId, pieceDataArray, empty);
         }
         pdpVerifier.schedulePieceDeletions(testSetId, pieceIdsToRemove, empty);
@@ -1749,7 +1721,7 @@ contract BadListener is PDPListener {
     }
 }
 
-contract PDPListenerIntegrationTest is Test {
+contract PDPListenerIntegrationTest is Test, PieceHelper {
     PDPVerifier pdpVerifier;
     BadListener badListener;
     uint256 constant challengeFinalityDelay = 2;
@@ -1776,7 +1748,7 @@ contract PDPListenerIntegrationTest is Test {
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.ADD);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 32);
+        pieces[0] = makeSamplePiece(1);
         vm.expectRevert("Failing operation");
         pdpVerifier.addPieces(setId, pieces, empty);
 
@@ -1826,7 +1798,7 @@ contract ExtraDataListener is PDPListener {
     }
 }
 
-contract PDPVerifierExtraDataTest is Test {
+contract PDPVerifierExtraDataTest is Test, PieceHelper {
     PDPVerifier pdpVerifier;
     ExtraDataListener extraDataListener;
     uint256 constant challengeFinalityDelay = 2;
@@ -1854,7 +1826,7 @@ contract PDPVerifierExtraDataTest is Test {
 
         // Test ADD operation
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
-        pieces[0] = IPDPTypes.PieceData(Cids.Cid(abi.encodePacked("test")), 32);
+        pieces[0] = makeSamplePiece(1);
         pdpVerifier.addPieces(setId, pieces, empty);
         assertEq(
             extraDataListener.getExtraData(setId, PDPRecordKeeper.OperationType.ADD),
@@ -1882,7 +1854,7 @@ contract PDPVerifierExtraDataTest is Test {
     }
 }
 
-contract PDPVerifierE2ETest is Test, ProofBuilderHelper {
+contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
     PDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
     uint256 constant challengeFinalityDelay = 2;

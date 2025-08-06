@@ -49,7 +49,7 @@ library Cids {
         (padding, offset) = _readUvarint(cid.data, offset);
 
         height = uint8(cid.data[offset]);
-        if (padding >= 1<<height) {
+        if ((128*padding)/127 >= 1<<(height+5)) {
             revert("Too much CommPv2 padding");
         }
         offset++;
@@ -69,7 +69,7 @@ library Cids {
     function leafCount(uint256 padding, uint8 height) internal pure returns (uint256) {
         // the number of leaves that are fully padding
         uint256 paddingLeafs = (128*padding)/127 >> 5;
-        return 1 << uint256(height) - paddingLeafs;
+        return (1 << uint256(height)) - paddingLeafs;
     }
 
 
