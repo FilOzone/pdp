@@ -41,20 +41,18 @@ library Cids {
         (mhLength, offset) = _readUvarint(cid.data, offset);
         require(mhLength >= 34, "CommPv2 multihash length must be at least 34");
         if (mhLength + offset != cid.data.length) {
-            // output lengths in revert
-            //revert("CommPv2 multihash length does not match data length", mhLength, cid.data.length);
-            // revert doesn't take multiple arguments
-            revert(string.concat("CommPv2 multihash length does not match data length", Strings.toString(mhLength), " ", Strings.toString(offset), " ",Strings.toString(cid.data.length)));
+            revert("CommPv2 multihash length does not match data length");
         }
         (padding, offset) = _readUvarint(cid.data, offset);
 
         height = uint8(cid.data[offset]);
-        if ((128*padding)/127 >= 1<<(height+5)) {
-            revert("Too much CommPv2 padding");
-        }
         offset++;
 
         return (padding, height, offset);
+    }
+
+    function isPaddingExcessive(uint256 padding, uint8 height) internal pure returns (bool) {
+        return (128*padding)/127 >= 1<<(height+5);
     }
 
     // pieceSize resturns the size of the data defined by amount of padding and height of the tree

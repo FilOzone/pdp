@@ -450,6 +450,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
         (uint256 padding, uint8 height, uint256 digestOffset) = Cids.validateCommPv2(piece);
+        if (Cids.isPaddingExcessive(padding, height)) {
+            revert IndexedError(callIdx, "Padding is too large");
+        }
         if (height > MAX_PIECE_SIZE_LOG2) {
             revert IndexedError(callIdx, "Piece size must be less than 2^50");
         }

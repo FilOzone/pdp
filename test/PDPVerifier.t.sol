@@ -329,19 +329,12 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](1);
 
-        // TODO(Kubuxu): fix this test
-        // Fail when piece size is not a multiple of 32
-        pieces[0] = makeSamplePiece(1);
-        expectIndexedError(0, "Size must be a multiple of 32");
-        pdpVerifier.addPieces(setId, pieces, empty);
-
-        // Fail when piece size is zero
         pieces[0] = makeSamplePiece(0);
-        expectIndexedError(0, "Size must be greater than 0");
+        expectIndexedError(0, "Padding is too large");
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Fail when piece size is too large
-        pieces[0] = makeSamplePiece(0);
+        pieces[0] = makeSamplePiece(1<<pdpVerifier.MAX_PIECE_SIZE_LOG2()+1);
         expectIndexedError(0, "Piece size must be less than 2^50");
         pdpVerifier.addPieces(setId, pieces, empty);
 
@@ -361,18 +354,17 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         // Add one bad piece, message fails on bad index
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.PieceData[] memory pieces = new IPDPTypes.PieceData[](4);
-        //TODO(Kubuxu): fix this test, last item should be invalid
         pieces[0] = makeSamplePiece(1);
         pieces[1] = makeSamplePiece(1);
         pieces[2] = makeSamplePiece(1);
         pieces[3] = makeSamplePiece(0);
 
-        expectIndexedError(3, "Size must be a multiple of 32");
+        expectIndexedError(3, "Padding is too large");
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Add multiple bad pieces, message fails on first bad index
         pieces[0] = makeSamplePiece(0);
-        expectIndexedError(0, "Size must be a multiple of 32");
+        expectIndexedError(0, "Padding is too large");
         pdpVerifier.addPieces(setId, pieces, empty);
     }
 
@@ -1490,7 +1482,7 @@ contract SumTreeAddTest is Test, PieceHelper {
         assertEq(pdpVerifier.getNextPieceId(testSetId), 8, "Incorrect next piece ID");
         assertEq(pdpVerifier.getSumTreeCounts(testSetId, 7), 87, "Incorrect sum tree count");
         assertEq(pdpVerifier.getPieceLeafCount(testSetId, 7), 34, "Incorrect piece leaf count");
-        Cids.Cid memory expectedCid = Cids.Cid(abi.encodePacked("test", uint256(3)));
+        Cids.Cid memory expectedCid = pieceDataArray[3].piece;
         Cids.Cid memory actualCid = pdpVerifier.getPieceCid(testSetId, 3);
         assertEq(actualCid.data, expectedCid.data, "Incorrect piece CID");
     }

@@ -9,7 +9,7 @@ contract PieceHelper is Test {
     // Constructs a PieceData structure for a Merkle tree.
     function makePiece(bytes32[][] memory tree, uint leafCount) internal pure returns (IPDPTypes.PieceData memory) {
         if (leafCount == 0) {
-            revert("zero left count");
+            return IPDPTypes.PieceData(Cids.commpV2FromDigest(127, 2, tree[0][0]));
         }
         uint8 height = uint8(256 - BitOps.clz(leafCount - 1));
         require(1<<height >= leafCount, "makePiece: height not enough to hold leaf count");
@@ -26,13 +26,18 @@ contract PieceHelper is Test {
 
     function makeSamplePiece(uint leafCount) internal pure returns (IPDPTypes.PieceData memory) {
         bytes32[][] memory tree = new bytes32[][](1);
-        tree[0] = new bytes32[](leafCount);
+        tree[0] = new bytes32[](1);
+        tree[0][0] = bytes32(abi.encodePacked(leafCount));
         return makePiece(tree, leafCount);
     }
 
     // count here is bytes after Fr32 padding
     function makeSamplePieceBytes(uint count) internal pure returns (IPDPTypes.PieceData memory) {
         bytes32 digest = bytes32(abi.encodePacked(count));
+        if (count == 0) {
+            return IPDPTypes.PieceData(Cids.commpV2FromDigest(127, 2,  digest));
+        }
+
 
         uint256 leafCount = (count+31) / 32;
         uint8 height = uint8(256 - BitOps.clz(leafCount - 1));
@@ -60,6 +65,7 @@ contract PieceHelperTest is Test, PieceHelper {
     }
 
     function testMakeSamplePiece() pure public {
+        makeSamplePiece(0);
         IPDPTypes.PieceData memory piece = makeSamplePiece(1);
         Cids.validateCommPv2(piece.piece);
         piece = makeSamplePiece(2);
@@ -79,7 +85,8 @@ contract PieceHelperTest is Test, PieceHelper {
     }
 
     function testMakeSamplePieceBytes() pure public {
-        IPDPTypes.PieceData memory piece = makeSamplePieceBytes(1);
+        IPDPTypes.PieceData memory piece = makeSamplePieceBytes(0);
+        piece = makeSamplePieceBytes(1);
         Cids.validateCommPv2(piece.piece);
         piece = makeSamplePieceBytes(2);
         Cids.validateCommPv2(piece.piece);
