@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.20;
 
 import {BitOps} from "./BitOps.sol";
@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 
 library Cids {
     uint256 public constant COMMP_LEAF_SIZE = 32;
-    //  0x01    0x55                0x9120                              0x21
-    // (cidv1)  (raw)  (fr32-sha2-256-trunc254-padded-binary-tree)  (length of multihash)
+    //  0x01    0x55                0x9120
+    // (cidv1)  (raw)  (fr32-sha2-256-trunc254-padded-binary-tree)
     bytes4 public constant COMMP_V2_PREFIX = hex"01559120";
 
     // A helper struct for events + getter functions to display digests as CommpV2 CIDs
@@ -64,16 +64,21 @@ library Cids {
         return (1 << (uint256(height)+5)) - (128*padding)/127;
     }
 
+    // leafCount returns the number of 32b leaves that contain any amount of data
     function leafCount(uint256 padding, uint8 height) internal pure returns (uint256) {
-        // the number of leaves that are fully padding
+        // the padding itself is # of bytes before Fr32 expansion
+        // so we need to expand it by factor 128/127
+        // then we divide by 32 with a floor to get the number of leaves that are fully padding
         uint256 paddingLeafs = (128*padding)/127 >> 5;
+        // 1<<height is the number of leaves in the tree
+        // wihch then after subtracting the padding leaves is the number of leaves that contain data
         return (1 << uint256(height)) - paddingLeafs;
     }
 
 
 
     // Creates a CommPv2 CID from a raw size and hash digest according to FRC-0069.
-    // The CID uses the Raw codec (0x55) and fr32-sha2-256-trunc254-padded-binary-tree multihash (0x1011).
+    // The CID uses the Raw codec and fr32-sha2-256-trunc254-padded-binary-tree multihash.
     // The digest format is: uvarint padding | uint8 height | 32 byte root data
     function commpV2FromDigest(uint256 padding, uint8 height, bytes32 digest) internal pure returns (Cids.Cid memory) {
         // Create the CID

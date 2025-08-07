@@ -224,7 +224,6 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
 
     function testScheduleRemovePiecesOnlyStorageProvider() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test"));
         IPDPTypes.PieceData[] memory pieceDataArray = new IPDPTypes.PieceData[](1);
         pieceDataArray[0] = makeSamplePiece(100);
         pdpVerifier.addPieces(setId, pieceDataArray, empty);
@@ -1657,7 +1656,6 @@ contract SumTreeAddTest is Test, PieceHelper {
         pieceIdsToRemove[2] = 2;
 
         for (uint256 i = 0; i < sizes.length; i++) {
-            Cids.Cid memory testCid = Cids.Cid(abi.encodePacked("test", i));
             IPDPTypes.PieceData[] memory pieceDataArray = new IPDPTypes.PieceData[](1);
             pieceDataArray[0] = makeSamplePiece(sizes[i]);
             pdpVerifier.addPieces(testSetId, pieceDataArray, empty);

@@ -43,4 +43,65 @@ contract CidsTest is Test {
         vm.expectRevert("Cid data is too short");
         Cids.digestFromCid(c);
     }
+
+    function testUvarintLength() public pure {
+        assertEq(Cids._uvarintLength(0), 1);
+        assertEq(Cids._uvarintLength(1), 1);
+        assertEq(Cids._uvarintLength(127), 1);
+        assertEq(Cids._uvarintLength(128), 2);
+        assertEq(Cids._uvarintLength(16383), 2);
+        assertEq(Cids._uvarintLength(16384), 3);
+        assertEq(Cids._uvarintLength(2097151), 3);
+        assertEq(Cids._uvarintLength(2097152), 4);
+        assertEq(Cids._uvarintLength(type(uint256).max), 37);
+    }
+
+    function testUvarintRoundTrip() public pure {
+        uint256[] memory values = new uint256[](7);
+        values[0] = 0;
+        values[1] = 1;
+        values[2] = 127;
+        values[3] = 128;
+        values[4] = 16384;
+        values[5] = 2097152;
+        values[6] = type(uint256).max;
+
+        uint256 totalLength = 0;
+        for (uint256 i = 0; i < values.length; i++) {
+            totalLength += Cids._uvarintLength(values[i]);
+        }
+        bytes memory buffer = new bytes(totalLength);
+        uint256 offset = 0;
+
+        // Write all values
+        for (uint256 i = 0; i < values.length; i++) {
+            offset = Cids._writeUvarint(buffer, offset, values[i]);
+        }
+
+        // Read all values and verify
+        uint256 currentOffset = 0;
+        for (uint256 i = 0; i < values.length; i++) {
+            (uint256 readValue, uint256 newOffset) = Cids._readUvarint(buffer, currentOffset);
+            assertEq(readValue, values[i], "Uvarint round trip failed");
+            currentOffset = newOffset;
+        }
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testReadUvarintEdgeCases() public {
+        // Test reading an incomplete uvarint that should revert
+        bytes memory incompleteUvarint = hex"80"; // A single byte indicating more to come, but nothing follows
+        vm.expectRevert(); // Expect any revert, specifically index out of bounds
+        Cids._readUvarint(incompleteUvarint, 0);
+
+        bytes memory incompleteUvarint2 = hex"ff01"; // MSB set on last byte.
+        vm.expectRevert();
+        Cids._readUvarint(incompleteUvarint2, 0);
+
+        // Test reading with an offset
+        bytes memory bufferWithOffset = hex"00010203040506078001"; // Value 128 (8001) at offset 8
+        (uint256 readValue, uint256 newOffset) = Cids._readUvarint(bufferWithOffset, 8);
+        assertEq(readValue, 128, "Read uvarint with offset failed");
+        assertEq(newOffset, 10, "Offset after reading with offset incorrect");
+    }
 }
