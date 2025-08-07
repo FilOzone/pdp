@@ -29,6 +29,11 @@ contract PieceHelper is Test {
         if (count == 0) {
             return Cids.CommPv2FromDigest(127, 2,  tree[0][0]);
         }
+        if (count == 1) {
+            // piece with just 1 data byte doesn't exist
+            // it is either 0 data bytes or two
+            count = 2;
+        }
 
         uint256 leafCount = (count+31) / 32;
         uint8 height = uint8(256 - BitOps.clz(leafCount - 1));
