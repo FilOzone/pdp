@@ -104,4 +104,35 @@ contract CidsTest is Test {
         assertEq(readValue, 128, "Read uvarint with offset failed");
         assertEq(newOffset, 10, "Offset after reading with offset incorrect");
     }
+
+    function testValidateCommPv2Golden() public pure {
+        // Test vector 1: height=4, padding=0
+        bytes memory cidData1 = hex"01559120220004496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605";
+        Cids.Cid memory cid1 = Cids.Cid(cidData1);
+        (uint256 padding1, uint8 height1, uint256 digestOffset1) = Cids.validateCommPv2(cid1);
+        assertEq(padding1, 0, "CID 1 padding");
+        assertEq(height1, 4, "CID 1 height");
+
+        // Test vector 2: height=2, padding=0
+        bytes memory cidData2 = hex"015591202200023731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333";
+        Cids.Cid memory cid2 = Cids.Cid(cidData2);
+        (uint256 padding2, uint8 height2, uint256 digestOffset2) = Cids.validateCommPv2(cid2);
+        assertEq(padding2, 0, "CID 2 padding");
+        assertEq(height2, 2, "CID 2 height");
+
+        // Test vector 3: height=5, padding=504
+        bytes memory cidData3 = hex"0155912023f80305de6815dcb348843215a94de532954b60be550a4bec6e74555665e9a5ec4e0f3c";
+        Cids.Cid memory cid3 = Cids.Cid(cidData3);
+        (uint256 padding3, uint8 height3, uint256 digestOffset3) = Cids.validateCommPv2(cid3);
+        assertEq(padding3, 504, "CID 3 padding");
+        assertEq(height3, 5, "CID 3 height");
+
+        // Verify that digestOffset points to valid data by checking a few bytes from the digest
+        // For CID 1
+        assertEq(cid1.data[digestOffset1], bytes1(0x49), "CID 1 digest first byte");
+        // For CID 2
+        assertEq(cid2.data[digestOffset2], bytes1(0x37), "CID 2 digest first byte");
+        // For CID 3
+        assertEq(cid3.data[digestOffset3], bytes1(0xde), "CID 3 digest first byte");
+    }
 }
