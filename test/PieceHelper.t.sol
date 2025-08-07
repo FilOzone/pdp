@@ -10,7 +10,7 @@ contract PieceHelper is Test {
     // Constructs a PieceData structure for a Merkle tree.
     function makePiece(bytes32[][] memory tree, uint leafCount) internal pure returns (Cids.Cid memory) {
         if (leafCount == 0) {
-            return Cids.commpV2FromDigest(127, 2, tree[0][0]);
+            return Cids.CommPv2FromDigest(127, 2, tree[0][0]);
         }
         uint8 height = uint8(256 - BitOps.clz(leafCount - 1));
         require(1<<height >= leafCount, "makePiece: height not enough to hold leaf count");
@@ -22,7 +22,7 @@ contract PieceHelper is Test {
         console.log("paddingLeaves", paddingLeaves);
         console.log("padding", padding);
         assertEq(Cids.leafCount(padding, height), leafCount, "makePiece: leaf count mismatch");
-        return Cids.commpV2FromDigest(padding,  height, tree[0][0]);
+        return Cids.CommPv2FromDigest(padding,  height, tree[0][0]);
     }
 
     function makeSamplePiece(uint leafCount) internal pure returns (Cids.Cid memory) {
@@ -36,7 +36,7 @@ contract PieceHelper is Test {
     function makeSamplePieceBytes(uint count) internal pure returns (Cids.Cid memory) {
         bytes32 digest = bytes32(abi.encodePacked(count));
         if (count == 0) {
-            return Cids.commpV2FromDigest(127, 2,  digest);
+            return Cids.CommPv2FromDigest(127, 2,  digest);
         }
 
 
@@ -53,7 +53,7 @@ contract PieceHelper is Test {
         assertEq(Cids.leafCount(padding, height), leafCount, "makeSamplePieceBytes: leaf count mismatch");
         assertEq(Cids.pieceSize(padding, height), count, "makeSamplePieceBytes: piece size mismatch");
 
-        return Cids.commpV2FromDigest(padding,  height, digest);
+        return Cids.CommPv2FromDigest(padding,  height, digest);
     }
 }
 

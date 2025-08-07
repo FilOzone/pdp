@@ -7,7 +7,7 @@ import {Cids} from "../src/Cids.sol";
 contract CidsTest is Test {
     function testDigestRoundTrip() public pure {
         bytes32 digest = 0xbeadcafefacedeedfeedbabedeadbeefbeadcafefacedeedfeedbabedeadbeef;
-        Cids.Cid memory c = Cids.commpV2FromDigest(0, 10, digest);
+        Cids.Cid memory c = Cids.CommPv2FromDigest(0, 10, digest);
         assertEq(c.data.length, 39);
         bytes32 foundDigest = Cids.digestFromCid(c);
         assertEq(foundDigest, digest, "digest equal");

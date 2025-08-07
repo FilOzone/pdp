@@ -80,7 +80,7 @@ library Cids {
     // Creates a CommPv2 CID from a raw size and hash digest according to FRC-0069.
     // The CID uses the Raw codec and fr32-sha2-256-trunc254-padded-binary-tree multihash.
     // The digest format is: uvarint padding | uint8 height | 32 byte root data
-    function commpV2FromDigest(uint256 padding, uint8 height, bytes32 digest) internal pure returns (Cids.Cid memory) {
+    function CommPv2FromDigest(uint256 padding, uint8 height, bytes32 digest) internal pure returns (Cids.Cid memory) {
         // Create the CID
         // Format: CIDv1 (0x01) | Raw codec (0x55) | fr32-sha2-256-trunc254-padded-binary-tree multihash (0x1011) | uvarint multihash length | multihash digest
         // multihash digest:
