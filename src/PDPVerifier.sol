@@ -20,7 +20,7 @@ import {IPDPEvents} from "./interfaces/IPDPEvents.sol";
 interface PDPListener {
     function dataSetCreated(uint256 dataSetId, address creator, bytes calldata extraData) external;
     function dataSetDeleted(uint256 dataSetId, uint256 deletedLeafCount, bytes calldata extraData) external;
-    function piecesAdded(uint256 dataSetId, uint256 firstAdded, IPDPTypes.PieceData[] memory pieceData, bytes calldata extraData) external;
+    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] memory pieceData, bytes calldata extraData) external;
     function piecesScheduledRemove(uint256 dataSetId, uint256[] memory pieceIds, bytes calldata extraData) external;
     // Note: extraData not included as proving messages conceptually always originate from the SP
     function possessionProven(uint256 dataSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external;
@@ -422,7 +422,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Appends new pieces to the collection managed by a data set.
     // These pieces won't be challenged until the next proving period is
     // started by calling nextProvingPeriod.
-    function addPieces(uint256 setId, IPDPTypes.PieceData[] calldata pieceData, bytes calldata extraData) public returns (uint256) {
+    function addPieces(uint256 setId, Cids.Cid[] calldata pieceData, bytes calldata extraData) public returns (uint256) {
         uint256 nPieces = pieceData.length;
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(dataSetLive(setId), "Data set not live");
@@ -433,7 +433,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
 
         for (uint256 i = 0; i < nPieces; i++) {
-            addOnePiece(setId, i, pieceData[i].piece);
+            addOnePiece(setId, i, pieceData[i]);
             pieceIds[i] = firstAdded + i;
         }
         emit PiecesAdded(setId, pieceIds);
@@ -449,7 +449,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error IndexedError(uint256 idx, string msg);
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
-        (uint256 padding, uint8 height, uint256 digestOffset) = Cids.validateCommPv2(piece);
+        (uint256 padding, uint8 height, ) = Cids.validateCommPv2(piece);
         if (Cids.isPaddingExcessive(padding, height)) {
             revert IndexedError(callIdx, "Padding is too large");
         }

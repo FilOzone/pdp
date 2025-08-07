@@ -8,9 +8,9 @@ import {BitOps} from "../src/BitOps.sol";
 
 contract PieceHelper is Test {
     // Constructs a PieceData structure for a Merkle tree.
-    function makePiece(bytes32[][] memory tree, uint leafCount) internal pure returns (IPDPTypes.PieceData memory) {
+    function makePiece(bytes32[][] memory tree, uint leafCount) internal pure returns (Cids.Cid memory) {
         if (leafCount == 0) {
-            return IPDPTypes.PieceData(Cids.commpV2FromDigest(127, 2, tree[0][0]));
+            return Cids.commpV2FromDigest(127, 2, tree[0][0]);
         }
         uint8 height = uint8(256 - BitOps.clz(leafCount - 1));
         require(1<<height >= leafCount, "makePiece: height not enough to hold leaf count");
@@ -22,10 +22,10 @@ contract PieceHelper is Test {
         console.log("paddingLeaves", paddingLeaves);
         console.log("padding", padding);
         assertEq(Cids.leafCount(padding, height), leafCount, "makePiece: leaf count mismatch");
-        return IPDPTypes.PieceData(Cids.commpV2FromDigest(padding,  height, tree[0][0]));
+        return Cids.commpV2FromDigest(padding,  height, tree[0][0]);
     }
 
-    function makeSamplePiece(uint leafCount) internal pure returns (IPDPTypes.PieceData memory) {
+    function makeSamplePiece(uint leafCount) internal pure returns (Cids.Cid memory) {
         bytes32[][] memory tree = new bytes32[][](1);
         tree[0] = new bytes32[](1);
         tree[0][0] = bytes32(abi.encodePacked(leafCount));
@@ -33,10 +33,10 @@ contract PieceHelper is Test {
     }
 
     // count here is bytes after Fr32 padding
-    function makeSamplePieceBytes(uint count) internal pure returns (IPDPTypes.PieceData memory) {
+    function makeSamplePieceBytes(uint count) internal pure returns (Cids.Cid memory) {
         bytes32 digest = bytes32(abi.encodePacked(count));
         if (count == 0) {
-            return IPDPTypes.PieceData(Cids.commpV2FromDigest(127, 2,  digest));
+            return Cids.commpV2FromDigest(127, 2,  digest);
         }
 
 
@@ -53,7 +53,7 @@ contract PieceHelper is Test {
         assertEq(Cids.leafCount(padding, height), leafCount, "makeSamplePieceBytes: leaf count mismatch");
         assertEq(Cids.pieceSize(padding, height), count, "makeSamplePieceBytes: piece size mismatch");
 
-        return IPDPTypes.PieceData(Cids.commpV2FromDigest(padding,  height, digest));
+        return Cids.commpV2FromDigest(padding,  height, digest);
     }
 }
 
@@ -61,43 +61,43 @@ contract PieceHelperTest is Test, PieceHelper {
     function testMakePiece() pure public {
         bytes32[][] memory tree = new bytes32[][](1);
         tree[0] = new bytes32[](10);
-        IPDPTypes.PieceData memory piece = makePiece(tree, 10);
-        Cids.validateCommPv2(piece.piece);
+        Cids.Cid memory piece = makePiece(tree, 10);
+        Cids.validateCommPv2(piece);
     }
 
     function testMakeSamplePiece() pure public {
         makeSamplePiece(0);
-        IPDPTypes.PieceData memory piece = makeSamplePiece(1);
-        Cids.validateCommPv2(piece.piece);
+        Cids.Cid memory piece = makeSamplePiece(1);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePiece(2);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePiece(3);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePiece(4);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePiece(10);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePiece(127);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePiece(128);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePiece(1024);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
     }
 
     function testMakeSamplePieceBytes() pure public {
-        IPDPTypes.PieceData memory piece = makeSamplePieceBytes(0);
+        Cids.Cid memory piece = makeSamplePieceBytes(0);
         piece = makeSamplePieceBytes(1);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePieceBytes(2);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePieceBytes(32);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePieceBytes(31);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePieceBytes(127);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
         piece = makeSamplePieceBytes(128);
-        Cids.validateCommPv2(piece.piece);
+        Cids.validateCommPv2(piece);
     }
 }
