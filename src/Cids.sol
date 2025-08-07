@@ -55,7 +55,7 @@ library Cids {
         return (128*padding)/127 >= 1<<(height+5);
     }
 
-    // pieceSize resturns the size of the data defined by amount of padding and height of the tree
+    // pieceSize returns the size of the data defined by amount of padding and height of the tree
     // this is after the Fr32 expansion, if 1 bit of actual data spills into padding byte, the whole byte is counted as data
     // as the padding is specified as before expansion
     function pieceSize(uint256 padding, uint8 height) internal pure returns (uint256) {
