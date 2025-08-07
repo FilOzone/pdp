@@ -523,8 +523,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
                 // Find the piece that has this leaf, and the offset of the leaf within that piece.
                 challenges[i] = findOnePieceId(setId, challengeIdx, sumTreeTop);
-                bytes32 pieceHash = Cids.digestFromCid(getPieceCid(setId, challenges[i].pieceId));
-                uint256 pieceHeight = 256 - BitOps.clz(pieceLeafCounts[setId][challenges[i].pieceId] - 1) + 1;
+                Cids.Cid memory pieceCid = getPieceCid(setId, challenges[i].pieceId);
+                bytes32 pieceHash = Cids.digestFromCid(pieceCid);
+                uint8 pieceHeight = Cids.heightFromCid(pieceCid) + 1; // because MerkleVerify.verify assumes that base layer is 1
                 bool ok = MerkleVerify.verify(proofs[i].proof, pieceHash, proofs[i].leaf, challenges[i].offset, pieceHeight);
                 require(ok, "proof did not verify");
             }

@@ -25,6 +25,12 @@ library Cids {
         return bytes32(dataSlice);
     }
 
+    function heightFromCid(Cid memory cid) internal pure returns (uint8) {
+        require(cid.data.length >= 33, "Cid data is too short");
+        return uint8(cid.data[cid.data.length - 32 - 1]);
+    }
+
+
     // Checks that cid matches Commpv2.
     function validateCommPv2(Cid memory cid)
         internal

@@ -25,23 +25,17 @@ contract PieceHelper is Test {
         return Cids.CommPv2FromDigest(padding,  height, tree[0][0]);
     }
 
-    function makeSamplePiece(uint leafCount) internal pure returns (Cids.Cid memory) {
-        bytes32[][] memory tree = new bytes32[][](1);
-        tree[0] = new bytes32[](1);
-        tree[0][0] = bytes32(abi.encodePacked(leafCount));
-        return makePiece(tree, leafCount);
-    }
-
-    // count here is bytes after Fr32 padding
-    function makeSamplePieceBytes(uint count) internal pure returns (Cids.Cid memory) {
-        bytes32 digest = bytes32(abi.encodePacked(count));
+    function makePieceBytes(bytes32[][] memory tree, uint count) internal pure returns (Cids.Cid memory) {
         if (count == 0) {
-            return Cids.CommPv2FromDigest(127, 2,  digest);
+            return Cids.CommPv2FromDigest(127, 2,  tree[0][0]);
         }
-
 
         uint256 leafCount = (count+31) / 32;
         uint8 height = uint8(256 - BitOps.clz(leafCount - 1));
+        if (height < 2) {
+            height = 2;
+        }
+
         require(1<<(height + 5) >= count, "makeSamplePieceBytes: height not enough to hold count");
         uint256 padding = (1 << (height + 5)) - count;
         padding = (padding * 127 + 127)/128;
@@ -52,8 +46,22 @@ contract PieceHelper is Test {
         console.log("padding", padding);
         assertEq(Cids.leafCount(padding, height), leafCount, "makeSamplePieceBytes: leaf count mismatch");
         assertEq(Cids.pieceSize(padding, height), count, "makeSamplePieceBytes: piece size mismatch");
+        return Cids.CommPv2FromDigest(padding,  height, tree[0][0]);
+    }
 
-        return Cids.CommPv2FromDigest(padding,  height, digest);
+    function makeSamplePiece(uint leafCount) internal pure returns (Cids.Cid memory) {
+        bytes32[][] memory tree = new bytes32[][](1);
+        tree[0] = new bytes32[](1);
+        tree[0][0] = bytes32(abi.encodePacked(leafCount));
+        return makePiece(tree, leafCount);
+    }
+
+    // count here is bytes after Fr32 padding
+    function makeSamplePieceBytes(uint count) internal pure returns (Cids.Cid memory) {
+        bytes32[][] memory tree = new bytes32[][](1);
+        tree[0] = new bytes32[](1);
+        tree[0][0] = bytes32(abi.encodePacked(count));
+        return makePieceBytes(tree, count);
     }
 }
 
