@@ -31,7 +31,8 @@ library Cids {
     }
 
 
-    // Checks that cid matches Commpv2.
+    // Checks that cid matches CommPv2.
+    // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
     function validateCommPv2(Cid memory cid)
         internal
         pure
