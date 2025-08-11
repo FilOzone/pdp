@@ -78,7 +78,7 @@ library Cids {
         // then we divide by 32 with a floor to get the number of leaves that are fully padding
         uint256 paddingLeafs = (128*padding)/127 >> 5;
         // 1<<height is the number of leaves in the tree
-        // wihch then after subtracting the padding leaves is the number of leaves that contain data
+        // which then after subtracting the padding leaves is the number of leaves that contain data
         return (1 << uint256(height)) - paddingLeafs;
     }
 
