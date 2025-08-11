@@ -25,13 +25,14 @@ library Cids {
         return bytes32(dataSlice);
     }
 
+    // Returns the height of the tree from the CID.
     function heightFromCid(Cid memory cid) internal pure returns (uint8) {
         require(cid.data.length >= 33, "Cid data is too short");
         return uint8(cid.data[cid.data.length - 32 - 1]);
     }
 
 
-    // Checks that cid matches CommPv2.
+    // Checks that CID is CommPv2 and decomposes it into its components.
     // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
     function validateCommPv2(Cid memory cid)
         internal
@@ -58,6 +59,7 @@ library Cids {
         return (padding, height, offset);
     }
 
+    // isPaddingExcessive checks if the padding size exceeds the size of the tree
     function isPaddingExcessive(uint256 padding, uint8 height) internal pure returns (bool) {
         return (128*padding)/127 >= 1<<(height+5);
     }
@@ -81,8 +83,6 @@ library Cids {
         // which then after subtracting the padding leaves is the number of leaves that contain data
         return (1 << uint256(height)) - paddingLeafs;
     }
-
-
 
     // Creates a CommPv2 CID from a raw size and hash digest according to FRC-0069.
     // The CID uses the Raw codec and fr32-sha2-256-trunc254-padded-binary-tree multihash.
