@@ -6,12 +6,13 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initiali
 import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
+import {Cids} from "./Cids.sol";
 import {IPDPEvents} from "./interfaces/IPDPEvents.sol";
 
 // PDPRecordKeeper tracks PDP operations.  It is used as a base contract for PDPListeners
 // in order to give users the capability to consume events async.
 /// @title PDPRecordKeeper
-/// @dev This contract is unused by the SimplePDPService as it is too expensive. 
+/// @dev This contract is unused by the SimplePDPService as it is too expensive.
 /// we've kept it here for future reference and testing.
 contract PDPRecordKeeper {
     enum OperationType {
@@ -75,7 +76,7 @@ contract PDPRecordKeeper {
 /// @title SimplePDPService
 /// @notice A default implementation of a PDP Listener.
 /// @dev This contract only supports one PDP service caller, set in the constructor,
-/// The primary purpose of this contract is to 
+/// The primary purpose of this contract is to
 /// 1. Enforce a proof count of 5 proofs per data set proving period.
 /// 2. Provide a reliable way to report faults to users.
 contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -170,7 +171,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
 
     function dataSetDeleted(uint256 dataSetId, uint256 deletedLeafCount, bytes calldata) external onlyPDPVerifier {}
 
-    function piecesAdded(uint256 dataSetId, uint256 firstAdded, IPDPTypes.PieceData[] memory pieceData, bytes calldata) external onlyPDPVerifier {}
+    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] memory pieceData, bytes calldata) external onlyPDPVerifier {}
 
     function piecesScheduledRemove(uint256 dataSetId, uint256[] memory pieceIds, bytes calldata) external onlyPDPVerifier {}
 
@@ -200,7 +201,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     }
 
     // nextProvingPeriod checks for unsubmitted proof in which case it emits a fault event
-    // Additionally it enforces constraints on the update of its state: 
+    // Additionally it enforces constraints on the update of its state:
     // 1. One update per proving period.
     // 2. Next challenge epoch must fall within the challenge window in the last challengeWindow()
     //    epochs of the proving period.
