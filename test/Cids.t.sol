@@ -88,16 +88,21 @@ contract CidsTest is Test {
     }
 
     /// forge-config: default.allow_internal_expect_revert = true
-    function testReadUvarintEdgeCases() public {
+    function testReadUvarintIncomplete() public {
         // Test reading an incomplete uvarint that should revert
         bytes memory incompleteUvarint = hex"80"; // A single byte indicating more to come, but nothing follows
         vm.expectRevert(); // Expect any revert, specifically index out of bounds
         Cids._readUvarint(incompleteUvarint, 0);
+    }
 
-        bytes memory incompleteUvarint2 = hex"ff01"; // MSB set on last byte.
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testReadUvarintMSBSetOnLastByte() public {
+        bytes memory incompleteUvarint2 = hex"ff81"; // MSB set on last byte.
         vm.expectRevert();
         Cids._readUvarint(incompleteUvarint2, 0);
+    }
 
+    function testReadUvarintWithOffset() public pure {
         // Test reading with an offset
         bytes memory bufferWithOffset = hex"00010203040506078001"; // Value 128 (8001) at offset 8
         (uint256 readValue, uint256 newOffset) = Cids._readUvarint(bufferWithOffset, 8);
@@ -105,7 +110,8 @@ contract CidsTest is Test {
         assertEq(newOffset, 10, "Offset after reading with offset incorrect");
     }
 
-    function testValidateCommPv2Golden() public pure {
+    function testValidateCommPv2FRC0069() public pure {
+        // The values are taken from FRC-0069 specification
         // Test vector 1: height=4, padding=0
         bytes memory cidData1 = hex"01559120220004496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605";
         Cids.Cid memory cid1 = Cids.Cid(cidData1);
