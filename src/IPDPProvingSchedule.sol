@@ -16,7 +16,6 @@ interface IPDPProvingSchedule {
     // @return Initial challenge window start in epochs
     function initChallengeWindowStart() external pure returns (uint256);
 
-
     /// @notice Calculates the start of the next challenge window for a given data set
     /// @param setId The ID of the data set
     /// @return The block number when the next challenge window starts

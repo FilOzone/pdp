@@ -7,7 +7,9 @@ import "./IPDPTypes.sol";
 /// @notice Shared events for PDP contracts and consumers
 interface IPDPEvents {
     event DataSetCreated(uint256 indexed setId, address indexed storageProvider);
-    event StorageProviderChanged(uint256 indexed setId, address indexed oldStorageProvider, address indexed newStorageProvider);
+    event StorageProviderChanged(
+        uint256 indexed setId, address indexed oldStorageProvider, address indexed newStorageProvider
+    );
     event DataSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event DataSetEmpty(uint256 indexed setId);
     event PiecesAdded(uint256 indexed setId, uint256[] pieceIds);
@@ -17,4 +19,4 @@ interface IPDPEvents {
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
     event PriceOracleFailure(bytes errorData);
     event ContractUpgraded(string version, address newImplementation);
-} 
+}

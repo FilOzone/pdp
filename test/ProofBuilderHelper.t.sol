@@ -16,23 +16,29 @@ import {PieceHelper} from "./PieceHelper.t.sol";
 
 contract ProofBuilderHelper is Test {
     // Builds a proof of possession for a data set
-    function buildProofs(PDPVerifier pdpVerifier, uint256 setId, uint challengeCount, bytes32[][][] memory trees, uint[] memory leafCounts) internal view returns (IPDPTypes.Proof[] memory) {
+    function buildProofs(
+        PDPVerifier pdpVerifier,
+        uint256 setId,
+        uint256 challengeCount,
+        bytes32[][][] memory trees,
+        uint256[] memory leafCounts
+    ) internal view returns (IPDPTypes.Proof[] memory) {
         uint256 challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         uint256 seed = challengeEpoch; // Seed is (temporarily) the challenge epoch
-        uint totalLeafCount = 0;
-        for (uint i = 0; i < leafCounts.length; ++i) {
+        uint256 totalLeafCount = 0;
+        for (uint256 i = 0; i < leafCounts.length; ++i) {
             totalLeafCount += leafCounts[i];
         }
 
         IPDPTypes.Proof[] memory proofs = new IPDPTypes.Proof[](challengeCount);
-        for (uint challengeIdx = 0; challengeIdx < challengeCount; challengeIdx++) {
+        for (uint256 challengeIdx = 0; challengeIdx < challengeCount; challengeIdx++) {
             // Compute challenge index
             bytes memory payload = abi.encodePacked(seed, setId, uint64(challengeIdx));
             uint256 challengeOffset = uint256(keccak256(payload)) % totalLeafCount;
 
-            uint treeIdx = 0;
+            uint256 treeIdx = 0;
             uint256 treeOffset = 0;
-            for (uint i = 0; i < leafCounts.length; ++i) {
+            for (uint256 i = 0; i < leafCounts.length; ++i) {
                 if (leafCounts[i] > challengeOffset) {
                     treeIdx = i;
                     treeOffset = challengeOffset;

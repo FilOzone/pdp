@@ -39,14 +39,13 @@ contract PDPRecordKeeper {
     // Mapping to store events for each data set
     mapping(uint256 => EventRecord[]) public dataSetEvents;
 
-    function receiveDataSetEvent(uint256 dataSetId, OperationType operationType, bytes memory extraData ) internal returns(uint256) {
+    function receiveDataSetEvent(uint256 dataSetId, OperationType operationType, bytes memory extraData)
+        internal
+        returns (uint256)
+    {
         uint64 epoch = uint64(block.number);
-        EventRecord memory newRecord = EventRecord({
-            epoch: epoch,
-            dataSetId: dataSetId,
-            operationType: operationType,
-            extraData: extraData
-        });
+        EventRecord memory newRecord =
+            EventRecord({epoch: epoch, dataSetId: dataSetId, operationType: operationType, extraData: extraData});
         dataSetEvents[dataSetId].push(newRecord);
         emit RecordAdded(dataSetId, epoch, operationType);
         return dataSetEvents[dataSetId].length - 1;
@@ -58,11 +57,7 @@ contract PDPRecordKeeper {
     }
 
     // Function to get a specific event for a data set
-    function getEvent(uint256 dataSetId, uint256 eventIndex)
-        external
-        view
-        returns (EventRecord memory)
-    {
+    function getEvent(uint256 dataSetId, uint256 eventIndex) external view returns (EventRecord memory) {
         require(eventIndex < dataSetEvents[dataSetId].length, "Event index out of bounds");
         return dataSetEvents[dataSetId][eventIndex];
     }
@@ -90,9 +85,9 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     mapping(uint256 => uint256) public provingDeadlines;
     mapping(uint256 => bool) public provenThisPeriod;
 
-     /// @custom:oz-upgrades-unsafe-allow constructor
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
-     _disableInitializers();
+        _disableInitializers();
     }
 
     function initialize(address _pdpVerifierAddress) public initializer {
@@ -138,10 +133,11 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         // Proving period is open 0 skipped periods
         if (block.number <= provingDeadlines[setId]) {
             periodsSkipped = 0;
-        } else { // Proving period has closed possibly some skipped periods
+        } else {
+            // Proving period has closed possibly some skipped periods
             periodsSkipped = 1 + (block.number - (provingDeadlines[setId] + 1)) / getMaxProvingPeriod();
         }
-        return provingDeadlines[setId] + periodsSkipped*getMaxProvingPeriod() - challengeWindow();
+        return provingDeadlines[setId] + periodsSkipped * getMaxProvingPeriod() - challengeWindow();
     }
 
     // The start of the NEXT OPEN proving period's challenge window
@@ -171,15 +167,26 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
 
     function dataSetDeleted(uint256 dataSetId, uint256 deletedLeafCount, bytes calldata) external onlyPDPVerifier {}
 
-    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] memory pieceData, bytes calldata) external onlyPDPVerifier {}
+    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] memory pieceData, bytes calldata)
+        external
+        onlyPDPVerifier
+    {}
 
-    function piecesScheduledRemove(uint256 dataSetId, uint256[] memory pieceIds, bytes calldata) external onlyPDPVerifier {}
+    function piecesScheduledRemove(uint256 dataSetId, uint256[] memory pieceIds, bytes calldata)
+        external
+        onlyPDPVerifier
+    {}
 
-    function storageProviderChanged(uint256, address, address, bytes calldata) external override onlyPDPVerifier { }
+    function storageProviderChanged(uint256, address, address, bytes calldata) external override onlyPDPVerifier {}
 
     // possession proven checks for correct challenge count and reverts if too low
     // it also checks that proofs are not late and emits a fault record if so
-    function possessionProven(uint256 dataSetId, uint256 /*challengedLeafCount*/, uint256 /*seed*/, uint256 challengeCount) external onlyPDPVerifier {
+    function possessionProven(
+        uint256 dataSetId,
+        uint256, /*challengedLeafCount*/
+        uint256, /*seed*/
+        uint256 challengeCount
+    ) external onlyPDPVerifier {
         if (provenThisPeriod[dataSetId]) {
             revert("Only one proof of possession allowed per proving period. Open a new proving period.");
         }
@@ -205,7 +212,10 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     // 1. One update per proving period.
     // 2. Next challenge epoch must fall within the challenge window in the last challengeWindow()
     //    epochs of the proving period.
-    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 /*leafCount*/, bytes calldata) external onlyPDPVerifier {
+    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256, /*leafCount*/ bytes calldata)
+        external
+        onlyPDPVerifier
+    {
         // initialize state for new data set
         if (provingDeadlines[dataSetId] == NO_PROVING_DEADLINE) {
             uint256 firstDeadline = block.number + getMaxProvingPeriod();
@@ -228,7 +238,8 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         // Proving period is open 0 skipped periods
         if (block.number <= provingDeadlines[dataSetId]) {
             periodsSkipped = 0;
-        } else { // Proving period has closed possibly some skipped periods
+        } else {
+            // Proving period has closed possibly some skipped periods
             periodsSkipped = (block.number - (provingDeadlines[dataSetId] + 1)) / getMaxProvingPeriod();
         }
 
@@ -237,7 +248,7 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
         if (challengeEpoch == NO_CHALLENGE_SCHEDULED) {
             nextDeadline = NO_PROVING_DEADLINE;
         } else {
-            nextDeadline = provingDeadlines[dataSetId] + getMaxProvingPeriod()*(periodsSkipped+1);
+            nextDeadline = provingDeadlines[dataSetId] + getMaxProvingPeriod() * (periodsSkipped + 1);
             if (challengeEpoch < nextDeadline - challengeWindow() || challengeEpoch > nextDeadline) {
                 revert("Next challenge epoch must fall within the next challenge window");
             }

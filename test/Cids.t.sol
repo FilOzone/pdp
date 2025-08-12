@@ -23,14 +23,15 @@ contract CidsTest is Test {
     }
 
     function testPieceSize() public pure {
-        assertEq(Cids.pieceSize(0, 30), 1<<(30+5));
-        assertEq(Cids.pieceSize(127,  30), (1<<(30+5)) - 128);
-        assertEq(Cids.pieceSize(128,  30), (1<<(30+5)) - 129);
+        assertEq(Cids.pieceSize(0, 30), 1 << (30 + 5));
+        assertEq(Cids.pieceSize(127, 30), (1 << (30 + 5)) - 128);
+        assertEq(Cids.pieceSize(128, 30), (1 << (30 + 5)) - 129);
     }
+
     function testLeafCount() public pure {
-        assertEq(Cids.leafCount(0, 30), 1<<30);
-        assertEq(Cids.leafCount(127,  30), (1<<30) - 4);
-        assertEq(Cids.leafCount(128,  30), (1<<30) - 4);
+        assertEq(Cids.leafCount(0, 30), 1 << 30);
+        assertEq(Cids.leafCount(127, 30), (1 << 30) - 4);
+        assertEq(Cids.leafCount(128, 30), (1 << 30) - 4);
     }
 
     /// forge-config: default.allow_internal_expect_revert = true

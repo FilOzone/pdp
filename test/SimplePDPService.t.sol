@@ -8,7 +8,6 @@ import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {Cids} from "../src/Cids.sol";
 import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 
-
 contract SimplePDPServiceTest is Test {
     SimplePDPService public pdpService;
     address public pdpVerifierAddress;
@@ -20,19 +19,18 @@ contract SimplePDPServiceTest is Test {
     function setUp() public {
         pdpVerifierAddress = address(this);
         SimplePDPService pdpServiceImpl = new SimplePDPService();
-        bytes memory initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifierAddress));
+        bytes memory initializeData =
+            abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifierAddress));
         MyERC1967Proxy pdpServiceProxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = SimplePDPService(address(pdpServiceProxy));
         dataSetId = 1;
         leafCount = 100;
         seed = 12345;
-
     }
 
     function testInitialState() public view {
         assertEq(pdpService.pdpVerifierAddress(), pdpVerifierAddress, "PDP verifier address should be set correctly");
     }
-
 
     function testOnlyPDPVerifierCanAddRecord() public {
         vm.prank(address(0xdead));
@@ -45,7 +43,7 @@ contract SimplePDPServiceTest is Test {
         assertEq(maxPeriod, 2880, "Max proving period should be 2880");
     }
 
-    function testGetChallengesPerProof() public view{
+    function testGetChallengesPerProof() public view {
         uint64 challenges = pdpService.getChallengesPerProof();
         assertEq(challenges, 5, "Challenges per proof should be 5");
     }
@@ -80,7 +78,6 @@ contract SimplePDPServiceTest is Test {
     }
 
     function testProveBeforeInitialization() public {
-
         // Create a simple mock proof
         vm.expectRevert("Proving not yet started");
         pdpService.possessionProven(dataSetId, leafCount, seed, 5);
@@ -103,11 +100,7 @@ contract SimplePDPServiceTest is Test {
             pdpService.NO_PROVING_DEADLINE(),
             "Proving deadline should be set to NO_PROVING_DEADLINE"
         );
-        assertEq(
-            pdpService.provenThisPeriod(dataSetId),
-            false,
-            "Proven this period should now be false"
-        );
+        assertEq(pdpService.provenThisPeriod(dataSetId), false, "Proven this period should now be false");
     }
 }
 
@@ -123,7 +116,8 @@ contract SimplePDPServiceFaultsTest is Test {
     function setUp() public {
         pdpVerifierAddress = address(this);
         SimplePDPService pdpServiceImpl = new SimplePDPService();
-        bytes memory initializeData = abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifierAddress));
+        bytes memory initializeData =
+            abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifierAddress));
         MyERC1967Proxy pdpServiceProxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
         pdpService = SimplePDPService(address(pdpServiceProxy));
         dataSetId = 1;
@@ -175,10 +169,18 @@ contract SimplePDPServiceFaultsTest is Test {
         uint256 deadline1 = pdpService.provingDeadlines(dataSetId);
         assertTrue(pdpService.provenThisPeriod(dataSetId));
 
-        assertEq(pdpService.provingDeadlines(dataSetId), deadline1, "Proving deadline should not change until nextProvingPeriod.");
+        assertEq(
+            pdpService.provingDeadlines(dataSetId),
+            deadline1,
+            "Proving deadline should not change until nextProvingPeriod."
+        );
         uint256 challengeEpoch = pdpService.nextChallengeWindowStart(dataSetId);
         pdpService.nextProvingPeriod(dataSetId, challengeEpoch, leafCount, empty);
-        assertEq(pdpService.provingDeadlines(dataSetId), deadline1 + pdpService.getMaxProvingPeriod(), "Proving deadline should be updated");
+        assertEq(
+            pdpService.provingDeadlines(dataSetId),
+            deadline1 + pdpService.getMaxProvingPeriod(),
+            "Proving deadline should be updated"
+        );
         assertFalse(pdpService.provenThisPeriod(dataSetId));
 
         vm.expectRevert("One call to nextProvingPeriod allowed per proving period");
@@ -276,7 +278,7 @@ contract SimplePDPServiceFaultsTest is Test {
         // We're in the previous deadline so we fail to prove until we roll forward into challenge window
         vm.expectRevert("Too early. Wait for challenge window to open");
         pdpService.possessionProven(dataSetId, leafCount, seed, 5);
-        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow() -1);
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow() - 1);
         // We're one before the challenge window so we should still fail
         vm.expectRevert("Too early. Wait for challenge window to open");
         pdpService.possessionProven(dataSetId, leafCount, seed, 5);
@@ -302,16 +304,18 @@ contract SimplePDPServiceFaultsTest is Test {
         pdpService.nextProvingPeriod(dataSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
         vm.roll(block.number + pdpService.getMaxProvingPeriod() - 100);
         // Too early
-        uint256 tooEarly = pdpService.nextChallengeWindowStart(dataSetId)-1;
+        uint256 tooEarly = pdpService.nextChallengeWindowStart(dataSetId) - 1;
         vm.expectRevert("Next challenge epoch must fall within the next challenge window");
         pdpService.nextProvingPeriod(dataSetId, tooEarly, leafCount, empty);
         // Too late
-        uint256 tooLate = pdpService.nextChallengeWindowStart(dataSetId)+pdpService.challengeWindow()+1;
+        uint256 tooLate = pdpService.nextChallengeWindowStart(dataSetId) + pdpService.challengeWindow() + 1;
         vm.expectRevert("Next challenge epoch must fall within the next challenge window");
         pdpService.nextProvingPeriod(dataSetId, tooLate, leafCount, empty);
 
         // Works right on the deadline
-        pdpService.nextProvingPeriod(dataSetId, pdpService.nextChallengeWindowStart(dataSetId)+pdpService.challengeWindow(), leafCount, empty);
+        pdpService.nextProvingPeriod(
+            dataSetId, pdpService.nextChallengeWindowStart(dataSetId) + pdpService.challengeWindow(), leafCount, empty
+        );
     }
 
     function testMissChallengeWindowAfterFaults() public {
@@ -321,12 +325,12 @@ contract SimplePDPServiceFaultsTest is Test {
         vm.roll(block.number + pdpService.getMaxProvingPeriod() * 3 - 100);
 
         // Too early
-        uint256 tooEarly = pdpService.nextChallengeWindowStart(dataSetId)-1;
+        uint256 tooEarly = pdpService.nextChallengeWindowStart(dataSetId) - 1;
         vm.expectRevert("Next challenge epoch must fall within the next challenge window");
         pdpService.nextProvingPeriod(dataSetId, tooEarly, leafCount, empty);
 
         // Too late
-        uint256 tooLate = pdpService.nextChallengeWindowStart(dataSetId)+pdpService.challengeWindow()+1;
+        uint256 tooLate = pdpService.nextChallengeWindowStart(dataSetId) + pdpService.challengeWindow() + 1;
         vm.expectRevert("Next challenge epoch must fall within the next challenge window");
         pdpService.nextProvingPeriod(dataSetId, tooLate, leafCount, empty);
 
@@ -334,7 +338,9 @@ contract SimplePDPServiceFaultsTest is Test {
         vm.expectEmit(true, true, true, true);
         emit SimplePDPService.FaultRecord(dataSetId, 2, pdpService.provingDeadlines(dataSetId));
         // Works right on the deadline
-        pdpService.nextProvingPeriod(dataSetId, pdpService.nextChallengeWindowStart(dataSetId)+pdpService.challengeWindow(), leafCount, empty);
+        pdpService.nextProvingPeriod(
+            dataSetId, pdpService.nextChallengeWindowStart(dataSetId) + pdpService.challengeWindow(), leafCount, empty
+        );
     }
 
     function testInactivateWithCurrentPeriodFault() public {
