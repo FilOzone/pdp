@@ -21,14 +21,10 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
     PDPVerifier pdpVerifier;
     bytes empty = new bytes(0);
 
-
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
         uint256 challengeFinality = 2;
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            challengeFinality
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinality);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
     }
@@ -45,14 +41,22 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
 
         (address currentStorageProvider, address proposedStorageProvider) = pdpVerifier.getDataSetStorageProvider(setId);
         assertEq(currentStorageProvider, address(this), "Data set storage provider should be the constructor sender");
-        assertEq(proposedStorageProvider, address(0), "Data set proposed storage provider should be initialized to zero address");
+        assertEq(
+            proposedStorageProvider,
+            address(0),
+            "Data set proposed storage provider should be initialized to zero address"
+        );
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), 0, "Data set challenge epoch should be zero");
         assertEq(pdpVerifier.pieceLive(setId, 0), false, "Data set piece should not be live");
         assertEq(pdpVerifier.getPieceCid(setId, 0).data, zeroPiece.data, "Uninitialized piece should be empty");
         assertEq(pdpVerifier.getPieceLeafCount(setId, 0), 0, "Uninitialized piece should have zero leaves");
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), 0, "Data set challenge epoch should be zero");
-        assertEq(pdpVerifier.getDataSetListener(setId), address(listener), "Data set listener should be the constructor listener");
+        assertEq(
+            pdpVerifier.getDataSetListener(setId),
+            address(listener),
+            "Data set listener should be the constructor listener"
+        );
     }
 
     function testDeleteDataSet() public {
@@ -67,7 +71,7 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
     }
 
     function testOnlyStorageProviderCanDeleteDataSet() public {
-         vm.expectEmit(true, true, false, false);
+        vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(0, address(this));
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         // Create a new address to act as a non-storage-provider
@@ -100,7 +104,7 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         emit IPDPEvents.DataSetDeleted(setId, 0);
         pdpVerifier.deleteDataSet(setId, empty);
         vm.expectRevert("Only the storage provider can delete data sets");
-        pdpVerifier.deleteDataSet(setId, empty );
+        pdpVerifier.deleteDataSet(setId, empty);
         vm.expectRevert("Data set not live");
         pdpVerifier.getDataSetStorageProvider(setId);
         vm.expectRevert("Data set not live");
@@ -123,7 +127,7 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        pdpVerifier.createDataSet{value: PDPFees.sybilFee()} (address(listener), empty);
+        pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         assertEq(2, pdpVerifier.getNextDataSetId(), "Next data set ID should be 2");
         assertEq(2, pdpVerifier.getNextDataSetId(), "Next data set ID should be 2");
     }
@@ -151,7 +155,11 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0, "Data set leaf count should be 0");
         (address currentStorageProvider, address proposedStorageProvider) = pdpVerifier.getDataSetStorageProvider(setId);
         assertEq(currentStorageProvider, address(this), "Data set storage provider should be the constructor sender");
-        assertEq(proposedStorageProvider, address(0), "Data set proposed storage provider should be initialized to zero address");
+        assertEq(
+            proposedStorageProvider,
+            address(0),
+            "Data set proposed storage provider should be initialized to zero address"
+        );
     }
 }
 
@@ -163,13 +171,9 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
     address public nonStorageProvider;
     bytes empty = new bytes(0);
 
-
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            2
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         listener = new TestingRecordKeeperService();
@@ -182,16 +186,26 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
     function testStorageProviderTransfer() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
-        (address currentStorageProviderStart, address proposedStorageProviderStart) = pdpVerifier.getDataSetStorageProvider(setId);
-        assertEq(currentStorageProviderStart, storageProvider, "Data set storage provider should be the constructor sender");
-        assertEq(proposedStorageProviderStart, nextStorageProvider, "Data set proposed storage provider should make the one proposed");
+        (address currentStorageProviderStart, address proposedStorageProviderStart) =
+            pdpVerifier.getDataSetStorageProvider(setId);
+        assertEq(
+            currentStorageProviderStart, storageProvider, "Data set storage provider should be the constructor sender"
+        );
+        assertEq(
+            proposedStorageProviderStart,
+            nextStorageProvider,
+            "Data set proposed storage provider should make the one proposed"
+        );
         vm.prank(nextStorageProvider);
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.StorageProviderChanged(setId, storageProvider, nextStorageProvider);
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
-        (address currentStorageProviderEnd, address proposedStorageProviderEnd) = pdpVerifier.getDataSetStorageProvider(setId);
-        assertEq(currentStorageProviderEnd, nextStorageProvider, "Data set storage provider should be the next provider");
+        (address currentStorageProviderEnd, address proposedStorageProviderEnd) =
+            pdpVerifier.getDataSetStorageProvider(setId);
+        assertEq(
+            currentStorageProviderEnd, nextStorageProvider, "Data set storage provider should be the next provider"
+        );
         assertEq(proposedStorageProviderEnd, address(0), "Data set proposed storage provider should be zero address");
     }
 
@@ -199,8 +213,11 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         pdpVerifier.proposeDataSetStorageProvider(setId, storageProvider);
-        (address currentStorageProviderEnd, address proposedStorageProviderEnd) = pdpVerifier.getDataSetStorageProvider(setId);
-        assertEq(currentStorageProviderEnd, storageProvider, "Data set storage provider should be the constructor sender");
+        (address currentStorageProviderEnd, address proposedStorageProviderEnd) =
+            pdpVerifier.getDataSetStorageProvider(setId);
+        assertEq(
+            currentStorageProviderEnd, storageProvider, "Data set storage provider should be the constructor sender"
+        );
         assertEq(proposedStorageProviderEnd, address(0), "Data set proposed storage provider should be zero address");
     }
 
@@ -238,7 +255,6 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
     }
 }
 
-
 contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
     uint256 constant challengeFinalityDelay = 2;
 
@@ -246,13 +262,9 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
     TestingRecordKeeperService listener;
     bytes empty = new bytes(0);
 
-
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            challengeFinalityDelay
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
     }
@@ -307,7 +319,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         emit IPDPEvents.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 6);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
-        uint256 expectedLeafCount = 64+128;
+        uint256 expectedLeafCount = 64 + 128;
         assertEq(pdpVerifier.getDataSetLeafCount(setId), expectedLeafCount);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
 
@@ -334,7 +346,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         pdpVerifier.addPieces(setId, pieces, empty);
 
         // Fail when piece size is too large
-        pieces[0] = makeSamplePiece(1<<pdpVerifier.MAX_PIECE_SIZE_LOG2()+1);
+        pieces[0] = makeSamplePiece(1 << pdpVerifier.MAX_PIECE_SIZE_LOG2() + 1);
         expectIndexedError(0, "Piece size must be less than 2^50");
         pdpVerifier.addPieces(setId, pieces, empty);
 
@@ -378,7 +390,6 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
 
-
         // Remove piece
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 0;
@@ -395,7 +406,6 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         bytes memory emptyCidData = new bytes(0);
         assertEq(pdpVerifier.getPieceCid(setId, 0).data, emptyCidData);
         assertEq(pdpVerifier.getPieceLeafCount(setId, 0), 0);
-
     }
 
     function testCannotScheduleRemovalOnNonLiveDataSet() public {
@@ -438,7 +448,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         assertEq(pdpVerifier.pieceLive(setId, 2), false);
 
         assertEq(pdpVerifier.getNextPieceId(setId), 3);
-        assertEq(pdpVerifier.getDataSetLeafCount(setId), 64/32);
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 64 / 32);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
 
         bytes memory emptyCidData = new bytes(0);
@@ -447,9 +457,8 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         assertEq(pdpVerifier.getPieceCid(setId, 2).data, emptyCidData);
 
         assertEq(pdpVerifier.getPieceLeafCount(setId, 0), 0);
-        assertEq(pdpVerifier.getPieceLeafCount(setId, 1), 64/32);
+        assertEq(pdpVerifier.getPieceLeafCount(setId, 1), 64 / 32);
         assertEq(pdpVerifier.getPieceLeafCount(setId, 2), 0);
-
     }
 
     function testRemoveFuturePieces() public {
@@ -493,7 +502,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
     function testExtraDataMaxSizeLimit() public {
         // Generate extra data that exceeds the max size (2KB)
         bytes memory tooLargeExtraData = new bytes(2049); // 2KB + 1 byte
-        for (uint i = 0; i < tooLargeExtraData.length; i++) {
+        for (uint256 i = 0; i < tooLargeExtraData.length; i++) {
             tooLargeExtraData[i] = 0x41; // ASCII 'A'
         }
 
@@ -624,11 +633,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         // Try to call nextProvingPeriod on the empty data set
         // Should revert because no leaves have been added yet
         vm.expectRevert("can only start proving once leaves are added");
-        pdpVerifier.nextProvingPeriod(
-            setId,
-            block.number + challengeFinalityDelay,
-            empty
-        );
+        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
     }
 
     function testEmitDataSetEmptyEvent() public {
@@ -666,22 +671,18 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
         uint256 challengeFinality = 2;
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            challengeFinality
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinality);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         listener = new TestingRecordKeeperService();
     }
 
-
     function testGetActivePiecesEmpty() public {
         // Create empty data set and test
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
-        (Cids.Cid[] memory pieces, uint256[] memory ids,
-         uint256[] memory sizes, bool hasMore) = pdpVerifier.getActivePieces(setId, 0, 10);
+        (Cids.Cid[] memory pieces, uint256[] memory ids, uint256[] memory sizes, bool hasMore) =
+            pdpVerifier.getActivePieces(setId, 0, 10);
 
         assertEq(pieces.length, 0, "Should return empty array for empty data set");
         assertEq(ids.length, 0, "Should return empty IDs array");
@@ -697,8 +698,8 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
 
         // Add 15 pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](15);
-        for (uint i = 0; i < 15; i++) {
-            testPieces[i] = makeSamplePiece(1024/32 * (i + 1));
+        for (uint256 i = 0; i < 15; i++) {
+            testPieces[i] = makeSamplePiece(1024 / 32 * (i + 1));
         }
 
         uint256 firstPieceId = pdpVerifier.addPieces(setId, testPieces, empty);
@@ -738,16 +739,16 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
 
         // Add pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](10);
-        for (uint i = 0; i < 10; i++) {
-            testPieces[i] = makeSamplePiece(1024/32);
+        for (uint256 i = 0; i < 10; i++) {
+            testPieces[i] = makeSamplePiece(1024 / 32);
         }
         uint256 firstPieceId = pdpVerifier.addPieces(setId, testPieces, empty);
 
         // Schedule removal of pieces 2, 4, 6 (indices 1, 3, 5)
         uint256[] memory toRemove = new uint256[](3);
-        toRemove[0] = firstPieceId + 1;  // Piece at index 1
-        toRemove[1] = firstPieceId + 3;  // Piece at index 3
-        toRemove[2] = firstPieceId + 5;  // Piece at index 5
+        toRemove[0] = firstPieceId + 1; // Piece at index 1
+        toRemove[1] = firstPieceId + 3; // Piece at index 3
+        toRemove[2] = firstPieceId + 5; // Piece at index 5
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
         // Move to next proving period to make removals effective
@@ -776,8 +777,8 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
 
         // Add 5 pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](5);
-        for (uint i = 0; i < 5; i++) {
-            testPieces[i] = makeSamplePiece(1024/32);
+        for (uint256 i = 0; i < 5; i++) {
+            testPieces[i] = makeSamplePiece(1024 / 32);
         }
         pdpVerifier.addPieces(setId, testPieces, empty);
 
@@ -818,8 +819,8 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
 
         // Add exactly 10 pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](10);
-        for (uint i = 0; i < 10; i++) {
-            testPieces[i] = makeSamplePiece(1024/32);
+        for (uint256 i = 0; i < 10; i++) {
+            testPieces[i] = makeSamplePiece(1024 / 32);
         }
         pdpVerifier.addPieces(setId, testPieces, empty);
 
@@ -845,8 +846,8 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
 
         // Add 100 pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](100);
-        for (uint i = 0; i < 100; i++) {
-            testPieces[i] = makeSamplePiece(1024/32 * (i + 1));
+        for (uint256 i = 0; i < 100; i++) {
+            testPieces[i] = makeSamplePiece(1024 / 32 * (i + 1));
         }
         pdpVerifier.addPieces(setId, testPieces, empty);
 
@@ -871,7 +872,7 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
             }
 
             // Verify IDs are sequential
-            for (uint i = 0; i < pieces.length; i++) {
+            for (uint256 i = 0; i < pieces.length; i++) {
                 assertEq(ids[i], offset + i, "IDs should be sequential");
                 assertEq(sizes[i], 1024 * (offset + i + 1), "Sizes should match pattern");
             }
@@ -899,7 +900,10 @@ contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.DELETE, abi.encode(deletedLeafCount));
     }
 
-    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] calldata pieceData, bytes calldata) external override {
+    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] calldata pieceData, bytes calldata)
+        external
+        override
+    {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.ADD, abi.encode(firstAdded, pieceData));
     }
 
@@ -907,19 +911,30 @@ contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.REMOVE_SCHEDULED, abi.encode(pieceIds));
     }
 
-    function possessionProven(uint256 dataSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external override {
-        receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.PROVE_POSSESSION, abi.encode(challengedLeafCount, seed, challengeCount));
+    function possessionProven(uint256 dataSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount)
+        external
+        override
+    {
+        receiveDataSetEvent(
+            dataSetId,
+            PDPRecordKeeper.OperationType.PROVE_POSSESSION,
+            abi.encode(challengedLeafCount, seed, challengeCount)
+        );
     }
 
-    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata) external override {
-        receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD, abi.encode(challengeEpoch, leafCount));
+    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata)
+        external
+        override
+    {
+        receiveDataSetEvent(
+            dataSetId, PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD, abi.encode(challengeEpoch, leafCount)
+        );
     }
 }
 
-
 contract SumTreeInternalTestPDPVerifier is PDPVerifier {
-    constructor() {
-    }
+    constructor() {}
+
     function getTestHeightFromIndex(uint256 index) public pure returns (uint256) {
         return heightFromIndex(index);
     }
@@ -934,10 +949,7 @@ contract SumTreeHeightTest is Test {
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new SumTreeInternalTestPDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            2
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = SumTreeInternalTestPDPVerifier(address(proxy));
     }
@@ -945,13 +957,118 @@ contract SumTreeHeightTest is Test {
     function testHeightFromIndex() public view {
         // https://oeis.org/A001511
         uint8[105] memory oeisA001511 = [
-            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6,
-            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 7,
-            1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 5, 1, 2, 1, 3, 1, 2, 1, 4, 1, 2, 1, 3, 1, 2, 1, 6,
-            1, 2, 1, 3, 1, 2, 1, 4, 1
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            4,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            5,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            4,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            6,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            4,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            5,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            4,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            7,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            4,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            5,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            4,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            6,
+            1,
+            2,
+            1,
+            3,
+            1,
+            2,
+            1,
+            4,
+            1
         ];
         for (uint256 i = 0; i < 105; i++) {
-            assertEq(uint256(oeisA001511[i]), pdpVerifier.getTestHeightFromIndex(i) + 1, "Heights from index 0 to 104 should match OEIS A001511");
+            assertEq(
+                uint256(oeisA001511[i]),
+                pdpVerifier.getTestHeightFromIndex(i) + 1,
+                "Heights from index 0 to 104 should match OEIS A001511"
+            );
         }
     }
 }
@@ -968,10 +1085,7 @@ contract SumTreeAddTest is Test, PieceHelper {
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new SumTreeInternalTestPDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            challengeFinalityDelay
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = SumTreeInternalTestPDPVerifier(address(proxy));
         listener = new TestingRecordKeeperService();
@@ -1139,7 +1253,10 @@ contract SumTreeAddTest is Test, PieceHelper {
 
     error TestingFindError(uint256 expected, uint256 actual, string msg);
 
-    function assertFindPieceAndOffset(uint256 setId, uint256 searchIndex, uint256 expectPieceId, uint256 expectOffset) internal view {
+    function assertFindPieceAndOffset(uint256 setId, uint256 searchIndex, uint256 expectPieceId, uint256 expectOffset)
+        internal
+        view
+    {
         uint256[] memory searchIndices = new uint256[](1);
         searchIndices[0] = searchIndex;
         IPDPTypes.PieceIdAndOffset[] memory result = pdpVerifier.findPieceIds(setId, searchIndices);
@@ -1152,7 +1269,12 @@ contract SumTreeAddTest is Test, PieceHelper {
     }
 
     // The batched version of assertFindPieceAndOffset
-    function assertFindPiecesAndOffsets(uint256 setId, uint256[] memory searchIndices, uint256[] memory expectPieceIds, uint256[] memory expectOffsets) internal view {
+    function assertFindPiecesAndOffsets(
+        uint256 setId,
+        uint256[] memory searchIndices,
+        uint256[] memory expectPieceIds,
+        uint256[] memory expectOffsets
+    ) internal view {
         IPDPTypes.PieceIdAndOffset[] memory result = pdpVerifier.findPieceIds(setId, searchIndices);
         for (uint256 i = 0; i < searchIndices.length; i++) {
             assertEq(result[i].pieceId, expectPieceIds[i], "unexpected piece");
@@ -1195,34 +1317,53 @@ contract BadListener is PDPListener {
 
     function storageProviderChanged(uint256, address, address, bytes calldata) external override {}
 
-    function dataSetCreated(uint256 dataSetId, address creator, bytes calldata) external override view {
+    function dataSetCreated(uint256 dataSetId, address creator, bytes calldata) external view override {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.CREATE, abi.encode(creator));
     }
 
-    function dataSetDeleted(uint256 dataSetId, uint256 deletedLeafCount, bytes calldata) external override view {
+    function dataSetDeleted(uint256 dataSetId, uint256 deletedLeafCount, bytes calldata) external view override {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.DELETE, abi.encode(deletedLeafCount));
     }
 
-    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] calldata pieceData, bytes calldata) external override view {
+    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] calldata pieceData, bytes calldata)
+        external
+        view
+        override
+    {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.ADD, abi.encode(firstAdded, pieceData));
     }
-    function piecesScheduledRemove(uint256 dataSetId, uint256[] calldata pieceIds, bytes calldata) external override view {
+
+    function piecesScheduledRemove(uint256 dataSetId, uint256[] calldata pieceIds, bytes calldata)
+        external
+        view
+        override
+    {
         receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.REMOVE_SCHEDULED, abi.encode(pieceIds));
     }
 
-    function possessionProven(uint256 dataSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external override view {
-        receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.PROVE_POSSESSION, abi.encode(challengedLeafCount, seed, challengeCount));
+    function possessionProven(uint256 dataSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount)
+        external
+        view
+        override
+    {
+        receiveDataSetEvent(
+            dataSetId,
+            PDPRecordKeeper.OperationType.PROVE_POSSESSION,
+            abi.encode(challengedLeafCount, seed, challengeCount)
+        );
     }
 
-    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata) external override view {
-        receiveDataSetEvent(dataSetId, PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD, abi.encode(challengeEpoch, leafCount));
+    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata)
+        external
+        view
+        override
+    {
+        receiveDataSetEvent(
+            dataSetId, PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD, abi.encode(challengeEpoch, leafCount)
+        );
     }
 
-    function receiveDataSetEvent(
-        uint256,
-        PDPRecordKeeper.OperationType operationType,
-        bytes memory
-    ) view internal {
+    function receiveDataSetEvent(uint256, PDPRecordKeeper.OperationType operationType, bytes memory) internal view {
         if (operationType == badOperation) {
             revert("Failing operation");
         }
@@ -1237,10 +1378,7 @@ contract PDPListenerIntegrationTest is Test, PieceHelper {
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            challengeFinalityDelay
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         badListener = new BadListener();
@@ -1285,23 +1423,34 @@ contract ExtraDataListener is PDPListener {
     mapping(uint256 => mapping(PDPRecordKeeper.OperationType => bytes)) public extraDataBySetId;
 
     function storageProviderChanged(uint256, address, address, bytes calldata) external override {}
+
     function dataSetCreated(uint256 dataSetId, address, bytes calldata extraData) external override {
         extraDataBySetId[dataSetId][PDPRecordKeeper.OperationType.CREATE] = extraData;
     }
+
     function dataSetDeleted(uint256 dataSetId, uint256, bytes calldata extraData) external override {
         extraDataBySetId[dataSetId][PDPRecordKeeper.OperationType.DELETE] = extraData;
     }
+
     function piecesAdded(uint256 dataSetId, uint256, Cids.Cid[] calldata, bytes calldata extraData) external override {
         extraDataBySetId[dataSetId][PDPRecordKeeper.OperationType.ADD] = extraData;
     }
+
     function piecesScheduledRemove(uint256 dataSetId, uint256[] calldata, bytes calldata extraData) external override {
         extraDataBySetId[dataSetId][PDPRecordKeeper.OperationType.REMOVE_SCHEDULED] = extraData;
     }
+
     function possessionProven(uint256, uint256, uint256, uint256) external override {}
+
     function nextProvingPeriod(uint256 dataSetId, uint256, uint256, bytes calldata extraData) external override {
         extraDataBySetId[dataSetId][PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD] = extraData;
     }
-    function getExtraData(uint256 dataSetId, PDPRecordKeeper.OperationType opType) external view returns (bytes memory) {
+
+    function getExtraData(uint256 dataSetId, PDPRecordKeeper.OperationType opType)
+        external
+        view
+        returns (bytes memory)
+    {
         return extraDataBySetId[dataSetId][opType];
     }
 }
@@ -1314,10 +1463,7 @@ contract PDPVerifierExtraDataTest is Test, PieceHelper {
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            challengeFinalityDelay
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         extraDataListener = new ExtraDataListener();
@@ -1370,10 +1516,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            challengeFinalityDelay
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         listener = new TestingRecordKeeperService();
@@ -1384,34 +1527,19 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
     receive() external payable {}
 
     function createPythCallData() internal view returns (bytes memory, PythStructs.Price memory) {
-        bytes memory pythCallData = abi.encodeWithSelector(
-            IPyth.getPriceNoOlderThan.selector,
-            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
-            86400
-        );
+        bytes memory pythCallData =
+            abi.encodeWithSelector(IPyth.getPriceNoOlderThan.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID(), 86400);
 
-        PythStructs.Price memory price = PythStructs.Price({
-            price: 5,
-            conf: 0,
-            expo: 0,
-            publishTime: 0
-        });
+        PythStructs.Price memory price = PythStructs.Price({price: 5, conf: 0, expo: 0, publishTime: 0});
 
         return (pythCallData, price);
     }
 
     function createPythUnsafeCallData() internal view returns (bytes memory, PythStructs.Price memory) {
-        bytes memory callData = abi.encodeWithSelector(
-            IPyth.getPriceUnsafe.selector,
-            pdpVerifier.FIL_USD_PRICE_FEED_ID()
-        );
+        bytes memory callData =
+            abi.encodeWithSelector(IPyth.getPriceUnsafe.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID());
 
-        PythStructs.Price memory price = PythStructs.Price({
-            price: 6,
-            conf: 0,
-            expo: 0,
-            publishTime: 0
-        });
+        PythStructs.Price memory price = PythStructs.Price({price: 6, conf: 0, expo: 0, publishTime: 0});
 
         return (callData, price);
     }
@@ -1457,7 +1585,11 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
 
         uint256 challengeRangePP1 = pdpVerifier.getChallengeRange(setId);
-        assertEq(challengeRangePP1, pdpVerifier.getDataSetLeafCount(setId), "Last challenged leaf should be total leaf count - 1");
+        assertEq(
+            challengeRangePP1,
+            pdpVerifier.getDataSetLeafCount(setId),
+            "Last challenged leaf should be total leaf count - 1"
+        );
 
         // Step 3: Now that first challenge is set for sampling add more data `B` only in scope for the second proving period
         uint256[] memory leafCountsB = new uint256[](2);
@@ -1473,21 +1605,31 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         piecesPP2[1] = makePiece(treesB[1], leafCountsB[1]);
         pdpVerifier.addPieces(setId, piecesPP2, empty);
 
-        assertEq(pdpVerifier.getPieceLeafCount(setId, 0), leafCountsA[0], "sanity check: First piece leaf count should be correct");
+        assertEq(
+            pdpVerifier.getPieceLeafCount(setId, 0),
+            leafCountsA[0],
+            "sanity check: First piece leaf count should be correct"
+        );
         assertEq(pdpVerifier.getPieceLeafCount(setId, 1), leafCountsA[1], "Second piece leaf count should be correct");
         assertEq(pdpVerifier.getPieceLeafCount(setId, 2), leafCountsB[0], "Third piece leaf count should be correct");
         assertEq(pdpVerifier.getPieceLeafCount(setId, 3), leafCountsB[1], "Fourth piece leaf count should be correct");
 
         // CHECK: last challenged leaf doesn't move
         assertEq(pdpVerifier.getChallengeRange(setId), challengeRangePP1, "Last challenged leaf should not move");
-        assertEq(pdpVerifier.getDataSetLeafCount(setId), leafCountsA[0] + leafCountsA[1] + leafCountsB[0] + leafCountsB[1], "Leaf count should only include non-removed pieces");
+        assertEq(
+            pdpVerifier.getDataSetLeafCount(setId),
+            leafCountsA[0] + leafCountsA[1] + leafCountsB[0] + leafCountsB[1],
+            "Leaf count should only include non-removed pieces"
+        );
 
         // Step 5: schedule removal of first + second proving period data
         uint256[] memory piecesToRemove = new uint256[](2);
         piecesToRemove[0] = 1; // Remove the second piece from first proving period
         piecesToRemove[1] = 3; // Remove the second piece from second proving period
         pdpVerifier.schedulePieceDeletions(setId, piecesToRemove, empty);
-        assertEq(pdpVerifier.getScheduledRemovals(setId), piecesToRemove, "Scheduled removals should match piecesToRemove");
+        assertEq(
+            pdpVerifier.getScheduledRemovals(setId), piecesToRemove, "Scheduled removals should match piecesToRemove"
+        );
 
         // Step 7: complete proving period 1.
         // Advance chain until challenge epoch.
@@ -1496,24 +1638,48 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         // Proving trees for PP1 are just treesA
         IPDPTypes.Proof[] memory proofsPP1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
 
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)));
+        vm.mockCall(
+            pdpVerifier.RANDOMNESS_PRECOMPILE(),
+            abi.encode(pdpVerifier.getNextChallengeEpoch(setId)),
+            abi.encode(pdpVerifier.getNextChallengeEpoch(setId))
+        );
 
         pdpVerifier.provePossession{value: 1e18}(setId, proofsPP1);
 
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
         // CHECK: leaf counts
-        assertEq(pdpVerifier.getPieceLeafCount(setId, 0), leafCountsA[0], "First piece leaf count should be the set leaf count");
+        assertEq(
+            pdpVerifier.getPieceLeafCount(setId, 0),
+            leafCountsA[0],
+            "First piece leaf count should be the set leaf count"
+        );
         assertEq(pdpVerifier.getPieceLeafCount(setId, 1), 0, "Second piece leaf count should be zeroed after removal");
-        assertEq(pdpVerifier.getPieceLeafCount(setId, 2), leafCountsB[0], "Third piece leaf count should be the set leaf count");
+        assertEq(
+            pdpVerifier.getPieceLeafCount(setId, 2),
+            leafCountsB[0],
+            "Third piece leaf count should be the set leaf count"
+        );
         assertEq(pdpVerifier.getPieceLeafCount(setId, 3), 0, "Fourth piece leaf count should be zeroed after removal");
-        assertEq(pdpVerifier.getDataSetLeafCount(setId), leafCountsA[0] + leafCountsB[0], "Leaf count should == size of non-removed pieces");
-        assertEq(pdpVerifier.getChallengeRange(setId), leafCountsA[0] + leafCountsB[0], "Last challenged leaf should be total leaf count");
+        assertEq(
+            pdpVerifier.getDataSetLeafCount(setId),
+            leafCountsA[0] + leafCountsB[0],
+            "Leaf count should == size of non-removed pieces"
+        );
+        assertEq(
+            pdpVerifier.getChallengeRange(setId),
+            leafCountsA[0] + leafCountsB[0],
+            "Last challenged leaf should be total leaf count"
+        );
 
         // CHECK: scheduled removals are processed
         assertEq(pdpVerifier.getScheduledRemovals(setId), new uint256[](0), "Scheduled removals should be processed");
 
         // CHECK: the next challenge epoch has been updated
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay, "Next challenge epoch should be updated");
+        assertEq(
+            pdpVerifier.getNextChallengeEpoch(setId),
+            block.number + challengeFinalityDelay,
+            "Next challenge epoch should be updated"
+        );
     }
 }
 
@@ -1523,7 +1689,7 @@ contract PDPVerifierMigrateTest is Test {
     MyERC1967Proxy proxy;
 
     function setUp() public {
-        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector,2);
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
         implementation = new PDPVerifier();
         newImplementation = new PDPVerifier();
         proxy = new MyERC1967Proxy(address(implementation), initializeData);
@@ -1539,6 +1705,7 @@ contract PDPVerifierMigrateTest is Test {
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
     }
 }
+
 contract MockStorageProviderChangedListener is PDPListener {
     uint256 public lastDataSetId;
     address public lastOldStorageProvider;
@@ -1546,15 +1713,23 @@ contract MockStorageProviderChangedListener is PDPListener {
     bytes public lastExtraData;
     bool public shouldRevert;
 
-    function setShouldRevert(bool value) external { shouldRevert = value; }
+    function setShouldRevert(bool value) external {
+        shouldRevert = value;
+    }
 
-    function storageProviderChanged(uint256 dataSetId, address oldStorageProvider, address newStorageProvider, bytes calldata extraData) external override {
+    function storageProviderChanged(
+        uint256 dataSetId,
+        address oldStorageProvider,
+        address newStorageProvider,
+        bytes calldata extraData
+    ) external override {
         if (shouldRevert) revert("MockStorageProviderChangedListener: forced revert");
         lastDataSetId = dataSetId;
         lastOldStorageProvider = oldStorageProvider;
         lastNewStorageProvider = newStorageProvider;
         lastExtraData = extraData;
     }
+
     function dataSetCreated(uint256, address, bytes calldata) external override {}
     function dataSetDeleted(uint256, uint256, bytes calldata) external override {}
     function piecesAdded(uint256, uint256, Cids.Cid[] calldata, bytes calldata) external override {}
@@ -1573,10 +1748,7 @@ contract PDPVerifierStorageProviderListenerTest is Test {
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            2
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         listener = new MockStorageProviderChangedListener();
@@ -1600,7 +1772,7 @@ contract PDPVerifierStorageProviderListenerTest is Test {
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         vm.prank(nextStorageProvider);
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
-      // No assertion needed, test passes if no revert
+        // No assertion needed, test passes if no revert
     }
 
     function testListenerRevertDoesNotRevertMainTx() public {

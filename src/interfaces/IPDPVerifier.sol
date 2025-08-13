@@ -30,9 +30,14 @@ interface IPDPVerifier is IPDPEvents {
     function claimDataSetStorageProvider(uint256 setId, bytes calldata extraData) external;
     function createDataSet(address listenerAddr, bytes calldata extraData) external payable returns (uint256);
     function deleteDataSet(uint256 setId, bytes calldata extraData) external;
-    function addPieces(uint256 setId, Cids.Cid[] calldata pieceData, bytes calldata extraData) external returns (uint256);
+    function addPieces(uint256 setId, Cids.Cid[] calldata pieceData, bytes calldata extraData)
+        external
+        returns (uint256);
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) external;
     function provePossession(uint256 setId, IPDPTypes.Proof[] calldata proofs) external payable;
     function nextProvingPeriod(uint256 setId, uint256 challengeEpoch, bytes calldata extraData) external;
-    function findPieceIds(uint256 setId, uint256[] calldata leafIndexs) external view returns (IPDPTypes.PieceIdAndOffset[] memory);
+    function findPieceIds(uint256 setId, uint256[] calldata leafIndexs)
+        external
+        view
+        returns (IPDPTypes.PieceIdAndOffset[] memory);
 }

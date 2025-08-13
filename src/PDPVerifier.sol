@@ -20,13 +20,21 @@ import {IPDPEvents} from "./interfaces/IPDPEvents.sol";
 interface PDPListener {
     function dataSetCreated(uint256 dataSetId, address creator, bytes calldata extraData) external;
     function dataSetDeleted(uint256 dataSetId, uint256 deletedLeafCount, bytes calldata extraData) external;
-    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] memory pieceData, bytes calldata extraData) external;
+    function piecesAdded(uint256 dataSetId, uint256 firstAdded, Cids.Cid[] memory pieceData, bytes calldata extraData)
+        external;
     function piecesScheduledRemove(uint256 dataSetId, uint256[] memory pieceIds, bytes calldata extraData) external;
     // Note: extraData not included as proving messages conceptually always originate from the SP
-    function possessionProven(uint256 dataSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount) external;
-    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata extraData) external;
+    function possessionProven(uint256 dataSetId, uint256 challengedLeafCount, uint256 seed, uint256 challengeCount)
+        external;
+    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256 leafCount, bytes calldata extraData)
+        external;
     /// @notice Called when data set storage provider is changed in PDPVerifier.
-    function storageProviderChanged(uint256 dataSetId, address oldStorageProvider, address newStorageProvider, bytes calldata extraData) external;
+    function storageProviderChanged(
+        uint256 dataSetId,
+        address oldStorageProvider,
+        address newStorageProvider,
+        bytes calldata extraData
+    ) external;
 }
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -45,10 +53,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
 
-
     // Events
     event DataSetCreated(uint256 indexed setId, address indexed storageProvider);
-    event StorageProviderChanged(uint256 indexed setId, address indexed oldStorageProvider, address indexed newStorageProvider);
+    event StorageProviderChanged(
+        uint256 indexed setId, address indexed oldStorageProvider, address indexed newStorageProvider
+    );
     event DataSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event DataSetEmpty(uint256 indexed setId);
 
@@ -56,7 +65,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
 
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
-
 
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
@@ -138,7 +146,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
-     _disableInitializers();
+        _disableInitializers();
     }
 
     function initialize(uint256 _challengeFinality) public initializer {
@@ -148,6 +156,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     string public constant VERSION = "2.0.0";
+
     event ContractUpgraded(string version, address implementation);
 
     function migrate() external onlyOwner reinitializer(2) {
@@ -158,7 +167,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function burnFee(uint256 amount) internal {
         require(msg.value >= amount, "Incorrect fee amount");
-        (bool success, ) = BURN_ACTOR.call{value: amount}("");
+        (bool success,) = BURN_ACTOR.call{value: amount}("");
         require(success, "Burn failed");
     }
 
@@ -185,8 +194,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns false if the piece is not live or if the piece id is not yet in challenge range
     function pieceChallengable(uint256 setId, uint256 pieceId) public view returns (bool) {
         uint256 top = 256 - BitOps.clz(nextPieceId[setId]);
-        IPDPTypes.PieceIdAndOffset memory ret = findOnePieceId(setId, challengeRange[setId]-1, top);
-        require(ret.offset == pieceLeafCounts[setId][ret.pieceId] - 1, "challengeRange -1 should align with the very last leaf of a piece");
+        IPDPTypes.PieceIdAndOffset memory ret = findOnePieceId(setId, challengeRange[setId] - 1, top);
+        require(
+            ret.offset == pieceLeafCounts[setId][ret.pieceId] - 1,
+            "challengeRange -1 should align with the very last leaf of a piece"
+        );
         return pieceLive(setId, pieceId) && pieceId <= ret.pieceId;
     }
 
@@ -280,16 +292,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @return rawSizes Array of raw sizes for each piece (in bytes)
      * @return hasMore True if there are more pieces beyond this page
      */
-    function getActivePieces(
-        uint256 setId,
-        uint256 offset,
-        uint256 limit
-    ) public view returns (
-        Cids.Cid[] memory pieces,
-        uint256[] memory pieceIds,
-        uint256[] memory rawSizes,
-        bool hasMore
-    ) {
+    function getActivePieces(uint256 setId, uint256 offset, uint256 limit)
+        public
+        view
+        returns (Cids.Cid[] memory pieces, uint256[] memory pieceIds, uint256[] memory rawSizes, bool hasMore)
+    {
         require(dataSetLive(setId), "Data set not live");
         require(limit > 0, "Limit must be greater than 0");
 
@@ -347,7 +354,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function proposeDataSetStorageProvider(uint256 setId, address newStorageProvider) public {
         require(dataSetLive(setId), "Data set not live");
         address currentStorageProvider = storageProvider[setId];
-        require(currentStorageProvider == msg.sender, "Only the current storage provider can propose a new storage provider");
+        require(
+            currentStorageProvider == msg.sender, "Only the current storage provider can propose a new storage provider"
+        );
         if (currentStorageProvider == newStorageProvider) {
             // If the storage provider proposes themself delete any outstanding proposed storage provider
             delete dataSetProposedStorageProvider[setId];
@@ -358,7 +367,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function claimDataSetStorageProvider(uint256 setId, bytes calldata extraData) public {
         require(dataSetLive(setId), "Data set not live");
-        require(dataSetProposedStorageProvider[setId] == msg.sender, "Only the proposed storage provider can claim storage provider role");
+        require(
+            dataSetProposedStorageProvider[setId] == msg.sender,
+            "Only the proposed storage provider can claim storage provider role"
+        );
         address oldStorageProvider = storageProvider[setId];
         storageProvider[setId] = msg.sender;
         delete dataSetProposedStorageProvider[setId];
@@ -380,7 +392,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 setId = nextDataSetId++;
         dataSetLeafCount[setId] = 0;
-        nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED;  // Initialized on first call to NextProvingPeriod
+        nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED; // Initialized on first call to NextProvingPeriod
         storageProvider[setId] = msg.sender;
         dataSetListener[setId] = listenerAddr;
         dataSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
@@ -392,7 +404,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // Return the at the end to avoid any possible re-entrency issues.
         if (msg.value > sybilFee) {
-            (bool success, ) = msg.sender.call{value: msg.value - sybilFee}("");
+            (bool success,) = msg.sender.call{value: msg.value - sybilFee}("");
             require(success, "Transfer failed.");
         }
         return setId;
@@ -422,7 +434,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Appends new pieces to the collection managed by a data set.
     // These pieces won't be challenged until the next proving period is
     // started by calling nextProvingPeriod.
-    function addPieces(uint256 setId, Cids.Cid[] calldata pieceData, bytes calldata extraData) public returns (uint256) {
+    function addPieces(uint256 setId, Cids.Cid[] calldata pieceData, bytes calldata extraData)
+        public
+        returns (uint256)
+    {
         uint256 nPieces = pieceData.length;
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(dataSetLive(setId), "Data set not live");
@@ -430,7 +445,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(storageProvider[setId] == msg.sender, "Only the storage provider can add pieces");
         uint256 firstAdded = nextPieceId[setId];
         uint256[] memory pieceIds = new uint256[](pieceData.length);
-
 
         for (uint256 i = 0; i < nPieces; i++) {
             addOnePiece(setId, i, pieceData[i]);
@@ -449,7 +463,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error IndexedError(uint256 idx, string msg);
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
-        (uint256 padding, uint8 height, ) = Cids.validateCommPv2(piece);
+        (uint256 padding, uint8 height,) = Cids.validateCommPv2(piece);
         if (Cids.isPaddingExcessive(padding, height)) {
             revert IndexedError(callIdx, "Padding is too large");
         }
@@ -472,9 +486,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(dataSetLive(setId), "Data set not live");
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
-        require(pieceIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS, "Too many removals wait for next proving period to schedule");
+        require(
+            pieceIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS,
+            "Too many removals wait for next proving period to schedule"
+        );
 
-        for (uint256 i = 0; i < pieceIds.length; i++){
+        for (uint256 i = 0; i < pieceIds.length; i++) {
             require(pieceIds[i] < nextPieceId[setId], "Can only schedule removal of existing pieces");
             scheduledRemovals[setId].push(pieceIds[i]);
         }
@@ -526,11 +543,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 Cids.Cid memory pieceCid = getPieceCid(setId, challenges[i].pieceId);
                 bytes32 pieceHash = Cids.digestFromCid(pieceCid);
                 uint8 pieceHeight = Cids.heightFromCid(pieceCid) + 1; // because MerkleVerify.verify assumes that base layer is 1
-                bool ok = MerkleVerify.verify(proofs[i].proof, pieceHash, proofs[i].leaf, challenges[i].offset, pieceHeight);
+                bool ok =
+                    MerkleVerify.verify(proofs[i].proof, pieceHash, proofs[i].leaf, challenges[i].offset, pieceHeight);
                 require(ok, "proof did not verify");
             }
         }
-
 
         // Note: We don't want to include gas spent on the listener call in the fee calculation
         // to only account for proof verification fees and avoid gamability by getting the listener
@@ -553,7 +570,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Return the overpayment after doing everything else to avoid re-entrancy issues (all state has been updated by this point). If this
         // call fails, the entire operation reverts.
         if (refund > 0) {
-            (bool success, ) = msg.sender.call{value: refund}("");
+            (bool success,) = msg.sender.call{value: refund}("");
             require(success, "Transfer failed.");
         }
     }
@@ -563,11 +580,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
 
         return PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee,
-            filUsdPrice,
-            filUsdPriceExpo,
-            rawSize,
-            block.number - dataSetLastProvenEpoch[setId]
+            estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, block.number - dataSetLastProvenEpoch[setId]
         );
     }
 
@@ -577,11 +590,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
 
         uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee,
-            filUsdPrice,
-            filUsdPriceExpo,
-            rawSize,
-            block.number - dataSetLastProvenEpoch[setId]
+            estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, block.number - dataSetLastProvenEpoch[setId]
         );
         burnFee(proofFee);
         emit ProofFeePaid(setId, proofFee, filUsdPrice, filUsdPriceExpo);
@@ -608,7 +617,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Decode and return the result
         return abi.decode(result, (uint256));
     }
-
 
     function drawChallengeSeed(uint256 setId) internal view returns (uint256) {
         return getRandomness(nextChallengeEpoch[setId]);
@@ -668,7 +676,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).nextProvingPeriod(setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData);
+            PDPListener(listenerAddr).nextProvingPeriod(
+                setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData
+            );
         }
         emit NextProvingPeriod(setId, challengeEpoch, dataSetLeafCount[setId]);
     }
@@ -677,7 +687,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function removePieces(uint256 setId, uint256[] memory pieceIds) internal {
         require(dataSetLive(setId), "Data set not live");
         uint256 totalDelta = 0;
-        for (uint256 i = 0; i < pieceIds.length; i++){
+        for (uint256 i = 0; i < pieceIds.length; i++) {
             totalDelta += removeOnePiece(setId, pieceIds[i]);
         }
         dataSetLeafCount[setId] -= totalDelta;
@@ -749,7 +759,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Perform sumtree find
-    function findOnePieceId(uint256 setId, uint256 leafIndex, uint256 top) internal view returns (IPDPTypes.PieceIdAndOffset memory) {
+    function findOnePieceId(uint256 setId, uint256 leafIndex, uint256 top)
+        internal
+        view
+        returns (IPDPTypes.PieceIdAndOffset memory)
+    {
         require(leafIndex < dataSetLeafCount[setId], "Leaf index out of bounds");
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
@@ -783,7 +797,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // findPieceIds is a batched version of findOnePieceId
-    function findPieceIds(uint256 setId, uint256[] calldata leafIndexs) public view returns (IPDPTypes.PieceIdAndOffset[] memory) {
+    function findPieceIds(uint256 setId, uint256[] calldata leafIndexs)
+        public
+        view
+        returns (IPDPTypes.PieceIdAndOffset[] memory)
+    {
         // The top of the sumtree is the largest power of 2 less than the number of pieces
         uint256 top = 256 - BitOps.clz(nextPieceId[setId]);
         IPDPTypes.PieceIdAndOffset[] memory result = new IPDPTypes.PieceIdAndOffset[](leafIndexs.length);
@@ -804,14 +822,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Add function to get FIL/USD price
     function getFILUSDPrice() public returns (uint64, int32) {
         // Get FIL/USD price no older than 1 day
-        try PYTH.getPriceNoOlderThan(
-            FIL_USD_PRICE_FEED_ID,
-            SECONDS_IN_DAY
-        ) returns (PythStructs.Price memory priceData) {
+        try PYTH.getPriceNoOlderThan(FIL_USD_PRICE_FEED_ID, SECONDS_IN_DAY) returns (PythStructs.Price memory priceData)
+        {
             require(priceData.price > 0, "failed to validate: price must be greater than 0");
             // Return the price and exponent representing USD per FIL
             return (uint64(priceData.price), priceData.expo);
-        }   catch (bytes memory reason) {
+        } catch (bytes memory reason) {
             // Log issue and fallback on latest unsafe price data
             emit PriceOracleFailure(reason);
             PythStructs.Price memory priceData = PYTH.getPriceUnsafe(FIL_USD_PRICE_FEED_ID);

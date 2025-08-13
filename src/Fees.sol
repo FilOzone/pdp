@@ -42,19 +42,22 @@ library PDPFees {
         int32 filUsdPriceExpo,
         uint256 rawSize,
         uint256 nProofEpochs
-    ) internal view returns (uint256) {        
-        require(estimatedGasFee > 0 || block.basefee == 0, "failed to validate: estimated gas fee must be greater than 0");
+    ) internal view returns (uint256) {
+        require(
+            estimatedGasFee > 0 || block.basefee == 0, "failed to validate: estimated gas fee must be greater than 0"
+        );
         require(filUsdPrice > 0, "failed to validate: AttoFIL price must be greater than 0");
         require(rawSize > 0, "failed to validate: raw size must be greater than 0");
 
         // Calculate reward per epoch per byte (in AttoFIL)
         uint256 rewardPerEpochPerByte;
         if (filUsdPriceExpo >= 0) {
-            rewardPerEpochPerByte = (ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL) / 
-                (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
+            rewardPerEpochPerByte = (ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL)
+                / (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice * (10 ** uint32(filUsdPriceExpo)));
         } else {
-            rewardPerEpochPerByte = (ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))) /
-                (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice);
+            rewardPerEpochPerByte = (
+                ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD * FIL_TO_ATTO_FIL * (10 ** uint32(-filUsdPriceExpo))
+            ) / (TIB_IN_BYTES * EPOCHS_PER_MONTH * filUsdPrice);
         }
 
         // Calculate total reward for the proving period

@@ -16,7 +16,6 @@ import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
 
-
 contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     uint256 constant challengeFinalityDelay = 2;
     string constant cidPrefix = "CID";
@@ -24,13 +23,9 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     PDPVerifier pdpVerifier;
     PDPListener listener;
 
-
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            challengeFinalityDelay
-        );
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         vm.fee(1 wei);
@@ -38,18 +33,10 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     }
 
     function createPythCallData() internal view returns (bytes memory, PythStructs.Price memory) {
-        bytes memory pythCallData = abi.encodeWithSelector(
-            IPyth.getPriceNoOlderThan.selector,
-            pdpVerifier.FIL_USD_PRICE_FEED_ID(),
-            86400
-        );
+        bytes memory pythCallData =
+            abi.encodeWithSelector(IPyth.getPriceNoOlderThan.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID(), 86400);
 
-        PythStructs.Price memory price = PythStructs.Price({
-            price: 5,
-            conf: 0,
-            expo: 0,
-            publishTime: 0
-        });
+        PythStructs.Price memory price = PythStructs.Price({price: 5, conf: 0, expo: 0, publishTime: 0});
 
         return (pythCallData, price);
     }
@@ -59,7 +46,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
-        uint leafCount = 10;
+        uint256 leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Advance chain until challenge epoch.
@@ -67,19 +54,18 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         vm.roll(challengeEpoch);
 
         // Build a proof with  multiple challenges to single tree.
-        uint challengeCount = 3;
+        uint256 challengeCount = 3;
         IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Submit proof.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
         vm.expectEmit(true, true, false, false);
         IPDPTypes.PieceIdAndOffset[] memory challenges = new IPDPTypes.PieceIdAndOffset[](challengeCount);
-        for (uint i = 0; i < challengeCount; i++) {
+        for (uint256 i = 0; i < challengeCount; i++) {
             challenges[i] = IPDPTypes.PieceIdAndOffset(0, 0);
         }
         emit IPDPEvents.PossessionProven(setId, challenges);
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
-
 
         // Verify the next challenge is in a subsequent epoch.
         // Next challenge unchanged by prove
@@ -92,7 +78,8 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     }
 
     receive() external payable {}
-        event Debug(string message, uint256 value);
+
+    event Debug(string message, uint256 value);
 
     function testProveWithDifferentFeeAmounts() public {
         vm.fee(0 gwei);
@@ -105,7 +92,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         vm.deal(sender, 1000 ether);
         vm.startPrank(sender);
 
-        uint leafCount = 10;
+        uint256 leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Advance chain until challenge epoch.
@@ -115,7 +102,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
 
         // Build a proof with multiple challenges to single tree.
-        uint challengeCount = 3;
+        uint256 challengeCount = 3;
         IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Mock block.number to 2881
@@ -141,7 +128,11 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         pdpVerifier.provePossession{value: correctFee + 1}(setId, proofs);
 
         // Verify that the proof was accepted
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), challengeEpoch, "Next challenge epoch should remain unchanged after prove");
+        assertEq(
+            pdpVerifier.getNextChallengeEpoch(setId),
+            challengeEpoch,
+            "Next challenge epoch should remain unchanged after prove"
+        );
     }
 
     function testDataSetLastProvenEpochOnPieceRemoval() public {
@@ -156,20 +147,26 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
 
-
         pdpVerifier.addPieces(setId, pieces, empty);
         pdpVerifier.nextProvingPeriod(setId, blockNumber + challengeFinalityDelay, empty);
-        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), blockNumber, "lastProvenEpoch should be set to block.number after first proving period piece");
+        assertEq(
+            pdpVerifier.getDataSetLastProvenEpoch(setId),
+            blockNumber,
+            "lastProvenEpoch should be set to block.number after first proving period piece"
+        );
 
         // Schedule piece removal
         uint256[] memory piecesToRemove = new uint256[](1);
         piecesToRemove[0] = 0;
         pdpVerifier.schedulePieceDeletions(setId, piecesToRemove, empty);
 
-
         // Call nextProvingPeriod and verify lastProvenEpoch is reset to 0
         pdpVerifier.nextProvingPeriod(setId, blockNumber + challengeFinalityDelay, empty);
-        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), 0, "lastProvenEpoch should be reset to 0 after removing last piece");
+        assertEq(
+            pdpVerifier.getDataSetLastProvenEpoch(setId),
+            0,
+            "lastProvenEpoch should be reset to 0 after removing last piece"
+        );
     }
 
     function testLateProofAccepted() public {
@@ -177,7 +174,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
-        uint leafCount = 10;
+        uint256 leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Advance chain short of challenge epoch
@@ -197,7 +194,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
-        uint leafCount = 3;
+        uint256 leafCount = 3;
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Advance chain short of challenge epoch
@@ -213,7 +210,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     }
 
     function testEarlyProofRejected() public {
-        uint leafCount = 10;
+        uint256 leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Advance chain short of challenge epoch
@@ -248,14 +245,13 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         pdpVerifier.provePossession{value: 1 ether}(setId, proofs);
     }
 
-
     function testEmptyProofRejected() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         IPDPTypes.Proof[] memory emptyProof = new IPDPTypes.Proof[](0);
 
         // Rejected with no pieces
         vm.expectRevert();
-        pdpVerifier.provePossession{value:1e18}(setId, emptyProof);
+        pdpVerifier.provePossession{value: 1e18}(setId, emptyProof);
 
         addOnePiece(setId, 10);
 
@@ -265,7 +261,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     }
 
     function testBadChallengeRejected() public {
-        uint leafCount = 10;
+        uint256 leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Make a proof that's good for this challenge epoch.
@@ -282,7 +278,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
         pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // resample
 
-        uint nextChallengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
+        uint256 nextChallengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         assertNotEq(nextChallengeEpoch, challengeEpoch);
         vm.roll(nextChallengeEpoch);
 
@@ -296,7 +292,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
-        uint[] memory leafCounts = new uint[](2);
+        uint256[] memory leafCounts = new uint256[](2);
         // Note: either co-prime leaf counts or a challenge count > 1 are required for this test to demonstrate the failing proof.
         // With a challenge count == 1 and leaf counts e.g. 10 and 20 it just so happens that the first computed challenge index is the same
         // (lying in the first piece) whether the tree has one or two pieces.
@@ -351,9 +347,9 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
-        uint[] memory leafCounts = new uint[](3);
+        uint256[] memory leafCounts = new uint256[](3);
         // Pick a distinct size for each tree (up to some small maximum size).
-        for (uint i = 0; i < leafCounts.length; i++) {
+        for (uint256 i = 0; i < leafCounts.length; i++) {
             leafCounts[i] = uint256(sha256(abi.encode(i))) % 64;
         }
 
@@ -364,7 +360,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         vm.roll(challengeEpoch);
 
         // Build a proof with multiple challenges to span the pieces.
-        uint challengeCount = 11;
+        uint256 challengeCount = 11;
         IPDPTypes.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
         // Submit proof.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
@@ -377,51 +373,58 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
         // Create data set and add initial piece
-        uint leafCount = 10;
+        uint256 leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Set challenge sampling far in the future
         uint256 farFutureBlock = block.number + 1000;
         pdpVerifier.nextProvingPeriod(setId, farFutureBlock, empty);
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), farFutureBlock, "Challenge epoch should be set to far future");
+        assertEq(
+            pdpVerifier.getNextChallengeEpoch(setId), farFutureBlock, "Challenge epoch should be set to far future"
+        );
 
         // Reset to a closer block
         uint256 nearerBlock = block.number + challengeFinalityDelay;
         pdpVerifier.nextProvingPeriod(setId, nearerBlock, empty);
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), nearerBlock, "Challenge epoch should be reset to nearer block");
+        assertEq(
+            pdpVerifier.getNextChallengeEpoch(setId), nearerBlock, "Challenge epoch should be reset to nearer block"
+        );
 
         // Verify we can still prove possession at the new block
         vm.roll(nearerBlock);
 
         IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 5, tree, 10);
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)), abi.encode(pdpVerifier.getNextChallengeEpoch(setId)));
+        vm.mockCall(
+            pdpVerifier.RANDOMNESS_PRECOMPILE(),
+            abi.encode(pdpVerifier.getNextChallengeEpoch(setId)),
+            abi.encode(pdpVerifier.getNextChallengeEpoch(setId))
+        );
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
     }
-
 
     function testProveSingleFake() public {
         // Mock Pyth oracle call to return $5 USD/FIL
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
-        uint leafCount = 10;
+        uint256 leafCount = 10;
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Advance chain until challenge epoch.
         uint256 challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch);
 
-        uint challengeCount = 3;
+        uint256 challengeCount = 3;
         // build fake proofs
         IPDPTypes.Proof[] memory proofs = new IPDPTypes.Proof[](5);
-        for (uint i = 0; i < 5; i++) {
+        for (uint256 i = 0; i < 5; i++) {
             proofs[i] = IPDPTypes.Proof(tree[0][0], new bytes32[](0));
         }
 
         // Submit proof.
         vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
         IPDPTypes.PieceIdAndOffset[] memory challenges = new IPDPTypes.PieceIdAndOffset[](challengeCount);
-        for (uint i = 0; i < challengeCount; i++) {
+        for (uint256 i = 0; i < challengeCount; i++) {
             challenges[i] = IPDPTypes.PieceIdAndOffset(0, 0);
         }
         vm.expectRevert("proof length does not match tree height");
@@ -431,15 +434,15 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     ///// Helpers /////
 
     // Initializes a new data set, generates trees of specified sizes, and adds pieces to the set.
-    function makeDataSetWithPieces(uint[] memory leafCounts) internal returns (uint256, bytes32[][][]memory) {
+    function makeDataSetWithPieces(uint256[] memory leafCounts) internal returns (uint256, bytes32[][][] memory) {
         // Create trees and their pieces.
         bytes32[][][] memory trees = new bytes32[][][](leafCounts.length);
         Cids.Cid[] memory pieces = new Cids.Cid[](leafCounts.length);
-        for (uint i = 0; i < leafCounts.length; i++) {
+        for (uint256 i = 0; i < leafCounts.length; i++) {
             // Generate a uniquely-sized tree for each piece (up to some small maximum size).
             if (leafCounts[i] < 4) {
                 trees[i] = ProofUtil.makeTree(4);
-                pieces[i] = makePieceBytes(trees[i], leafCounts[i]*32);
+                pieces[i] = makePieceBytes(trees[i], leafCounts[i] * 32);
             } else {
                 trees[i] = ProofUtil.makeTree(leafCounts[i]);
                 pieces[i] = makePiece(trees[i], leafCounts[i]);
@@ -454,8 +457,8 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     }
 
     // Initializes a new data set and adds a single generated tree.
-    function makeDataSetWithOnePiece(uint leafCount) internal returns (uint256, bytes32[][]memory) {
-         uint[] memory leafCounts = new uint[](1);
+    function makeDataSetWithOnePiece(uint256 leafCount) internal returns (uint256, bytes32[][] memory) {
+        uint256[] memory leafCounts = new uint256[](1);
         leafCounts[0] = leafCount;
         (uint256 setId, bytes32[][][] memory trees) = makeDataSetWithPieces(leafCounts);
         return (setId, trees[0]);
@@ -463,7 +466,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
 
     // Creates a tree and adds it to a data set.
     // Returns the Merkle tree and piece.
-    function addOnePiece(uint256 setId, uint leafCount) internal returns (bytes32[][] memory, uint256) {
+    function addOnePiece(uint256 setId, uint256 leafCount) internal returns (bytes32[][] memory, uint256) {
         bytes32[][] memory tree = ProofUtil.makeTree(leafCount);
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makePiece(tree, leafCount);
@@ -473,10 +476,14 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     }
 
     // Builds a proof of posesesion for a data set with a single piece.
-    function buildProofsForSingleton(uint256 setId, uint challengeCount, bytes32[][] memory tree, uint leafCount) internal view returns (IPDPTypes.Proof[] memory) {
+    function buildProofsForSingleton(uint256 setId, uint256 challengeCount, bytes32[][] memory tree, uint256 leafCount)
+        internal
+        view
+        returns (IPDPTypes.Proof[] memory)
+    {
         bytes32[][][] memory trees = new bytes32[][][](1);
         trees[0] = tree;
-        uint[] memory leafCounts = new uint[](1);
+        uint256[] memory leafCounts = new uint256[](1);
         leafCounts[0] = leafCount;
         IPDPTypes.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
         return proofs;

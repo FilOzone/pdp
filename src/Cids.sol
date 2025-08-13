@@ -31,7 +31,6 @@ library Cids {
         return uint8(cid.data[cid.data.length - 32 - 1]);
     }
 
-
     // Checks that CID is CommPv2 and decomposes it into its components.
     // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
     function validateCommPv2(Cid memory cid)
@@ -61,7 +60,7 @@ library Cids {
 
     // isPaddingExcessive checks if the padding size exceeds the size of the tree
     function isPaddingExcessive(uint256 padding, uint8 height) internal pure returns (bool) {
-        return (128*padding)/127 >= 1<<(height+5);
+        return (128 * padding) / 127 >= 1 << (height + 5);
     }
 
     // pieceSize returns the size of the data defined by amount of padding and height of the tree
@@ -70,7 +69,7 @@ library Cids {
     function pieceSize(uint256 padding, uint8 height) internal pure returns (uint256) {
         // 2^height * 32 - padding
         // we can fold the 32 into height
-        return (1 << (uint256(height)+5)) - (128*padding)/127;
+        return (1 << (uint256(height) + 5)) - (128 * padding) / 127;
     }
 
     // leafCount returns the number of 32b leaves that contain any amount of data
@@ -78,7 +77,7 @@ library Cids {
         // the padding itself is # of bytes before Fr32 expansion
         // so we need to expand it by factor 128/127
         // then we divide by 32 with a floor to get the number of leaves that are fully padding
-        uint256 paddingLeafs = (128*padding)/127 >> 5;
+        uint256 paddingLeafs = (128 * padding) / 127 >> 5;
         // 1<<height is the number of leaves in the tree
         // which then after subtracting the padding leaves is the number of leaves that contain data
         return (1 << uint256(height)) - paddingLeafs;
@@ -142,11 +141,11 @@ library Cids {
     function _readUvarint(bytes memory data, uint256 offset) internal pure returns (uint256, uint256) {
         uint256 i = 0;
         uint256 value = uint256(uint8(data[offset])) & 0x7F;
-        while (data[offset+i] >= 0x80) {
+        while (data[offset + i] >= 0x80) {
             i++;
-            value = value | uint256(uint8(data[offset+i]) & 0x7F) << (i * 7);
+            value = value | uint256(uint8(data[offset + i]) & 0x7F) << (i * 7);
         }
         i++;
-        return (value, offset+i);
+        return (value, offset + i);
     }
 }
