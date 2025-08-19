@@ -5,13 +5,14 @@ import {Test} from "forge-std/Test.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
+
 contract ERC1967ProxyTest is Test {
     PDPVerifier public implementation;
     PDPVerifier public proxy;
     address owner = address(0x123);
 
     function setUp() public {
-         // Set owner for testing
+        // Set owner for testing
         vm.startPrank(owner);
         // Deploy implementation contract
         implementation = new PDPVerifier();
@@ -22,10 +23,7 @@ contract ERC1967ProxyTest is Test {
             uint256(150) // challengeFinality
         );
 
-        ERC1967Proxy proxyContract = new MyERC1967Proxy(
-            address(implementation),
-            initData
-        );
+        ERC1967Proxy proxyContract = new MyERC1967Proxy(address(implementation), initData);
 
         // Get PDPVerifier interface on proxy address
         proxy = PDPVerifier(address(proxyContract));
@@ -46,7 +44,7 @@ contract ERC1967ProxyTest is Test {
 
         // Deploy new implementation
         PDPVerifier newImplementation = new PDPVerifier();
-    
+
         // Upgrade proxy to new implementation
         proxy.upgradeToAndCall(address(newImplementation), "");
 
@@ -58,7 +56,7 @@ contract ERC1967ProxyTest is Test {
 
     function testUpgradeFromNonOwnerNoGood() public {
         PDPVerifier newImplementation = new PDPVerifier();
-        
+
         vm.stopPrank();
         vm.startPrank(address(0xdead));
 
@@ -78,7 +76,7 @@ contract ERC1967ProxyTest is Test {
 
         // Transfer ownership
         proxy.transferOwnership(newOwner);
-        
+
         // Verify ownership changed
         assertEq(proxy.owner(), newOwner);
     }

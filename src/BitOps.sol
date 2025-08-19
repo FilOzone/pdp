@@ -8,14 +8,43 @@ library BitOps {
         uint256 n = 256;
         uint256 y;
 
-        y = x >> 128; if (y != 0) { n -= 128; x = y; }
-        y = x >> 64;  if (y != 0) { n -= 64;  x = y; }
-        y = x >> 32;  if (y != 0) { n -= 32;  x = y; }
-        y = x >> 16;  if (y != 0) { n -= 16;  x = y; }
-        y = x >> 8;   if (y != 0) { n -= 8;   x = y; }
-        y = x >> 4;   if (y != 0) { n -= 4;   x = y; }
-        y = x >> 2;   if (y != 0) { n -= 2;   x = y; }
-        y = x >> 1;   if (y != 0) return n - 2;
+        y = x >> 128;
+        if (y != 0) {
+            n -= 128;
+            x = y;
+        }
+        y = x >> 64;
+        if (y != 0) {
+            n -= 64;
+            x = y;
+        }
+        y = x >> 32;
+        if (y != 0) {
+            n -= 32;
+            x = y;
+        }
+        y = x >> 16;
+        if (y != 0) {
+            n -= 16;
+            x = y;
+        }
+        y = x >> 8;
+        if (y != 0) {
+            n -= 8;
+            x = y;
+        }
+        y = x >> 4;
+        if (y != 0) {
+            n -= 4;
+            x = y;
+        }
+        y = x >> 2;
+        if (y != 0) {
+            n -= 2;
+            x = y;
+        }
+        y = x >> 1;
+        if (y != 0) return n - 2;
         return n - x;
     }
 
@@ -28,10 +57,10 @@ library BitOps {
     int256 constant MASK2 = 0x3333333333333333333333333333333333333333333333333333333333333333;
     int256 constant MASK1 = 0x5555555555555555555555555555555555555555555555555555555555555555;
 
-    // Calculates the number of trailing zeros in binary representation. 
+    // Calculates the number of trailing zeros in binary representation.
     function ctz(uint256 x) internal pure returns (uint256) {
         require(x <= uint256(type(int256).max), "Input exceeds maximum int256 value");
-        uint256 c = 256; 
+        uint256 c = 256;
 
         int256 v = -int256(x);
         v = v & int256(x);

@@ -19,6 +19,19 @@ The PDP service contract and the PDP verifier contracts are deployed on Filecoin
 
 > Disclaimer: ⚠️ These contracts are still under beta testing and might be upgraded for bug fixes and/or improvements. Please use with caution for production environments. ⚠️
 
+#### Latest
+
+*Mainnet**
+- [PDP Verifier]([url](https://github.com/FilOzone/pdp/blob/main/src/PDPVerifier.sol)): [TBD]([url](https://filfox.info/en/address/TBD))
+
+**Calibration Testnet**
+- [PDP Verifier]([url](https://github.com/FilOzone/pdp/blob/main/src/PDPVerifier.sol)): [TBD]([url](https://calibration.filfox.info/en/address/TBD))
+
+
+#### v1.1.0
+
+⚠️ Deprecation Notice: The following contracts will be deprecated (read-only) by End of August. Please upgrade/migrate to the latest contracts as soon as they are available.
+
 **Mainnet**
 - [PDP Verifier]([url](https://github.com/FilOzone/pdp/blob/main/src/PDPVerifier.sol)): [0x9C65E8E57C98cCc040A3d825556832EA1e9f4Df6]([url](https://filfox.info/en/address/0x9C65E8E57C98cCc040A3d825556832EA1e9f4Df6))
 - [PDP Service]([url](https://github.com/FilOzone/pdp/blob/main/src/SimplePDPService.sol)): [0x805370387fA5Bd8053FD8f7B2da4055B9a4f8019]([url](https://filfox.info/en/address/0x805370387fA5Bd8053FD8f7B2da4055B9a4f8019))
@@ -28,7 +41,7 @@ The PDP service contract and the PDP verifier contracts are deployed on Filecoin
 - [PDP Service]([url](https://github.com/FilOzone/pdp/blob/main/src/SimplePDPService.sol)): [0x6170dE2b09b404776197485F3dc6c968Ef948505]([url](https://calibration.filfox.info/en/address/0x6170dE2b09b404776197485F3dc6c968Ef948505)) Note this has proving period every 30 minutes instead of every day
 
 ## Build
-Depends on [Foundry](https://github.com/foundry-rs/foundry) and npm for development.
+Depends on [Foundry](https://github.com/foundry-rs/foundry) for development.
 ```
 make build
 ```

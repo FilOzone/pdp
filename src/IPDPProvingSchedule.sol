@@ -12,17 +12,16 @@ interface IPDPProvingSchedule {
     /// @return Challenge window size in epochs
     function challengeWindow() external pure returns (uint256);
 
-    /// @notice Value for initializing the challenge window start for any proof set assuming proving period starts now
+    /// @notice Value for initializing the challenge window start for any data set assuming proving period starts now
     // @return Initial challenge window start in epochs
     function initChallengeWindowStart() external pure returns (uint256);
 
-
-    /// @notice Calculates the start of the next challenge window for a given proof set
-    /// @param setId The ID of the proof set
+    /// @notice Calculates the start of the next challenge window for a given data set
+    /// @param setId The ID of the data set
     /// @return The block number when the next challenge window starts
     function nextChallengeWindowStart(uint256 setId) external view returns (uint256);
 
-    /// @notice Returns the required number of challenges/merkle inclusion proofs per proof set
+    /// @notice Returns the required number of challenges/merkle inclusion proofs per data set
     /// @return Number of challenges required per proof
     function getChallengesPerProof() external pure returns (uint64);
 }
