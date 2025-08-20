@@ -61,7 +61,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event DataSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event DataSetEmpty(uint256 indexed setId);
 
-    event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
+    event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, bytes[] pieceCids);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
 
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
@@ -445,12 +445,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(storageProvider[setId] == msg.sender, "Only the storage provider can add pieces");
         uint256 firstAdded = nextPieceId[setId];
         uint256[] memory pieceIds = new uint256[](pieceData.length);
-        Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](pieceData.length);
+        bytes[] memory pieceCidsAdded = new bytes[](pieceData.length);
 
         for (uint256 i = 0; i < nPieces; i++) {
             addOnePiece(setId, i, pieceData[i]);
             pieceIds[i] = firstAdded + i;
-            pieceCidsAdded[i] = pieceCids[setId][firstAdded + i];
+            pieceCidsAdded[i] = pieceCids[setId][firstAdded + i].data;
         }
         emit PiecesAdded(setId, pieceIds, pieceCidsAdded);
 
