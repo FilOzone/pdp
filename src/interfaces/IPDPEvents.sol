@@ -12,7 +12,7 @@ interface IPDPEvents {
     );
     event DataSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event DataSetEmpty(uint256 indexed setId);
-    event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, bytes[] pieceCids);
+    event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
