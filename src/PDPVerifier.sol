@@ -450,7 +450,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         for (uint256 i = 0; i < nPieces; i++) {
             addOnePiece(setId, i, pieceData[i]);
             pieceIds[i] = firstAdded + i;
-            pieceCidsAdded[i] = pieceCids[setId][firstAdded + i].data;
+            pieceCidsAdded[i] = pieceData[i].data;
         }
         emit PiecesAdded(setId, pieceIds, pieceCidsAdded);
 
