@@ -279,7 +279,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         pieces[0] = makeSamplePiece(leafCount);
 
         vm.expectEmit(true, true, false, false);
-        emit IPDPEvents.PiecesAdded(setId, new uint256[](0));
+        emit IPDPEvents.PiecesAdded(setId, new uint256[](0), new Cids.Cid[](0));
         uint256 pieceId = pdpVerifier.addPieces(setId, pieces, empty);
         assertEq(pdpVerifier.getChallengeRange(setId), 0);
 
@@ -311,7 +311,10 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         uint256[] memory pieceIds = new uint256[](2);
         pieceIds[0] = 0;
         pieceIds[1] = 1;
-        emit IPDPEvents.PiecesAdded(setId, pieceIds);
+        Cids.Cid[] memory pieceCids = new Cids.Cid[](2);
+        pieceCids[0] = pieces[0];
+        pieceCids[1] = pieces[1];
+        emit IPDPEvents.PiecesAdded(setId, pieceIds, pieceCids);
         uint256 firstId = pdpVerifier.addPieces(setId, pieces, empty);
         assertEq(firstId, 0);
         // flush add
