@@ -6,15 +6,15 @@ pragma solidity ^0.8.20;
 interface IPDPProvingSchedule {
     /// @notice Returns the number of epochs allowed before challenges must be resampled
     /// @return Maximum proving period in epochs
-    function getMaxProvingPeriod() external pure returns (uint64);
+    function getMaxProvingPeriod() external view returns (uint64);
 
     /// @notice Returns the number of epochs at the end of a proving period during which proofs can be submitted
     /// @return Challenge window size in epochs
-    function challengeWindow() external pure returns (uint256);
+    function challengeWindow() external view returns (uint256);
 
     /// @notice Value for initializing the challenge window start for any data set assuming proving period starts now
     // @return Initial challenge window start in epochs
-    function initChallengeWindowStart() external pure returns (uint256);
+    function initChallengeWindowStart() external view returns (uint256);
 
     /// @notice Calculates the start of the next challenge window for a given data set
     /// @param setId The ID of the data set
