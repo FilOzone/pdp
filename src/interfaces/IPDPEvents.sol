@@ -17,6 +17,5 @@ interface IPDPEvents {
     event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
-    event PriceOracleFailure(bytes errorData);
     event ContractUpgraded(string version, address newImplementation);
 }

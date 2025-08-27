@@ -577,7 +577,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public returns (uint256) {
+    function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
         uint256 rawSize = 32 * challengeRange[setId];
         (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
 
@@ -819,22 +819,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return BitOps.ctz(index + 1);
     }
 
-    event PriceOracleFailure(bytes reason);
-
     // Add function to get FIL/USD price
-    function getFILUSDPrice() public returns (uint64, int32) {
-        // Get FIL/USD price no older than 1 day
-        try PYTH.getPriceNoOlderThan(FIL_USD_PRICE_FEED_ID, SECONDS_IN_DAY) returns (PythStructs.Price memory priceData)
-        {
-            require(priceData.price > 0, "failed to validate: price must be greater than 0");
-            // Return the price and exponent representing USD per FIL
-            return (uint64(priceData.price), priceData.expo);
-        } catch (bytes memory reason) {
-            // Log issue and fallback on latest unsafe price data
-            emit PriceOracleFailure(reason);
-            PythStructs.Price memory priceData = PYTH.getPriceUnsafe(FIL_USD_PRICE_FEED_ID);
-            require(priceData.price > 0, "failed to validate: price must be greater than 0");
-            return (uint64(priceData.price), priceData.expo);
-        }
+    function getFILUSDPrice() public view returns (uint64, int32) {
+        PythStructs.Price memory priceData = PYTH.getPriceUnsafe(FIL_USD_PRICE_FEED_ID);
+        require(priceData.price > 0, "failed to validate: price must be greater than 0");
+        return (uint64(priceData.price), priceData.expo);
     }
 }
