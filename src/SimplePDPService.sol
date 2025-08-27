@@ -8,6 +8,7 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgrad
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
 import {Cids} from "./Cids.sol";
 import {IPDPEvents} from "./interfaces/IPDPEvents.sol";
+import {IPDPProvingSchedule} from "./IPDPProvingSchedule.sol";
 
 // PDPRecordKeeper tracks PDP operations.  It is used as a base contract for PDPListeners
 // in order to give users the capability to consume events async.
@@ -74,7 +75,7 @@ contract PDPRecordKeeper {
 /// The primary purpose of this contract is to
 /// 1. Enforce a proof count of 5 proofs per data set proving period.
 /// 2. Provide a reliable way to report faults to users.
-contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract SimplePDPService is PDPListener, IPDPProvingSchedule, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event FaultRecord(uint256 indexed dataSetId, uint256 periodsFaulted, uint256 deadline);
 
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
@@ -157,6 +158,39 @@ contract SimplePDPService is PDPListener, Initializable, UUPSUpgradeable, Ownabl
     // Challenges / merkle inclusion proofs provided per data set
     function getChallengesPerProof() public pure returns (uint64) {
         return 5;
+    }
+
+    /**
+     * @notice Returns PDP configuration values (for IPDPProvingSchedule interface)
+     * @return maxProvingPeriod Maximum number of epochs between proofs
+     * @return challengeWindow_ Number of epochs for the challenge window
+     * @return challengesPerProof Number of challenges required per proof
+     * @return initChallengeWindowStart_ Initial challenge window start for new data sets
+     */
+    function getPDPConfig()
+        external
+        view
+        override
+        returns (
+            uint64 maxProvingPeriod,
+            uint256 challengeWindow_,
+            uint256 challengesPerProof,
+            uint256 initChallengeWindowStart_
+        )
+    {
+        maxProvingPeriod = getMaxProvingPeriod();
+        challengeWindow_ = challengeWindow();
+        challengesPerProof = getChallengesPerProof();
+        initChallengeWindowStart_ = initChallengeWindowStart();
+    }
+
+    /**
+     * @notice Returns the start of the next challenge window for a data set (for IPDPProvingSchedule interface)
+     * @param setId The ID of the data set
+     * @return The block number when the next challenge window starts
+     */
+    function nextPDPChallengeWindowStart(uint256 setId) external view override returns (uint256) {
+        return nextChallengeWindowStart(setId);
     }
 
     // Listener interface methods

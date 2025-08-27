@@ -384,4 +384,47 @@ contract SimplePDPServiceFaultsTest is Test {
             "Proving deadline should be set to NO_PROVING_DEADLINE"
         );
     }
+
+    function testGetPDPConfig() public view {
+        (uint64 maxProvingPeriod, uint256 challengeWindow, uint256 challengesPerProof, uint256 initChallengeWindowStart)
+        = pdpService.getPDPConfig();
+
+        assertEq(maxProvingPeriod, 2880, "Max proving period should be 2880");
+        assertEq(challengeWindow, 60, "Challenge window should be 60");
+        assertEq(challengesPerProof, 5, "Challenges per proof should be 5");
+        assertEq(
+            initChallengeWindowStart,
+            block.number + 2880 - 60,
+            "Init challenge window start should be calculated correctly"
+        );
+    }
+
+    function testNextPDPChallengeWindowStart() public {
+        // Setup initial state
+        pdpService.piecesAdded(dataSetId, 0, new Cids.Cid[](0), empty);
+        pdpService.nextProvingPeriod(dataSetId, pdpService.initChallengeWindowStart(), leafCount, empty);
+
+        // Test that nextPDPChallengeWindowStart returns the same as nextChallengeWindowStart
+        uint256 expected = pdpService.nextChallengeWindowStart(dataSetId);
+        uint256 actual = pdpService.nextPDPChallengeWindowStart(dataSetId);
+        assertEq(actual, expected, "nextPDPChallengeWindowStart should match nextChallengeWindowStart");
+
+        // Move to challenge window and prove
+        vm.roll(block.number + pdpService.getMaxProvingPeriod() - pdpService.challengeWindow());
+        pdpService.possessionProven(dataSetId, leafCount, seed, 5);
+
+        // Open next period
+        pdpService.nextProvingPeriod(dataSetId, pdpService.nextChallengeWindowStart(dataSetId), leafCount, empty);
+
+        // Test again in new period
+        expected = pdpService.nextChallengeWindowStart(dataSetId);
+        actual = pdpService.nextPDPChallengeWindowStart(dataSetId);
+        assertEq(actual, expected, "nextPDPChallengeWindowStart should match nextChallengeWindowStart in new period");
+    }
+
+    function testNextPDPChallengeWindowStartNotInitialized() public {
+        // Test that it reverts when proving period not initialized
+        vm.expectRevert("Proving period not yet initialized");
+        pdpService.nextPDPChallengeWindowStart(dataSetId);
+    }
 }
