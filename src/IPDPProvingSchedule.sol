@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.20;
 
-import {PDPListener} from "./PDPVerifier.sol";
-
 /// @title IPDPProvingSchedule
 /// @notice Interface for PDP Service SLA specifications
 interface IPDPProvingSchedule {
-    /// @notice Returns the service associated with this proving schedule
-    /// @return The PDP Service
-    function service() external view returns (PDPListener);
-
     /**
      * @notice Returns PDP configuration values
      * @return maxProvingPeriod Maximum number of epochs between proofs
