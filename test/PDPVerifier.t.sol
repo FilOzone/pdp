@@ -1531,14 +1531,14 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
 
     function createPythCallData() internal view returns (bytes memory, PythStructs.Price memory) {
         bytes memory pythCallData =
-            abi.encodeWithSelector(IPyth.getPriceNoOlderThan.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID(), 86400);
+            abi.encodeWithSelector(IPyth.getPriceUnsafe.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID());
 
         PythStructs.Price memory price = PythStructs.Price({price: 5, conf: 0, expo: 0, publishTime: 0});
 
         return (pythCallData, price);
     }
 
-    function createPythUnsafeCallData() internal view returns (bytes memory, PythStructs.Price memory) {
+    function createPythAncientCallData() internal view returns (bytes memory, PythStructs.Price memory) {
         bytes memory callData =
             abi.encodeWithSelector(IPyth.getPriceUnsafe.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID());
 
@@ -1547,15 +1547,9 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         return (callData, price);
     }
 
-    function testGetPriceOracleFailure() public {
-        (bytes memory pythCallData, PythStructs.Price memory _notReturnedPrice) = createPythCallData();
-        bytes memory errorData = abi.encodeWithSelector(bytes4(keccak256("StalePrice()")));
-        vm.mockCallRevert(address(pdpVerifier.PYTH()), pythCallData, errorData);
-        (bytes memory pythFallbackCallData, PythStructs.Price memory price) = createPythUnsafeCallData();
+    function testGetOldPrice() public {
+        (bytes memory pythFallbackCallData, PythStructs.Price memory price) = createPythAncientCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythFallbackCallData, abi.encode(price));
-
-        vm.expectEmit(true, false, false, false);
-        emit IPDPEvents.PriceOracleFailure(errorData);
 
         (uint64 priceOut, int32 expoOut) = pdpVerifier.getFILUSDPrice();
         assertEq(priceOut, uint64(6), "Price should be 6");

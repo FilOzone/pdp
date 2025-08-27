@@ -34,7 +34,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
 
     function createPythCallData() internal view returns (bytes memory, PythStructs.Price memory) {
         bytes memory pythCallData =
-            abi.encodeWithSelector(IPyth.getPriceNoOlderThan.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID(), 86400);
+            abi.encodeWithSelector(IPyth.getPriceUnsafe.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID());
 
         PythStructs.Price memory price = PythStructs.Price({price: 5, conf: 0, expo: 0, publishTime: 0});
 
