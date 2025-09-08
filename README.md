@@ -21,12 +21,7 @@ The PDP service contract and the PDP verifier contracts are deployed on Filecoin
 
 #### Latest
 
-*Mainnet**
-- [PDP Verifier]([url](https://github.com/FilOzone/pdp/blob/main/src/PDPVerifier.sol)): [TBD]([url](https://filfox.info/en/address/TBD))
-
-**Calibration Testnet**
-- [PDP Verifier]([url](https://github.com/FilOzone/pdp/blob/main/src/PDPVerifier.sol)): [TBD]([url](https://calibration.filfox.info/en/address/TBD))
-
+Please check out the latest tag: https://github.com/FilOzone/filecoin-services/tags
 
 #### v1.1.0
 
