@@ -15,6 +15,6 @@ remappings = [
     '@pythnetwork/pyth-sdk-solidity/=lib/pyth-sdk-solidity/',
 ]
 
-optimizer_runs = 1000000000
+optimizer_runs = 1
 via_ir = true
 
