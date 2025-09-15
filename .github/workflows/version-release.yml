@@ -1,0 +1,275 @@
+name: Auto Release on Version Change
+
+# Automatically creates and publishes releases when the VERSION constant in PDPVerifier.sol changes
+# This workflow:
+# - On PR: Detects version changes and creates draft releases with comprehensive changelog
+# - On merge: Automatically publishes the draft release
+# - Generates changelog from git history since last release with commit details and file changes
+# - Posts notification comments on PRs
+# 
+# Workflow: PR creates draft → Review/edit if needed → Merge publishes automatically
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/PDPVerifier.sol"
+  push:
+    branches: ["main"]
+    paths:
+      - "src/PDPVerifier.sol"
+
+jobs:
+  check-version-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Determine workflow action
+        id: workflow_action
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "action=create_draft" >> $GITHUB_OUTPUT
+            echo "Action: Create draft release"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            echo "action=publish_release" >> $GITHUB_OUTPUT
+            echo "Action: Publish existing draft release"
+          fi
+
+      - name: Get current VERSION from PDPVerifier.sol
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(grep 'string public constant VERSION' src/PDPVerifier.sol | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Get previous VERSION from main branch
+        id: previous_version
+        run: |
+          git checkout origin/main -- src/PDPVerifier.sol
+          PREVIOUS_VERSION=$(grep 'string public constant VERSION' src/PDPVerifier.sol | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          echo "Previous version: $PREVIOUS_VERSION"
+          
+          # Restore the PR version
+          git checkout HEAD -- src/PDPVerifier.sol
+
+      - name: Check if version changed
+        id: version_check
+        run: |
+          if [ "${{ steps.current_version.outputs.version }}" != "${{ steps.previous_version.outputs.version }}" ]; then
+            echo "Version changed from ${{ steps.previous_version.outputs.version }} to ${{ steps.current_version.outputs.version }}"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version unchanged: ${{ steps.current_version.outputs.version }}"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract changes from git history
+        if: steps.version_check.outputs.changed == 'true'
+        id: changelog
+        run: |
+          CURRENT_VERSION="${{ steps.current_version.outputs.version }}"
+          
+          # Find the previous release tag (exclude the current version if it exists)
+          PREVIOUS_TAG=$(git tag -l "v*" --sort=-version:refname | grep -v "v${CURRENT_VERSION}" | head -n 1)
+          
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Found previous tag: $PREVIOUS_TAG"
+            echo "Current version: v${CURRENT_VERSION}"
+            
+            # Get commit messages between previous tag and current HEAD
+            COMMIT_RANGE="$PREVIOUS_TAG..HEAD"
+            echo "Extracting changes from: $COMMIT_RANGE"
+            
+            # Count commits in range
+            COMMIT_COUNT=$(git rev-list --count $COMMIT_RANGE)
+            echo "Found $COMMIT_COUNT commits since $PREVIOUS_TAG"
+            
+            if [ "$COMMIT_COUNT" -gt 0 ]; then
+              # Generate changelog from commit messages
+              {
+                echo "## Changes Since $PREVIOUS_TAG"
+                echo ""
+                echo "### Commits - $COMMIT_COUNT total"
+                echo ""
+                
+                # Add commit messages with better formatting (escape special characters)
+                git log --pretty=format:"- %s (%h)" --reverse "$COMMIT_RANGE" | sed 's/`/\\`/g; s/\$/\\$/g'
+                
+                echo ""
+                echo ""
+                echo "### Files Changed"
+                echo ""
+                CHANGED_FILES=$(git diff --name-only "$COMMIT_RANGE" | wc -l)
+                echo "$CHANGED_FILES files changed:"
+                echo ""
+                git diff --name-only "$COMMIT_RANGE" | sed 's/^/- /'
+                
+                echo ""
+                echo "### Diff Summary"
+                echo ""
+                git diff --stat "$COMMIT_RANGE" | tail -n 1 | sed 's/^/- /'
+              } > /tmp/release_notes.txt
+              
+              echo "changelog_found=true" >> $GITHUB_OUTPUT
+            else
+              echo "No commits found between $PREVIOUS_TAG and HEAD"
+              echo "## Release v${CURRENT_VERSION}" > /tmp/release_notes.txt
+              echo "" >> /tmp/release_notes.txt
+              echo "No new commits since $PREVIOUS_TAG. This may be a version bump or re-release." >> /tmp/release_notes.txt
+              echo "changelog_found=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No previous release tag found - this is the first release"
+            
+            echo "## First Release" > /tmp/release_notes.txt
+            echo "" >> /tmp/release_notes.txt
+            echo "This is the initial release of PDP v${CURRENT_VERSION}." >> /tmp/release_notes.txt
+            echo "" >> /tmp/release_notes.txt
+            echo "### Contract Files" >> /tmp/release_notes.txt
+            echo "" >> /tmp/release_notes.txt
+            
+            # Show main contract files for first release
+            ls -la src/*.sol | awk '{print "- " $9 " (" $5 " bytes)"}' >> /tmp/release_notes.txt
+            
+            echo "changelog_found=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Output changelog (GitHub Actions multiline output)
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/release_notes.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Check if tag already exists
+        if: steps.version_check.outputs.changed == 'true'
+        id: tag_check
+        run: |
+          TAG="v${{ steps.current_version.outputs.version }}"
+          if git tag -l | grep -q "^$TAG$"; then
+            echo "Tag $TAG already exists"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tag $TAG does not exist"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if release already exists
+        if: steps.version_check.outputs.changed == 'true'
+        id: release_check
+        run: |
+          TAG="v${{ steps.current_version.outputs.version }}"
+          if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Release $TAG does not exist"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create draft release
+        if: steps.version_check.outputs.changed == 'true' && steps.release_check.outputs.exists == 'false' && steps.workflow_action.outputs.action == 'create_draft'
+        run: |
+          TAG="v${{ steps.current_version.outputs.version }}"
+          TITLE="PDP v${{ steps.current_version.outputs.version }}"
+          
+          # Determine if this is a prerelease
+          if [[ "${{ steps.current_version.outputs.version }}" == *-* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          else
+            PRERELEASE_FLAG=""
+          fi
+          
+          # Create the release body
+          cat > /tmp/release_body.md << EOF
+          # PDP v${{ steps.current_version.outputs.version }}
+          
+          ${{ steps.changelog.outputs.notes }}
+          
+          ## Version Information
+          
+          - **PDPVerifier VERSION**: \`${{ steps.current_version.outputs.version }}\`
+          - **Previous VERSION**: \`${{ steps.previous_version.outputs.version }}\`
+          - **Generated from**: Git history between releases
+          
+          > **Note**: This is a draft release created automatically when the VERSION constant was updated in PDPVerifier.sol. 
+          > The changelog above is generated from git commits since the last release. Review and edit as needed before publishing.
+          
+          EOF
+          
+          # Create draft release
+          gh release create "$TAG" \
+            --repo ${{ github.repository }} \
+            --draft \
+            --title "$TITLE" \
+            --notes-file /tmp/release_body.md \
+            $PRERELEASE_FLAG
+            
+          echo "✅ Created draft release: $TAG"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish draft release
+        if: steps.version_check.outputs.changed == 'true' && steps.workflow_action.outputs.action == 'publish_release'
+        run: |
+          TAG="v${{ steps.current_version.outputs.version }}"
+          
+          # Check if draft release exists
+          if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            # Check if it's already published
+            DRAFT_STATUS=$(gh release view "$TAG" --repo ${{ github.repository }} --json isDraft --jq '.isDraft')
+            
+            if [ "$DRAFT_STATUS" = "true" ]; then
+              echo "Publishing draft release: $TAG"
+              gh release edit "$TAG" --repo ${{ github.repository }} --draft=false
+              echo "✅ Published release: $TAG"
+            else
+              echo "Release $TAG is already published"
+            fi
+          else
+            echo "⚠️  No draft release found for $TAG. This may happen if the VERSION was changed directly on main without a PR."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add comment to PR
+        if: steps.version_check.outputs.changed == 'true' && steps.workflow_action.outputs.action == 'create_draft'
+        run: |
+          if [ "${{ steps.release_check.outputs.exists }}" == "false" ]; then
+            cat > /tmp/pr_comment.md << 'EOF'
+🚀 **Version Update Detected!**
+
+Version changed: **${{ steps.previous_version.outputs.version }}** → **${{ steps.current_version.outputs.version }}**
+
+✅ **Created draft release:** [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }})
+
+The draft release includes the changelog and is ready for review. Publish it when ready to deploy version ${{ steps.current_version.outputs.version }}.
+EOF
+            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file /tmp/pr_comment.md
+          else
+            cat > /tmp/pr_comment.md << 'EOF'
+🔄 **Version Update Detected!**
+
+Version changed: **${{ steps.previous_version.outputs.version }}** → **${{ steps.current_version.outputs.version }}**
+
+ℹ️ **Release already exists:** [v${{ steps.current_version.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.current_version.outputs.version }})
+EOF
+            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file /tmp/pr_comment.md
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: No version change detected
+        if: steps.version_check.outputs.changed == 'false'
+        run: |
+          echo "ℹ️ No version change detected in PDPVerifier.sol VERSION constant"
