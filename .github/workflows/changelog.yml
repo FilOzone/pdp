@@ -1,0 +1,90 @@
+name: Changelog Check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+jobs:
+  check-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if changelog should be skipped
+        id: skip_check
+        run: |
+          # Check for skip/changelog label
+          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'skip/changelog') }}" == "true" ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Changelog check skipped due to 'skip/changelog' label"
+            exit 0
+          fi
+          
+          # Check for skip indicators in PR title
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if echo "$PR_TITLE" | grep -iqE '\[(skip|no).?changelog\]'; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Changelog check skipped due to skip indicator in PR title: $PR_TITLE"
+            exit 0
+          fi
+          
+          # Check for skip indicators in PR description
+          PR_BODY="${{ github.event.pull_request.body }}"
+          if echo "$PR_BODY" | grep -iqE '\[(skip|no).?changelog\]'; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Changelog check skipped due to skip indicator in PR description"
+            exit 0
+          fi
+          
+          echo "skip=false" >> $GITHUB_OUTPUT
+          echo "Changelog check required"
+
+      - name: Check for CHANGELOG.md changes
+        if: steps.skip_check.outputs.skip != 'true'
+        id: changelog_check
+        run: |
+          # Get the list of changed files in this PR
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          
+          echo "Changed files in this PR:"
+          echo "$CHANGED_FILES"
+          
+          # Check if CHANGELOG.md is in the list of changed files
+          if echo "$CHANGED_FILES" | grep -q "^CHANGELOG.md$"; then
+            echo "✅ CHANGELOG.md has been updated"
+            echo "changelog_updated=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ CHANGELOG.md has not been updated"
+            echo "changelog_updated=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fail if changelog not updated
+        if: steps.skip_check.outputs.skip != 'true' && steps.changelog_check.outputs.changelog_updated != 'true'
+        run: |
+          echo "::error title=Changelog Required::CHANGELOG.md must be updated for this pull request. Please add an entry describing your changes under the [Unreleased] section."
+          echo ""
+          echo "If this PR doesn't require a changelog entry (e.g., documentation-only changes, CI changes), you can skip this check by:"
+          echo "• Adding the 'skip/changelog' label to this PR, OR"
+          echo "• Including '[skip changelog]' or '[no changelog]' in the PR title or description"
+          echo ""
+          echo "Examples:"
+          echo "  Title: 'Fix typo in README [skip changelog]'"
+          echo "  Description: 'This is a minor documentation fix [no changelog]'"
+          echo ""
+          echo "For more information about our changelog format, see: https://keepachangelog.com/en/1.0.0/"
+          exit 1
+
+      - name: Success message
+        if: steps.skip_check.outputs.skip == 'true' || steps.changelog_check.outputs.changelog_updated == 'true'
+        run: |
+          if [[ "${{ steps.skip_check.outputs.skip }}" == "true" ]]; then
+            echo "✅ Changelog check skipped (via label or PR title/description)"
+          else
+            echo "✅ Changelog check passed - CHANGELOG.md has been updated"
+          fi

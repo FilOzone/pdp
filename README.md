@@ -76,9 +76,12 @@ Follow the existing code style and patterns. Write clear, descriptive commit mes
 ### Pull Requests
 Use descriptive PR titles that summarize the change. Include a clear description of the changes and their purpose, reference any related issues, and ensure all tests pass and code is properly linted.
 
+### Changelog
+All notable changes must be documented in [CHANGELOG.md](CHANGELOG.md). Add your changes under the `[Unreleased]` section. If your PR doesn't require a changelog entry, you can skip this by adding the `skip/changelog` label or including `[skip changelog]` in your PR title or description.
+
 ### Getting Help
 If you need assistance, feel free to open a issue or reach out to the maintainers of the contract in the #fil-pdp channel on [Filecoin Slack](https://filecoin.io/slack).
 
 ## License
 
-Dual-licensed under [MIT](https://github.com/filecoin-project/lotus/blob/master/LICENSE-MIT) + [Apache 2.0](https://github.com/filecoin-project/lotus/blob/master/LICENSE-APACHE)
+Dual-licensed under [MIT](https://github.com/FilOzone/pdp/blob/main/LICENSE.md) + [Apache 2.0](https://github.com/FilOzone/pdp/blob/main/LICENSE.md)
