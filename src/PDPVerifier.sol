@@ -153,6 +153,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
+        nextDataSetId = 1; // Data sets start at 1
     }
 
     string public constant VERSION = "2.0.0";
