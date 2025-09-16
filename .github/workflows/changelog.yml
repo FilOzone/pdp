@@ -28,7 +28,7 @@ jobs:
           
           # Check for skip indicators in PR title
           PR_TITLE="${{ github.event.pull_request.title }}"
-          if echo "$PR_TITLE" | grep -iqE '\[(skip|no).?changelog\]'; then
+          if echo "$PR_TITLE" | grep -iqE '\[(skip|no)\s?changelog\]'; then
             echo "skip=true" >> $GITHUB_OUTPUT
             echo "Changelog check skipped due to skip indicator in PR title: $PR_TITLE"
             exit 0
@@ -36,7 +36,7 @@ jobs:
           
           # Check for skip indicators in PR description
           PR_BODY="${{ github.event.pull_request.body }}"
-          if echo "$PR_BODY" | grep -iqE '\[(skip|no).?changelog\]'; then
+          if echo "$PR_BODY" | grep -iqE '\[(skip|no)\s?changelog\]'; then
             echo "skip=true" >> $GITHUB_OUTPUT
             echo "Changelog check skipped due to skip indicator in PR description"
             exit 0
