@@ -49,6 +49,8 @@ jobs:
         if: steps.skip_check.outputs.skip != 'true'
         id: changelog_check
         run: |
+          # Ensure the base branch exists locally
+          git fetch origin ${{ github.base_ref }}
           # Get the list of changed files in this PR
           CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
           
