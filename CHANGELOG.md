@@ -5,6 +5,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [2.1.0] - 2025-09-17
+
+### 💥 Breaking Changes
+- **BREAKING**: Switched from Piece CID version 1 to version 2 ([#184](https://github.com/FilOzone/pdp/pull/184))
+  - New `Cids.sol` library with CIDv2 handling capabilities
+  - **No backward compatibility** - CIDv1 support completely removed
+  - Enhanced piece data validation using CID height information
+  - Golden tests for CommPv2 functionality
+
+### 🚀 Added
+- **Data Set Indexing**: Data set IDs now start at 1 instead of 0 ([#196](https://github.com/FilOzone/pdp/pull/196))
+- **Event Enhancement**: Added `root_cids` to `RootsAdded` event for better piece tracking ([#169](https://github.com/FilOzone/pdp/pull/169))
+
+### 🔧 Changed
+- **Interface Updates**: IPDPProvingSchedule methods changed from `pure` to `view` for accurate state access patterns ([#186](https://github.com/FilOzone/pdp/pull/186))
+- **Price Validation**: Updated price validation logic to accept older price data for improved reliability ([#191](https://github.com/FilOzone/pdp/pull/191))
+- **Performance Optimization**: Reduced optimizer runs to minimize deployed contract size ([#194](https://github.com/FilOzone/pdp/pull/194))
+- **Code Architecture**: Transitioned from `IPDPTypes.PieceData` to `Cids.Cid` throughout the codebase for better type consistency ([#184](https://github.com/FilOzone/pdp/pull/184))
+- **Code Quality**: Comprehensive formatting improvements across all Solidity files and tests ([#185](https://github.com/FilOzone/pdp/pull/185))
+- **Documentation**: Updated README to point to latest release ([#192](https://github.com/FilOzone/pdp/pull/192))
+
+### 🐛 Fixed
+- Various test stability improvements and bug fixes
+- Enhanced error handling in CID processing
+- Improved code formatting consistency
+
+### 📝 Changelog
+
+For the set of changes since the last tag:
+
+**[View all changes between v2.0.0 and v2.1.0](https://github.com/FilOzone/pdp/compare/v2.0.0...v2.1.0)**
+
 ## [2.0.0] - 2025-07-20
 ### Changed
 - **BREAKING**: Renamed core terminology throughout the codebase for better clarity, for each of the following, all functions, variables, events, and parameters have been changed.
@@ -117,7 +149,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/filozone/pdp/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/filozone/pdp/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/filozone/pdp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/filozone/pdp/releases/tag/v1.0.0
