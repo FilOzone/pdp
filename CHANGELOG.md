@@ -7,12 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [2.1.0] - 2025-09-16
 
-### 🚀 Added
-- **PieceCIDv2 Support**: Added comprehensive support for Piece CID version 2 ([#184](https://github.com/FilOzone/pdp/pull/184))
+### 💥 Breaking Changes
+- **BREAKING**: Switched from Piece CID version 1 to version 2 ([#184](https://github.com/FilOzone/pdp/pull/184))
   - New `Cids.sol` library with CIDv2 handling capabilities
-  - Support for both CIDv1 and CIDv2 formats 
+  - **No backward compatibility** - CIDv1 support completely removed
   - Enhanced piece data validation using CID height information
   - Golden tests for CommPv2 functionality
+
+### 🚀 Added
 - **Enhanced Data Set Management**: Data set IDs now start at 1 instead of 0 for better user experience ([#196](https://github.com/FilOzone/pdp/pull/196))
 - **CI/CD Improvements**: 
   - New GitHub Actions workflow for publishing contract ABIs to releases ([#170](https://github.com/FilOzone/pdp/pull/170))
