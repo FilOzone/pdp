@@ -16,10 +16,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### 🚀 Added
 - **Data Set Indexing**: Data set IDs now start at 1 instead of 0 ([#196](https://github.com/FilOzone/pdp/pull/196))
-- **CI/CD Improvements**: 
-  - New GitHub Actions workflow for publishing contract ABIs to releases ([#170](https://github.com/FilOzone/pdp/pull/170))
-  - Link checking workflow to validate documentation links
-  - Extract-abis Makefile target for ABI generation
 - **Event Enhancement**: Added `root_cids` to `RootsAdded` event for better piece tracking ([#169](https://github.com/FilOzone/pdp/pull/169))
 
 ### 🔧 Changed
