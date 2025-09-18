@@ -17,11 +17,17 @@ This project contains the implementation of the PDP service contract, auxiliary 
 
 The PDP service contract and the PDP verifier contracts are deployed on Filecoin Mainnet and Calibration Testnet.
 
-> Disclaimer: ⚠️ These contracts are still under beta testing and might be upgraded for bug fixes and/or improvements. Please use with caution for production environments. ⚠️
+> Disclaimer: ⚠️ These contracts are still in beta testing and might be upgraded for bug fixes and/or improvements. Please use with caution for production environments. ⚠️
 
-#### Latest
+#### v2.1.0
 
-Please check out the latest tag: https://github.com/FilOzone/filecoin-services/tags
+**Mainnet:**
+- PDPVerifier Implementation: [0xf2a47b4136Ab2dfB6FA67Fb85c7a031f56F6f024](https://filfox.info/en/address/0xf2a47b4136Ab2dfB6FA67Fb85c7a031f56F6f024)
+- PDPVerifier Proxy: [0x31D87004Fc0C38D897725978e51BC06163603E5A](https://filfox.info/en/address/0x31D87004Fc0C38D897725978e51BC06163603E5A)
+
+**Calibnet:**
+- PDPVerifier Implementation: [0x648E8D9103Ec91542DcD0045A65Ef9679F886e82](https://calibration.filfox.info/en/address/0x648E8D9103Ec91542DcD0045A65Ef9679F886e82)
+- PDPVerifier Proxy: [0x445238Eca6c6aB8Dff1Aa6087d9c05734D22f137](https://calibration.filfox.info/en/address/0x445238Eca6c6aB8Dff1Aa6087d9c05734D22f137)
 
 #### v1.1.0
 
