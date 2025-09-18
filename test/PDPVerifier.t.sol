@@ -15,8 +15,9 @@ import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import {NEW_DATA_SET_SENTINEL} from "./TestConstants.sol";
 
-contract PDPVerifierDataSetCreateDeleteTest is Test {
+contract PDPVerifierDataSetCreateDeleteTest is Test, PieceHelper {
     TestingRecordKeeperService listener;
     PDPVerifier pdpVerifier;
     bytes empty = new bytes(0);
@@ -27,6 +28,7 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinality);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        listener = new TestingRecordKeeperService();
     }
 
     function testCreateDataSet() public {
@@ -35,7 +37,9 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
 
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         assertEq(setId, 1, "First data set ID should be 1");
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0, "Data set leaf count should be 0");
 
@@ -62,7 +66,9 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
     function testDeleteDataSet() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetDeleted(setId, 0);
         pdpVerifier.deleteDataSet(setId, empty);
@@ -73,7 +79,9 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
     function testOnlyStorageProviderCanDeleteDataSet() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         // Create a new address to act as a non-storage-provider
         address nonStorageProvider = address(0x1234);
         // Expect revert when non-storage-provider tries to delete the data set
@@ -103,7 +111,9 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
     function testMethodsOnDeletedDataSetFails() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetDeleted(setId, 0);
@@ -123,16 +133,20 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         vm.expectRevert("Data set not live");
         pdpVerifier.getNextChallengeEpoch(setId);
         vm.expectRevert("Data set not live");
-        pdpVerifier.addPieces(setId, new Cids.Cid[](0), empty);
+        pdpVerifier.addPieces(setId, address(0), new Cids.Cid[](1), empty);
     }
 
     function testGetDataSetID() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(2, address(this));
-        pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         assertEq(3, pdpVerifier.getNextDataSetId(), "Next data set ID should be 3");
         assertEq(3, pdpVerifier.getNextDataSetId(), "Next data set ID should be 3");
     }
@@ -143,10 +157,14 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
         // Test that data set IDs start from 1, not 0
         assertEq(pdpVerifier.getNextDataSetId(), 1, "Next data set ID should start at 1");
 
-        uint256 firstSetId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 firstSetId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         assertEq(firstSetId, 1, "First data set ID should be 1, not 0");
 
-        uint256 secondSetId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 secondSetId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         assertEq(secondSetId, 2, "Second data set ID should be 2");
 
         assertEq(pdpVerifier.getNextDataSetId(), 3, "Next data set ID should be 3 after creating two data sets");
@@ -157,13 +175,17 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
 
         // Test 1: Fails when sending not enough for sybil fee
         vm.expectRevert("sybil fee not met");
-        pdpVerifier.createDataSet{value: sybilFee - 1}(address(listener), empty);
+        pdpVerifier.addPieces{value: sybilFee - 1}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Test 2: Returns funds over the sybil fee back to the sender
         uint256 excessAmount = 1 ether;
         uint256 initialBalance = address(this).balance;
 
-        uint256 setId = pdpVerifier.createDataSet{value: sybilFee + excessAmount}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: sybilFee + excessAmount}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         uint256 finalBalance = address(this).balance;
         uint256 refundedAmount = finalBalance - (initialBalance - sybilFee - excessAmount);
@@ -178,6 +200,53 @@ contract PDPVerifierDataSetCreateDeleteTest is Test {
             address(0),
             "Data set proposed storage provider should be initialized to zero address"
         );
+    }
+
+    function testCombinedCreateDataSetAndAddPieces() public {
+        uint256 sybilFee = PDPFees.sybilFee();
+        bytes memory combinedExtraData = abi.encode(empty, empty);
+
+        Cids.Cid[] memory pieces = new Cids.Cid[](2);
+        pieces[0] = makeSamplePiece(64);
+        pieces[1] = makeSamplePiece(128);
+
+        vm.expectEmit(true, true, false, false);
+        emit IPDPEvents.DataSetCreated(1, address(this));
+
+        vm.expectEmit(true, true, false, false);
+        uint256[] memory expectedPieceIds = new uint256[](2);
+        expectedPieceIds[0] = 1;
+        expectedPieceIds[1] = 2;
+        emit IPDPEvents.PiecesAdded(1, expectedPieceIds, pieces);
+
+        uint256 firstAdded =
+            pdpVerifier.addPieces{value: sybilFee}(NEW_DATA_SET_SENTINEL, address(listener), pieces, combinedExtraData);
+
+        // Verify the data set was created correctly
+        assertEq(firstAdded, 1, "First piece ID should be 1");
+        assertEq(pdpVerifier.getDataSetLeafCount(firstAdded), 192, "Data set leaf count should be 64 + 128");
+        assertEq(pdpVerifier.getNextPieceId(firstAdded), 2, "Next piece ID should be 2");
+        assertEq(pdpVerifier.getDataSetListener(firstAdded), address(listener), "Listener should be set correctly");
+
+        // Verify pieces were added correctly
+        assertTrue(pdpVerifier.pieceLive(firstAdded, 0), "First piece should be live");
+        assertTrue(pdpVerifier.pieceLive(firstAdded, 1), "Second piece should be live");
+        assertEq(pdpVerifier.getPieceLeafCount(firstAdded, 0), 64, "First piece leaf count should be 64");
+        assertEq(pdpVerifier.getPieceLeafCount(firstAdded, 1), 128, "Second piece leaf count should be 128");
+    }
+
+    function testNewDataSetSentinelValue() public {
+        assertEq(NEW_DATA_SET_SENTINEL, type(uint256).max, "Sentinel value should be type(uint256).max");
+
+        uint256 sybilFee = PDPFees.sybilFee();
+        bytes memory combinedExtraData = abi.encode(empty, empty);
+        Cids.Cid[] memory pieces = new Cids.Cid[](0);
+
+        uint256 firstAdded =
+            pdpVerifier.addPieces{value: sybilFee}(NEW_DATA_SET_SENTINEL, address(listener), pieces, combinedExtraData);
+
+        assertEq(firstAdded, 1, "First piece ID should be 1");
+        assertEq(pdpVerifier.getDataSetLeafCount(firstAdded), 0, "Data set leaf count should be 0");
     }
 }
 
@@ -202,7 +271,9 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
     }
 
     function testStorageProviderTransfer() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         (address currentStorageProviderStart, address proposedStorageProviderStart) =
             pdpVerifier.getDataSetStorageProvider(setId);
@@ -228,7 +299,9 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
     }
 
     function testStorageProviderProposalReset() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         pdpVerifier.proposeDataSetStorageProvider(setId, storageProvider);
         (address currentStorageProviderEnd, address proposedStorageProviderEnd) =
@@ -240,7 +313,9 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
     }
 
     function testStorageProviderPermissionsRequired() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         vm.prank(nonStorageProvider);
         vm.expectRevert("Only the current storage provider can propose a new storage provider");
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
@@ -259,10 +334,12 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
     }
 
     function testScheduleRemovePiecesOnlyStorageProvider() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieceDataArray = new Cids.Cid[](1);
         pieceDataArray[0] = makeSamplePiece(100);
-        pdpVerifier.addPieces(setId, pieceDataArray, empty);
+        pdpVerifier.addPieces(setId, address(0), pieceDataArray, empty);
 
         uint256[] memory pieceIdsToRemove = new uint256[](1);
         pieceIdsToRemove[0] = 0;
@@ -285,12 +362,15 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        listener = new TestingRecordKeeperService();
     }
 
     function testAddPiece() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         uint256 leafCount = 64;
@@ -298,7 +378,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.PiecesAdded(setId, new uint256[](0), new Cids.Cid[](0));
-        uint256 pieceId = pdpVerifier.addPieces(setId, pieces, empty);
+        uint256 pieceId = pdpVerifier.addPieces(setId, address(0), pieces, empty);
         assertEq(pdpVerifier.getChallengeRange(setId), 0);
 
         // flush add
@@ -317,10 +397,55 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         assertEq(pdpVerifier.getNextPieceId(setId), 1);
     }
 
+    function testAddPiecesToExistingDataSetWithFee() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = makeSamplePiece(64);
+        bytes memory addPayload = abi.encode("add", "data");
+
+        vm.expectRevert("no fee on add to existing dataset");
+        pdpVerifier.addPieces{value: 1 ether}(setId, address(0), pieces, addPayload);
+    }
+
+    function testAddPiecesToNonExistentDataSet() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = makeSamplePiece(64);
+        bytes memory addPayload = abi.encode("add", "data");
+
+        vm.expectRevert("Data set not live");
+        pdpVerifier.addPieces(
+            999, // Non-existent data set ID
+            address(0),
+            pieces,
+            addPayload
+        );
+    }
+
+    function testAddPiecesToExistingDataSetWrongStorageProvider() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = makeSamplePiece(64);
+        bytes memory addPayload = abi.encode("add", "data");
+
+        // Try to add pieces as a different address
+        address otherAddress = address(0x1234);
+        vm.prank(otherAddress);
+        vm.expectRevert("Only the storage provider can add pieces");
+        pdpVerifier.addPieces(setId, address(0), pieces, addPayload);
+    }
+
     function testAddMultiplePieces() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](2);
         pieces[0] = makeSamplePiece(64);
         pieces[1] = makeSamplePiece(128);
@@ -333,7 +458,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         pieceCids[0] = pieces[0];
         pieceCids[1] = pieces[1];
         emit IPDPEvents.PiecesAdded(setId, pieceIds, pieceCids);
-        uint256 firstId = pdpVerifier.addPieces(setId, pieces, empty);
+        uint256 firstId = pdpVerifier.addPieces(setId, address(0), pieces, empty);
         assertEq(firstId, 0);
         // flush add
         vm.expectEmit(true, true, true, false);
@@ -359,33 +484,37 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
     }
 
     function testAddBadPiece() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
 
         pieces[0] = makeSamplePiece(0);
         expectIndexedError(0, "Padding is too large");
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Fail when piece size is too large
         pieces[0] = makeSamplePiece(1 << pdpVerifier.MAX_PIECE_SIZE_LOG2() + 1);
         expectIndexedError(0, "Piece size must be less than 2^50");
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Fail when not adding any pieces;
         Cids.Cid[] memory emptyPieces = new Cids.Cid[](0);
         vm.expectRevert("Must add at least one piece");
-        pdpVerifier.addPieces(setId, emptyPieces, empty);
+        pdpVerifier.addPieces(setId, address(0), emptyPieces, empty);
 
         // Fail when data set is no longer live
         pieces[0] = makeSamplePiece(1);
         pdpVerifier.deleteDataSet(setId, empty);
         vm.expectRevert("Data set not live");
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
     }
 
     function testAddBadPiecesBatched() public {
         // Add one bad piece, message fails on bad index
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](4);
         pieces[0] = makeSamplePiece(1);
         pieces[1] = makeSamplePiece(1);
@@ -393,20 +522,22 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         pieces[3] = makeSamplePiece(0);
 
         expectIndexedError(3, "Padding is too large");
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Add multiple bad pieces, message fails on first bad index
         pieces[0] = makeSamplePiece(0);
         expectIndexedError(0, "Padding is too large");
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
     }
 
     function testRemovePiece() public {
         // Add one piece
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED()); // Not updated on first add anymore
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY);
@@ -431,12 +562,14 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
     function testCannotScheduleRemovalOnNonLiveDataSet() public {
         // Create a data set
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Add a piece to the data set
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Delete the data set
         pdpVerifier.deleteDataSet(setId, empty);
@@ -449,12 +582,14 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
     }
 
     function testRemovePieceBatch() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](3);
         pieces[0] = makeSamplePiece(2);
         pieces[1] = makeSamplePiece(2);
         pieces[2] = makeSamplePiece(2);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
         uint256[] memory toRemove = new uint256[](2);
         toRemove[0] = 0;
         toRemove[1] = 2;
@@ -483,10 +618,12 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
     }
 
     function testRemoveFuturePieces() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
         assertEq(true, pdpVerifier.pieceLive(setId, 0));
         assertEq(false, pdpVerifier.pieceLive(setId, 1));
         uint256[] memory toRemove = new uint256[](2);
@@ -502,7 +639,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         // Scheduling both unchallengeable and challengeable pieces for removal succeeds
         // scheduling duplicate ids in both cases succeeds
         uint256[] memory toRemove2 = new uint256[](4);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
         toRemove2[0] = 0; // current challengeable piece
         toRemove2[1] = 1; // current unchallengeable piece
         toRemove2[2] = 0; // duplicate challengeable
@@ -529,19 +666,23 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
         // First test createDataSet with too large extra data
         vm.expectRevert("Extra data too large");
-        pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), tooLargeExtraData);
+        pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(tooLargeExtraData, empty)
+        );
 
         // Now create data set
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
 
         // Test addPieces with too large extra data
         pieces[0] = makeSamplePiece(2);
         vm.expectRevert("Extra data too large");
-        pdpVerifier.addPieces(setId, pieces, tooLargeExtraData);
+        pdpVerifier.addPieces(setId, address(0), pieces, tooLargeExtraData);
 
         // Now actually add piece id 0
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Test schedulePieceDeletions with too large extra data
         uint256[] memory pieceIds = new uint256[](1);
@@ -560,18 +701,20 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
     function testOnlyStorageProviderCanModifyDataSet() public {
         // Setup a piece we can add
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
 
         // First add a piece as the storage provider so we can test removal
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         address nonStorageProvider = address(0xC0FFEE);
         // Try to add pieces as non-storage-provider
         vm.prank(nonStorageProvider);
         vm.expectRevert("Only the storage provider can add pieces");
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Try to delete data set as non-storage-provider
         vm.prank(nonStorageProvider);
@@ -599,11 +742,13 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
     }
 
     function testNextProvingPeriodChallengeEpochTooSoon() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         // Add a piece to the data set (otherwise nextProvingPeriod fails waiting for leaves)
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Current block number
         uint256 currentBlock = vm.getBlockNumber();
@@ -631,7 +776,9 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         // Get the NO_CHALLENGE_SCHEDULED constant value for clarity
         uint256 noChallenge = pdpVerifier.NO_CHALLENGE_SCHEDULED();
 
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Initial state should be NO_CHALLENGE
         assertEq(
@@ -651,7 +798,9 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
     function testNextProvingPeriodRevertsOnEmptyDataSet() public {
         // Create a new data set
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Try to call nextProvingPeriod on the empty data set
         // Should revert because no leaves have been added yet
@@ -661,11 +810,13 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
     function testEmitDataSetEmptyEvent() public {
         // Create a data set with one piece
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Schedule piece for removal
         uint256[] memory toRemove = new uint256[](1);
@@ -702,7 +853,9 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
 
     function testGetActivePiecesEmpty() public {
         // Create empty data set and test
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         (Cids.Cid[] memory pieces, uint256[] memory ids, uint256[] memory sizes, bool hasMore) =
             pdpVerifier.getActivePieces(setId, 0, 10);
@@ -717,7 +870,9 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
     }
 
     function testGetActivePiecesPagination() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Add 15 pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](15);
@@ -725,7 +880,7 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
             testPieces[i] = makeSamplePiece(1024 / 32 * (i + 1));
         }
 
-        uint256 firstPieceId = pdpVerifier.addPieces(setId, testPieces, empty);
+        uint256 firstPieceId = pdpVerifier.addPieces(setId, address(0), testPieces, empty);
         assertEq(firstPieceId, 0, "First piece ID should be 0");
 
         // Verify total count
@@ -758,14 +913,16 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
     }
 
     function testGetActivePiecesWithDeleted() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Add pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](10);
         for (uint256 i = 0; i < 10; i++) {
             testPieces[i] = makeSamplePiece(1024 / 32);
         }
-        uint256 firstPieceId = pdpVerifier.addPieces(setId, testPieces, empty);
+        uint256 firstPieceId = pdpVerifier.addPieces(setId, address(0), testPieces, empty);
 
         // Schedule removal of pieces 2, 4, 6 (indices 1, 3, 5)
         uint256[] memory toRemove = new uint256[](3);
@@ -796,14 +953,16 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
     }
 
     function testGetActivePiecesEdgeCases() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Add 5 pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](5);
         for (uint256 i = 0; i < 5; i++) {
             testPieces[i] = makeSamplePiece(1024 / 32);
         }
-        pdpVerifier.addPieces(setId, testPieces, empty);
+        pdpVerifier.addPieces(setId, address(0), testPieces, empty);
 
         // Verify count
         assertEq(pdpVerifier.getActivePieceCount(setId), 5, "Should have 5 active pieces");
@@ -838,14 +997,16 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
     }
 
     function testGetActivePiecesHasMore() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Add exactly 10 pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](10);
         for (uint256 i = 0; i < 10; i++) {
             testPieces[i] = makeSamplePiece(1024 / 32);
         }
-        pdpVerifier.addPieces(setId, testPieces, empty);
+        pdpVerifier.addPieces(setId, address(0), testPieces, empty);
 
         // Test exact boundary - requesting exactly all items
         (,,, bool hasMore1) = pdpVerifier.getActivePieces(setId, 0, 10);
@@ -865,14 +1026,16 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
     }
 
     function testGetActivePiecesLargeSet() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Add 100 pieces
         Cids.Cid[] memory testPieces = new Cids.Cid[](100);
         for (uint256 i = 0; i < 100; i++) {
             testPieces[i] = makeSamplePiece(1024 / 32 * (i + 1));
         }
-        pdpVerifier.addPieces(setId, testPieces, empty);
+        pdpVerifier.addPieces(setId, address(0), testPieces, empty);
 
         // Verify total count
         assertEq(pdpVerifier.getActivePieceCount(setId), 100, "Should have 100 active pieces");
@@ -1109,7 +1272,9 @@ contract SumTreeAddTest is Test, PieceHelper {
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = SumTreeInternalTestPDPVerifier(address(proxy));
         listener = new TestingRecordKeeperService();
-        testSetId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        testSetId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
     }
 
     function testMultiAdd() public {
@@ -1128,7 +1293,7 @@ contract SumTreeAddTest is Test, PieceHelper {
         for (uint256 i = 0; i < counts.length; i++) {
             pieceDataArray[i] = makeSamplePiece(counts[i]);
         }
-        pdpVerifier.addPieces(testSetId, pieceDataArray, empty);
+        pdpVerifier.addPieces(testSetId, address(0), pieceDataArray, empty);
         assertEq(pdpVerifier.getDataSetLeafCount(testSetId), 87, "Incorrect final data set leaf count");
         assertEq(pdpVerifier.getNextPieceId(testSetId), 8, "Incorrect next piece ID");
         assertEq(pdpVerifier.getSumTreeCounts(testSetId, 7), 87, "Incorrect sum tree count");
@@ -1168,7 +1333,7 @@ contract SumTreeAddTest is Test, PieceHelper {
         for (uint256 i = 0; i < counts.length; i++) {
             Cids.Cid[] memory pieceDataArray = new Cids.Cid[](1);
             pieceDataArray[0] = makeSamplePiece(counts[i]);
-            pdpVerifier.addPieces(testSetId, pieceDataArray, empty);
+            pdpVerifier.addPieces(testSetId, address(0), pieceDataArray, empty);
             // Assert the piece was added correctly
             assertEq(pdpVerifier.getPieceCid(testSetId, i).data, pieceDataArray[0].data, "Piece not added correctly");
         }
@@ -1318,7 +1483,7 @@ contract SumTreeAddTest is Test, PieceHelper {
         for (uint256 i = 0; i < sizes.length; i++) {
             Cids.Cid[] memory pieceDataArray = new Cids.Cid[](1);
             pieceDataArray[0] = makeSamplePiece(sizes[i]);
-            pdpVerifier.addPieces(testSetId, pieceDataArray, empty);
+            pdpVerifier.addPieces(testSetId, address(0), pieceDataArray, empty);
         }
         pdpVerifier.schedulePieceDeletions(testSetId, pieceIdsToRemove, empty);
         pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); //flush removals
@@ -1407,19 +1572,23 @@ contract PDPListenerIntegrationTest is Test, PieceHelper {
     function testListenerPropagatesErrors() public {
         badListener.setBadOperation(PDPRecordKeeper.OperationType.CREATE);
         vm.expectRevert("Failing operation");
-        pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(badListener), empty);
+        pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(badListener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NONE);
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(badListener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(badListener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.ADD);
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(1);
         vm.expectRevert("Failing operation");
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NONE);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.REMOVE_SCHEDULED);
         uint256[] memory pieceIds = new uint256[](1);
@@ -1491,7 +1660,9 @@ contract PDPVerifierExtraDataTest is Test, PieceHelper {
 
     function testExtraDataPropagation() public {
         // Test CREATE operation
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(extraDataListener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(extraDataListener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         assertEq(
             extraDataListener.getExtraData(setId, PDPRecordKeeper.OperationType.CREATE),
             empty,
@@ -1501,7 +1672,7 @@ contract PDPVerifierExtraDataTest is Test, PieceHelper {
         // Test ADD operation
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(1);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
         assertEq(
             extraDataListener.getExtraData(setId, PDPRecordKeeper.OperationType.ADD),
             empty,
@@ -1579,7 +1750,9 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
         // Step 1: Create a data set
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
 
         // Step 2: Add data `A` in scope for the first proving period
         // Note that the data in the first addPieces call is added to the first proving period
@@ -1594,7 +1767,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         Cids.Cid[] memory piecesProofPeriod1 = new Cids.Cid[](2);
         piecesProofPeriod1[0] = makePiece(treesA[0], leafCountsA[0]);
         piecesProofPeriod1[1] = makePiece(treesA[1], leafCountsA[1]);
-        pdpVerifier.addPieces(setId, piecesProofPeriod1, empty);
+        pdpVerifier.addPieces(setId, address(0), piecesProofPeriod1, empty);
         // flush the original addPieces call
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
@@ -1617,7 +1790,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         Cids.Cid[] memory piecesProvingPeriod2 = new Cids.Cid[](2);
         piecesProvingPeriod2[0] = makePiece(treesB[0], leafCountsB[0]);
         piecesProvingPeriod2[1] = makePiece(treesB[1], leafCountsB[1]);
-        pdpVerifier.addPieces(setId, piecesProvingPeriod2, empty);
+        pdpVerifier.addPieces(setId, address(0), piecesProvingPeriod2, empty);
 
         assertEq(
             pdpVerifier.getPieceLeafCount(setId, 0),
@@ -1774,7 +1947,9 @@ contract PDPVerifierStorageProviderListenerTest is Test {
     }
 
     function testStorageProviderChangedCalledOnStorageProviderTransfer() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         vm.prank(nextStorageProvider);
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
@@ -1783,16 +1958,10 @@ contract PDPVerifierStorageProviderListenerTest is Test {
         assertEq(listener.lastNewStorageProvider(), nextStorageProvider, "New storage provider mismatch");
     }
 
-    function testNoListenerNoRevert() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(0), empty);
-        pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
-        vm.prank(nextStorageProvider);
-        pdpVerifier.claimDataSetStorageProvider(setId, empty);
-        // No assertion needed, test passes if no revert
-    }
-
     function testListenerRevertDoesNotRevertMainTx() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
         listener.setShouldRevert(true);
         vm.prank(nextStorageProvider);
