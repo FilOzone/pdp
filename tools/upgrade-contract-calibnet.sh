@@ -5,6 +5,15 @@
 # and to a valid RPC_URL for the devnet.
 # Assumption: forge, cast, jq are in the PATH
 #
+# Set DRY_RUN=false to actually deploy and broadcast transactions (default is dry-run for safety)
+DRY_RUN=${DRY_RUN:-true}
+
+if [ "$DRY_RUN" = "true" ]; then
+    echo "🧪 Running in DRY-RUN mode - simulation only, no actual deployment"
+else
+    echo "🚀 Running in DEPLOYMENT mode - will actually deploy and upgrade contracts"
+fi
+
 echo "Upgrading contract calibnet"
 
 if [ -z "$RPC_URL" ]; then
@@ -32,15 +41,42 @@ if [ -z "$IMPLEMENTATION_PATH" ]; then
   exit 1
 fi
 
-echo "Deploying new $IMPLEMENTATION_PATH implementation contract"
-# Parse the output of forge create to extract the contract address
-IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.23 --chain-id 314159 "$IMPLEMENTATION_PATH" | grep "Deployed to" | awk '{print $3}')
+if [ "$DRY_RUN" = "true" ]; then
+    echo "🔍 Simulating deployment of new $IMPLEMENTATION_PATH implementation contract"
+    forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.23 --chain-id 314159 "$IMPLEMENTATION_PATH"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Contract compilation and simulation successful!"
+        echo "🔍 Simulating proxy upgrade at $PROXY_ADDRESS"
+        echo "   - Would call: upgradeToAndCall(address,bytes)"
+        echo "   - With upgrade data: $UPGRADE_DATA"
+        echo "✅ Dry run completed successfully!"
+        echo ""
+        echo "To perform actual deployment, run with: DRY_RUN=false ./tools/upgrade-contract-calibnet.sh"
+    else
+        echo "❌ Contract compilation failed during simulation"
+        exit 1
+    fi
+else
+    echo "🚀 Deploying new $IMPLEMENTATION_PATH implementation contract"
+    # Parse the output of forge create to extract the contract address
+    IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --compiler-version 0.8.23 --chain-id 314159 "$IMPLEMENTATION_PATH" | grep "Deployed to" | awk '{print $3}')
 
-if [ -z "$IMPLEMENTATION_ADDRESS" ]; then
-    echo "Error: Failed to extract PDP verifier contract address"
-    exit 1
+    if [ -z "$IMPLEMENTATION_ADDRESS" ]; then
+        echo "❌ Error: Failed to extract PDP verifier contract address"
+        exit 1
+    fi
+    echo "✅ $IMPLEMENTATION_PATH implementation deployed at: $IMPLEMENTATION_ADDRESS"
+
+    echo "🔄 Upgrading proxy at $PROXY_ADDRESS"
+    cast send --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --chain-id 314159 "$PROXY_ADDRESS" "upgradeToAndCall(address,bytes)" "$IMPLEMENTATION_ADDRESS" "$UPGRADE_DATA"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Contract upgrade completed successfully!"
+        echo "📄 You can verify the upgrade by checking the VERSION:"
+        echo "   cast call $PROXY_ADDRESS \"VERSION()\" --rpc-url $RPC_URL | cast --to-ascii"
+    else
+        echo "❌ Contract upgrade failed"
+        exit 1
+    fi
 fi
-echo "$IMPLEMENTATION_PATH implementation deployed at: $IMPLEMENTATION_ADDRESS"
-
-echo "Upgrading proxy at $PROXY_ADDRESS"
-cast send --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --chain-id 314159 "$PROXY_ADDRESS" "upgradeToAndCall(address,bytes)" "$IMPLEMENTATION_ADDRESS" "$UPGRADE_DATA"
