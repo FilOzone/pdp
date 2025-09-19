@@ -50,3 +50,9 @@ extract-abis:
 	  name=$$(basename "$${file%.*}"); \
 	  jq '.abi' "$${file}" > "abi/$${name}.abi.json"; \
 	done
+
+# Contract size check
+.PHONY: contract-size-check
+contract-size-check:
+	@echo "Checking contract sizes..."
+	bash tools/check-contract-size.sh
