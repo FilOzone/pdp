@@ -1629,7 +1629,9 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         assertEq(pdpVerifier.getPieceLeafCount(setId, 3), leafCountsB[1], "Fourth piece leaf count should be correct");
 
         // CHECK: last challenged leaf doesn't move
-        assertEq(pdpVerifier.getChallengeRange(setId), challengeRangeProofPeriod1, "Last challenged leaf should not move");
+        assertEq(
+            pdpVerifier.getChallengeRange(setId), challengeRangeProofPeriod1, "Last challenged leaf should not move"
+        );
         assertEq(
             pdpVerifier.getDataSetLeafCount(setId),
             leafCountsA[0] + leafCountsA[1] + leafCountsB[0] + leafCountsB[1],
