@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.13;
 
-import {Test, console} from "forge-std/Test.sol";
-import {PDPListener, PDPVerifier} from "../src/PDPVerifier.sol";
-import {SimplePDPService, PDPRecordKeeper} from "../src/SimplePDPService.sol";
+import {Test} from "forge-std/Test.sol";
+import {SimplePDPService} from "../src/SimplePDPService.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {Cids} from "../src/Cids.sol";
-import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 
 contract SimplePDPServiceTest is Test {
     SimplePDPService public pdpService;

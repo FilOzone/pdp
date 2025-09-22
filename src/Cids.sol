@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.20;
 
-import {BitOps} from "./BitOps.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
-
 library Cids {
     uint256 public constant COMMP_LEAF_SIZE = 32;
     //  0x01    0x55                0x9120

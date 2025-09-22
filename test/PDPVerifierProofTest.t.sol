@@ -1,31 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.13;
 
-import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
-import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
-import {Test, console, Vm} from "forge-std/Test.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {Test} from "forge-std/Test.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
-import {MerkleProve} from "../src/Proofs.sol";
 import {ProofUtil} from "./ProofUtil.sol";
 import {PDPFees} from "../src/Fees.sol";
-import {SimplePDPService, PDPRecordKeeper} from "../src/SimplePDPService.sol";
 import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
 
 contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
-    uint256 constant challengeFinalityDelay = 2;
-    string constant cidPrefix = "CID";
+    uint256 constant CHALLENGE_FINALITY_DELAY = 2;
     bytes empty = new bytes(0);
     PDPVerifier pdpVerifier;
     PDPListener listener;
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         vm.fee(1 wei);
@@ -72,9 +69,9 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), challengeEpoch);
 
         // Verify the next challenge is in a subsequent epoch after nextProvingPeriod
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + CHALLENGE_FINALITY_DELAY);
     }
 
     receive() external payable {}
@@ -148,7 +145,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         pieces[0] = makeSamplePiece(2);
 
         pdpVerifier.addPieces(setId, pieces, empty);
-        pdpVerifier.nextProvingPeriod(setId, blockNumber + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, blockNumber + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(
             pdpVerifier.getDataSetLastProvenEpoch(setId),
             blockNumber,
@@ -161,7 +158,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         pdpVerifier.schedulePieceDeletions(setId, piecesToRemove, empty);
 
         // Call nextProvingPeriod and verify lastProvenEpoch is reset to 0
-        pdpVerifier.nextProvingPeriod(setId, blockNumber + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, blockNumber + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(
             pdpVerifier.getDataSetLastProvenEpoch(setId),
             0,
@@ -276,7 +273,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // resample
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty); // resample
 
         uint256 nextChallengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         assertNotEq(nextChallengeEpoch, challengeEpoch);
@@ -323,7 +320,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         removePieces[0] = newPieceId;
         pdpVerifier.schedulePieceDeletions(setId, removePieces, empty);
         // flush removes
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
         // Make a new proof that is valid with two pieces
         challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
@@ -384,7 +381,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         );
 
         // Reset to a closer block
-        uint256 nearerBlock = block.number + challengeFinalityDelay;
+        uint256 nearerBlock = block.number + CHALLENGE_FINALITY_DELAY;
         pdpVerifier.nextProvingPeriod(setId, nearerBlock, empty);
         assertEq(
             pdpVerifier.getNextChallengeEpoch(setId), nearerBlock, "Challenge epoch should be reset to nearer block"
@@ -452,7 +449,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         // Create new data set and add pieces.
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         pdpVerifier.addPieces(setId, pieces, empty);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // flush adds
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty); // flush adds
         return (setId, trees);
     }
 
@@ -471,7 +468,7 @@ contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makePiece(tree, leafCount);
         uint256 pieceId = pdpVerifier.addPieces(setId, pieces, empty);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // flush adds
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty); // flush adds
         return (tree, pieceId);
     }
 

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./IPDPTypes.sol";
+import {Cids} from "../Cids.sol";
+import {IPDPTypes} from "./IPDPTypes.sol";
 
 /// @title IPDPEvents
 /// @notice Shared events for PDP contracts and consumers

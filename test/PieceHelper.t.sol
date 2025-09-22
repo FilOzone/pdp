@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.13;
 
-import {Test, console, Vm} from "forge-std/Test.sol";
+import {Test, console} from "forge-std/Test.sol";
 import {Cids} from "../src/Cids.sol";
-import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 import {BitOps} from "../src/BitOps.sol";
 
 contract PieceHelper is Test {

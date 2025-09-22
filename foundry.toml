@@ -18,3 +18,9 @@ remappings = [
 optimizer_runs = 1
 via_ir = true
 
+[lint]
+exclude_lints = [
+    "incorrect-shift",
+    "mixed-case-function",
+    "mixed-case-variable",
+]

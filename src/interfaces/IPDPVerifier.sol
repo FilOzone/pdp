@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./IPDPTypes.sol";
-import "./IPDPEvents.sol";
-import "../Cids.sol";
+import {Cids} from "../Cids.sol";
+import {IPDPTypes} from "./IPDPTypes.sol";
+import {IPDPEvents} from "./IPDPEvents.sol";
 
 /// @title IPDPVerifier
 /// @notice Main interface for the PDPVerifier contract
