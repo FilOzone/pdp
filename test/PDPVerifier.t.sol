@@ -1591,16 +1591,16 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
             treesA[i] = ProofUtil.makeTree(leafCountsA[i]);
         }
 
-        Cids.Cid[] memory piecesPP1 = new Cids.Cid[](2);
-        piecesPP1[0] = makePiece(treesA[0], leafCountsA[0]);
-        piecesPP1[1] = makePiece(treesA[1], leafCountsA[1]);
-        pdpVerifier.addPieces(setId, piecesPP1, empty);
+        Cids.Cid[] memory piecesProofPeriod1 = new Cids.Cid[](2);
+        piecesProofPeriod1[0] = makePiece(treesA[0], leafCountsA[0]);
+        piecesProofPeriod1[1] = makePiece(treesA[1], leafCountsA[1]);
+        pdpVerifier.addPieces(setId, piecesProofPeriod1, empty);
         // flush the original addPieces call
         pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
-        uint256 challengeRangePP1 = pdpVerifier.getChallengeRange(setId);
+        uint256 challengeRangeProofPeriod1 = pdpVerifier.getChallengeRange(setId);
         assertEq(
-            challengeRangePP1,
+            challengeRangeProofPeriod1,
             pdpVerifier.getDataSetLeafCount(setId),
             "Last challenged leaf should be total leaf count - 1"
         );
@@ -1614,10 +1614,10 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
             treesB[i] = ProofUtil.makeTree(leafCountsB[i]);
         }
 
-        Cids.Cid[] memory piecesPP2 = new Cids.Cid[](2);
-        piecesPP2[0] = makePiece(treesB[0], leafCountsB[0]);
-        piecesPP2[1] = makePiece(treesB[1], leafCountsB[1]);
-        pdpVerifier.addPieces(setId, piecesPP2, empty);
+        Cids.Cid[] memory piecesProvingPeriod2 = new Cids.Cid[](2);
+        piecesProvingPeriod2[0] = makePiece(treesB[0], leafCountsB[0]);
+        piecesProvingPeriod2[1] = makePiece(treesB[1], leafCountsB[1]);
+        pdpVerifier.addPieces(setId, piecesProvingPeriod2, empty);
 
         assertEq(
             pdpVerifier.getPieceLeafCount(setId, 0),
@@ -1629,7 +1629,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         assertEq(pdpVerifier.getPieceLeafCount(setId, 3), leafCountsB[1], "Fourth piece leaf count should be correct");
 
         // CHECK: last challenged leaf doesn't move
-        assertEq(pdpVerifier.getChallengeRange(setId), challengeRangePP1, "Last challenged leaf should not move");
+        assertEq(pdpVerifier.getChallengeRange(setId), challengeRangeProofPeriod1, "Last challenged leaf should not move");
         assertEq(
             pdpVerifier.getDataSetLeafCount(setId),
             leafCountsA[0] + leafCountsA[1] + leafCountsB[0] + leafCountsB[1],
@@ -1649,8 +1649,8 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         // Advance chain until challenge epoch.
         vm.roll(pdpVerifier.getNextChallengeEpoch(setId));
         // Prepare proofs.
-        // Proving trees for PP1 are just treesA
-        IPDPTypes.Proof[] memory proofsPP1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
+        // Proving trees for ProofPeriod1 are just treesA
+        IPDPTypes.Proof[] memory proofsProofPeriod1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
 
         vm.mockCall(
             pdpVerifier.RANDOMNESS_PRECOMPILE(),
@@ -1658,7 +1658,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
             abi.encode(pdpVerifier.getNextChallengeEpoch(setId))
         );
 
-        pdpVerifier.provePossession{value: 1e18}(setId, proofsPP1);
+        pdpVerifier.provePossession{value: 1e18}(setId, proofsProofPeriod1);
 
         pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
         // CHECK: leaf counts

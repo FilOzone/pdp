@@ -22,5 +22,4 @@ via_ir = true
 exclude_lints = [
     "incorrect-shift",
     "mixed-case-function",
-    "mixed-case-variable",
 ]
