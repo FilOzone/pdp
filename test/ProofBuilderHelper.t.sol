@@ -1,18 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.13;
 
-import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
-import {Test, console, Vm} from "forge-std/Test.sol";
-import {Cids} from "../src/Cids.sol";
-import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
-import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
+import {Test} from "forge-std/Test.sol";
+import {PDPVerifier} from "../src/PDPVerifier.sol";
 import {MerkleProve} from "../src/Proofs.sol";
-import {ProofUtil} from "./ProofUtil.sol";
-import {PDPFees} from "../src/Fees.sol";
-import {SimplePDPService, PDPRecordKeeper} from "../src/SimplePDPService.sol";
 import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
-import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
-import {PieceHelper} from "./PieceHelper.t.sol";
 
 contract ProofBuilderHelper is Test {
     // Builds a proof of possession for a data set

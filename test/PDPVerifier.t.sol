@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.13;
 
-import {Test, console, Vm} from "forge-std/Test.sol";
+import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {Test} from "forge-std/Test.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
-import {MerkleProve} from "../src/Proofs.sol";
 import {ProofUtil} from "./ProofUtil.sol";
 import {PDPFees} from "../src/Fees.sol";
-import {SimplePDPService, PDPRecordKeeper} from "../src/SimplePDPService.sol";
+import {PDPRecordKeeper} from "../src/SimplePDPService.sol";
 import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
-import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
-import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 contract PDPVerifierDataSetCreateDeleteTest is Test {
     TestingRecordKeeperService listener;
@@ -274,7 +274,7 @@ contract PDPVerifierStorageProviderTest is Test, PieceHelper {
 }
 
 contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
-    uint256 constant challengeFinalityDelay = 2;
+    uint256 constant CHALLENGE_FINALITY_DELAY = 2;
 
     PDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
@@ -282,7 +282,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
     }
@@ -303,11 +303,11 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
         // flush add
         vm.expectEmit(true, true, false, false);
-        emit IPDPEvents.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 2);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        emit IPDPEvents.NextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, 2);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
         assertEq(pdpVerifier.getDataSetLeafCount(setId), leafCount);
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + CHALLENGE_FINALITY_DELAY);
         assertEq(pdpVerifier.getChallengeRange(setId), leafCount);
 
         assertTrue(pdpVerifier.pieceLive(setId, pieceId));
@@ -337,12 +337,12 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         assertEq(firstId, 0);
         // flush add
         vm.expectEmit(true, true, true, false);
-        emit IPDPEvents.NextProvingPeriod(setId, block.number + challengeFinalityDelay, 6);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        emit IPDPEvents.NextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, 6);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
         uint256 expectedLeafCount = 64 + 128;
         assertEq(pdpVerifier.getDataSetLeafCount(setId), expectedLeafCount);
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + CHALLENGE_FINALITY_DELAY);
 
         assertTrue(pdpVerifier.pieceLive(setId, firstId));
         assertTrue(pdpVerifier.pieceLive(setId, firstId + 1));
@@ -408,8 +408,8 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, pieces, empty);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED()); // Not updated on first add anymore
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + CHALLENGE_FINALITY_DELAY);
 
         // Remove piece
         uint256[] memory toRemove = new uint256[](1);
@@ -418,7 +418,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.PiecesRemoved(setId, toRemove);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // flush
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty); // flush
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED());
         assertEq(pdpVerifier.pieceLive(setId, 0), false);
@@ -462,7 +462,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.PiecesRemoved(setId, toRemove);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty); // flush
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty); // flush
 
         assertEq(pdpVerifier.pieceLive(setId, 0), false);
         assertEq(pdpVerifier.pieceLive(setId, 1), true);
@@ -470,7 +470,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
         assertEq(pdpVerifier.getNextPieceId(setId), 3);
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 64 / 32);
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + challengeFinalityDelay);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + CHALLENGE_FINALITY_DELAY);
 
         bytes memory emptyCidData = new bytes(0);
         assertEq(pdpVerifier.getPieceCid(setId, 0).data, emptyCidData);
@@ -497,7 +497,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         vm.expectRevert("Can only schedule removal of existing pieces");
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
         // Actual removal does not fail
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
         // Scheduling both unchallengeable and challengeable pieces for removal succeeds
         // scheduling duplicate ids in both cases succeeds
@@ -514,7 +514,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         assertEq(true, pdpVerifier.pieceChallengable(setId, 0));
         assertEq(false, pdpVerifier.pieceChallengable(setId, 1));
         pdpVerifier.schedulePieceDeletions(setId, toRemove2, empty);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
         assertEq(false, pdpVerifier.pieceLive(setId, 0));
         assertEq(false, pdpVerifier.pieceLive(setId, 1));
@@ -610,7 +610,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
         // Try to call nextProvingPeriod with a challenge epoch that is not at least
         // challengeFinality epochs in the future
-        uint256 tooSoonEpoch = currentBlock + challengeFinalityDelay - 1;
+        uint256 tooSoonEpoch = currentBlock + CHALLENGE_FINALITY_DELAY - 1;
 
         // Expect revert with the specific error message
         vm.expectRevert("challenge epoch must be at least challengeFinality epochs in the future");
@@ -618,7 +618,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
         // Set challenge epoch to exactly challengeFinality epochs in the future
         // This should work (not revert)
-        uint256 validEpoch = currentBlock + challengeFinalityDelay;
+        uint256 validEpoch = currentBlock + CHALLENGE_FINALITY_DELAY;
 
         // This call should succeed
         pdpVerifier.nextProvingPeriod(setId, validEpoch, "");
@@ -629,19 +629,21 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
 
     function testNextProvingPeriodWithNoData() public {
         // Get the NO_CHALLENGE_SCHEDULED constant value for clarity
-        uint256 NO_CHALLENGE = pdpVerifier.NO_CHALLENGE_SCHEDULED();
+        uint256 noChallenge = pdpVerifier.NO_CHALLENGE_SCHEDULED();
 
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         // Initial state should be NO_CHALLENGE
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE, "Initial state should be NO_CHALLENGE");
+        assertEq(
+            pdpVerifier.getNextChallengeEpoch(setId), noChallenge, "Initial state should be NO_CHALLENGE_SCHEDULED"
+        );
 
         // Try to set next proving period with various values
         vm.expectRevert("can only start proving once leaves are added");
         pdpVerifier.nextProvingPeriod(setId, block.number + 100, empty);
 
         vm.expectRevert("can only start proving once leaves are added");
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
         vm.expectRevert("can only start proving once leaves are added");
         pdpVerifier.nextProvingPeriod(setId, type(uint256).max, empty);
@@ -654,7 +656,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         // Try to call nextProvingPeriod on the empty data set
         // Should revert because no leaves have been added yet
         vm.expectRevert("can only start proving once leaves are added");
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
     }
 
     function testEmitDataSetEmptyEvent() public {
@@ -675,7 +677,7 @@ contract PDPVerifierDataSetMutateTest is Test, PieceHelper {
         emit IPDPEvents.DataSetEmpty(setId);
 
         // Call nextProvingPeriod which should remove the piece and emit the event
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
         // Verify the data set is indeed empty
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0);
@@ -773,8 +775,8 @@ contract PDPVerifierPaginationTest is Test, PieceHelper {
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
         // Move to next proving period to make removals effective
-        uint256 challengeFinalityDelay = pdpVerifier.getChallengeFinality();
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        uint256 challengeFinality = pdpVerifier.getChallengeFinality();
+        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinality, empty);
 
         // Should return only 7 active pieces
         (Cids.Cid[] memory pieces, uint256[] memory ids, uint256[] memory sizes, bool hasMore) =
@@ -1094,19 +1096,16 @@ contract SumTreeHeightTest is Test {
     }
 }
 
-import "forge-std/Test.sol";
-import "../src/PDPVerifier.sol";
-
 contract SumTreeAddTest is Test, PieceHelper {
     SumTreeInternalTestPDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
     uint256 testSetId;
-    uint256 challengeFinalityDelay = 100;
+    uint256 constant CHALLENGE_FINALITY_DELAY = 100;
     bytes empty = new bytes(0);
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new SumTreeInternalTestPDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = SumTreeInternalTestPDPVerifier(address(proxy));
         listener = new TestingRecordKeeperService();
@@ -1178,7 +1177,7 @@ contract SumTreeAddTest is Test, PieceHelper {
         // Remove pieces in batch
         pdpVerifier.schedulePieceDeletions(testSetId, pieceIdsToRemove, empty);
         // flush adds and removals
-        pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + CHALLENGE_FINALITY_DELAY, empty);
         for (uint256 i = 0; i < pieceIdsToRemove.length; i++) {
             bytes memory zeroBytes;
             assertEq(pdpVerifier.getPieceCid(testSetId, pieceIdsToRemove[i]).data, zeroBytes);
@@ -1322,7 +1321,7 @@ contract SumTreeAddTest is Test, PieceHelper {
             pdpVerifier.addPieces(testSetId, pieceDataArray, empty);
         }
         pdpVerifier.schedulePieceDeletions(testSetId, pieceIdsToRemove, empty);
-        pdpVerifier.nextProvingPeriod(testSetId, block.number + challengeFinalityDelay, empty); //flush removals
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + CHALLENGE_FINALITY_DELAY, empty); //flush removals
 
         assertFindPieceAndOffset(testSetId, 0, 3, 0);
         assertFindPieceAndOffset(testSetId, 1, 4, 0);
@@ -1394,12 +1393,12 @@ contract BadListener is PDPListener {
 contract PDPListenerIntegrationTest is Test, PieceHelper {
     PDPVerifier pdpVerifier;
     BadListener badListener;
-    uint256 constant challengeFinalityDelay = 2;
+    uint256 constant CHALLENGE_FINALITY_DELAY = 2;
     bytes empty = new bytes(0);
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         badListener = new BadListener();
@@ -1433,10 +1432,10 @@ contract PDPListenerIntegrationTest is Test, PieceHelper {
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD);
         vm.expectRevert("Failing operation");
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NONE);
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
     }
 }
 
@@ -1479,12 +1478,12 @@ contract ExtraDataListener is PDPListener {
 contract PDPVerifierExtraDataTest is Test, PieceHelper {
     PDPVerifier pdpVerifier;
     ExtraDataListener extraDataListener;
-    uint256 constant challengeFinalityDelay = 2;
+    uint256 constant CHALLENGE_FINALITY_DELAY = 2;
     bytes empty = new bytes(0);
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         extraDataListener = new ExtraDataListener();
@@ -1520,7 +1519,7 @@ contract PDPVerifierExtraDataTest is Test, PieceHelper {
         );
 
         // Test NEXT_PROVING_PERIOD operation
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(
             extraDataListener.getExtraData(setId, PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD),
             empty,
@@ -1532,12 +1531,12 @@ contract PDPVerifierExtraDataTest is Test, PieceHelper {
 contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
     PDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
-    uint256 constant challengeFinalityDelay = 2;
+    uint256 constant CHALLENGE_FINALITY_DELAY = 2;
     bytes empty = new bytes(0);
 
     function setUp() public {
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
-        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinalityDelay);
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
         listener = new TestingRecordKeeperService();
@@ -1592,16 +1591,16 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
             treesA[i] = ProofUtil.makeTree(leafCountsA[i]);
         }
 
-        Cids.Cid[] memory piecesPP1 = new Cids.Cid[](2);
-        piecesPP1[0] = makePiece(treesA[0], leafCountsA[0]);
-        piecesPP1[1] = makePiece(treesA[1], leafCountsA[1]);
-        pdpVerifier.addPieces(setId, piecesPP1, empty);
+        Cids.Cid[] memory piecesProofPeriod1 = new Cids.Cid[](2);
+        piecesProofPeriod1[0] = makePiece(treesA[0], leafCountsA[0]);
+        piecesProofPeriod1[1] = makePiece(treesA[1], leafCountsA[1]);
+        pdpVerifier.addPieces(setId, piecesProofPeriod1, empty);
         // flush the original addPieces call
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
 
-        uint256 challengeRangePP1 = pdpVerifier.getChallengeRange(setId);
+        uint256 challengeRangeProofPeriod1 = pdpVerifier.getChallengeRange(setId);
         assertEq(
-            challengeRangePP1,
+            challengeRangeProofPeriod1,
             pdpVerifier.getDataSetLeafCount(setId),
             "Last challenged leaf should be total leaf count - 1"
         );
@@ -1615,10 +1614,10 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
             treesB[i] = ProofUtil.makeTree(leafCountsB[i]);
         }
 
-        Cids.Cid[] memory piecesPP2 = new Cids.Cid[](2);
-        piecesPP2[0] = makePiece(treesB[0], leafCountsB[0]);
-        piecesPP2[1] = makePiece(treesB[1], leafCountsB[1]);
-        pdpVerifier.addPieces(setId, piecesPP2, empty);
+        Cids.Cid[] memory piecesProvingPeriod2 = new Cids.Cid[](2);
+        piecesProvingPeriod2[0] = makePiece(treesB[0], leafCountsB[0]);
+        piecesProvingPeriod2[1] = makePiece(treesB[1], leafCountsB[1]);
+        pdpVerifier.addPieces(setId, piecesProvingPeriod2, empty);
 
         assertEq(
             pdpVerifier.getPieceLeafCount(setId, 0),
@@ -1630,7 +1629,9 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         assertEq(pdpVerifier.getPieceLeafCount(setId, 3), leafCountsB[1], "Fourth piece leaf count should be correct");
 
         // CHECK: last challenged leaf doesn't move
-        assertEq(pdpVerifier.getChallengeRange(setId), challengeRangePP1, "Last challenged leaf should not move");
+        assertEq(
+            pdpVerifier.getChallengeRange(setId), challengeRangeProofPeriod1, "Last challenged leaf should not move"
+        );
         assertEq(
             pdpVerifier.getDataSetLeafCount(setId),
             leafCountsA[0] + leafCountsA[1] + leafCountsB[0] + leafCountsB[1],
@@ -1650,8 +1651,8 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         // Advance chain until challenge epoch.
         vm.roll(pdpVerifier.getNextChallengeEpoch(setId));
         // Prepare proofs.
-        // Proving trees for PP1 are just treesA
-        IPDPTypes.Proof[] memory proofsPP1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
+        // Proving trees for ProofPeriod1 are just treesA
+        IPDPTypes.Proof[] memory proofsProofPeriod1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
 
         vm.mockCall(
             pdpVerifier.RANDOMNESS_PRECOMPILE(),
@@ -1659,9 +1660,9 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
             abi.encode(pdpVerifier.getNextChallengeEpoch(setId))
         );
 
-        pdpVerifier.provePossession{value: 1e18}(setId, proofsPP1);
+        pdpVerifier.provePossession{value: 1e18}(setId, proofsProofPeriod1);
 
-        pdpVerifier.nextProvingPeriod(setId, block.number + challengeFinalityDelay, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
         // CHECK: leaf counts
         assertEq(
             pdpVerifier.getPieceLeafCount(setId, 0),
@@ -1692,7 +1693,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
         // CHECK: the next challenge epoch has been updated
         assertEq(
             pdpVerifier.getNextChallengeEpoch(setId),
-            block.number + challengeFinalityDelay,
+            block.number + CHALLENGE_FINALITY_DELAY,
             "Next challenge epoch should be updated"
         );
     }

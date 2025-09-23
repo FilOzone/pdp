@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.20;
 
-import {PDPVerifier, PDPListener} from "./PDPVerifier.sol";
-import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
-import "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
+import {PDPListener} from "./PDPVerifier.sol";
+import {Initializable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {Cids} from "./Cids.sol";
-import {IPDPEvents} from "./interfaces/IPDPEvents.sol";
 import {IPDPProvingSchedule} from "./IPDPProvingSchedule.sol";
 
 // PDPRecordKeeper tracks PDP operations.  It is used as a base contract for PDPListeners

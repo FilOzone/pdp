@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.13;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {PDPFees} from "../src/Fees.sol";
 
 contract PDPFeesTest is Test {
-    uint256 constant epochs_per_day = 2880;
+    uint256 constant EPOCHS_PER_DAY = 2880;
 
     function computeRewardPerPeriod(uint64 filUsdPrice, int32 filUsdPriceExpo, uint256 rawSize)
         internal
@@ -22,7 +22,7 @@ contract PDPFeesTest is Test {
                     * (10 ** uint32(-filUsdPriceExpo))
             ) / (PDPFees.TIB_IN_BYTES * PDPFees.EPOCHS_PER_MONTH * filUsdPrice);
         }
-        uint256 rewardPerPeriod = rewardPerEpochPerByte * epochs_per_day * rawSize;
+        uint256 rewardPerPeriod = rewardPerEpochPerByte * EPOCHS_PER_DAY * rawSize;
         return rewardPerPeriod;
     }
 
@@ -30,19 +30,19 @@ contract PDPFeesTest is Test {
     function testProofFeeWithGasFeeBoundZeroGasFee() public {
         vm.expectRevert("failed to validate: estimated gas fee must be greater than 0");
         vm.fee(1000);
-        PDPFees.proofFeeWithGasFeeBound(0, 5, 0, 1e18, epochs_per_day);
+        PDPFees.proofFeeWithGasFeeBound(0, 5, 0, 1e18, EPOCHS_PER_DAY);
     }
 
     /// forge-config: default.allow_internal_expect_revert = true
     function testProofFeeWithGasFeeBoundZeroAttoFilUsdPrice() public {
         vm.expectRevert("failed to validate: AttoFIL price must be greater than 0");
-        PDPFees.proofFeeWithGasFeeBound(1, 0, 0, 1e18, epochs_per_day);
+        PDPFees.proofFeeWithGasFeeBound(1, 0, 0, 1e18, EPOCHS_PER_DAY);
     }
 
     /// forge-config: default.allow_internal_expect_revert = true
     function testProofFeeWithGasFeeBoundZeroRawSize() public {
         vm.expectRevert("failed to validate: raw size must be greater than 0");
-        PDPFees.proofFeeWithGasFeeBound(1, 5, 0, 0, epochs_per_day);
+        PDPFees.proofFeeWithGasFeeBound(1, 5, 0, 0, EPOCHS_PER_DAY);
     }
 
     function testProofFeeWithGasFeeBoundHighGasFee() public view {
@@ -57,7 +57,7 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = gasLimitRight;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
 
         assertEq(fee, 0, "Fee should be 0 when gas fee is high");
     }
@@ -75,7 +75,7 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = (gasLimitLeft + gasLimitRight) / 2;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
 
         uint256 expectedFee = gasLimitRight - estimatedGasFee;
 
@@ -94,7 +94,7 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = gasLimitLeft / 2;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
 
         uint256 expectedFee = (rewardPerPeriod * PDPFees.PROOF_FEE_PERCENTAGE) / 100;
 
@@ -108,7 +108,7 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = 1e15;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
         assertTrue(fee > 0, "Fee should be positive with negative exponent");
     }
 
@@ -119,7 +119,7 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = 1e15;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
         assertTrue(fee > 0, "Fee should be positive for large raw size");
     }
 
@@ -134,7 +134,7 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = gasLimitLeft / 2;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
 
         uint256 expectedFee = (rewardPerPeriod * PDPFees.PROOF_FEE_PERCENTAGE) / 100;
 
@@ -148,12 +148,12 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = 1e15;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
         assertTrue(fee > 0, "Fee should be positive with FIL price at $0.50");
 
         // With lower FIL price, fee should be higher than when price is $5
         uint256 feeAt5Dollars =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, 0, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, 0, rawSize, EPOCHS_PER_DAY);
         assertTrue(fee > feeAt5Dollars, "Fee should be higher with lower FIL price");
     }
 
@@ -174,7 +174,7 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = gasLimitLeft;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
 
         uint256 expectedFee = (rewardPerPeriod * PDPFees.PROOF_FEE_PERCENTAGE) / 100;
         assertEq(fee, expectedFee, "Fee should be full proof fee at left boundary");
@@ -192,7 +192,7 @@ contract PDPFeesTest is Test {
         uint256 estimatedGasFee = gasLimitRight - 1;
 
         uint256 fee =
-            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, epochs_per_day);
+            PDPFees.proofFeeWithGasFeeBound(estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, EPOCHS_PER_DAY);
 
         uint256 expectedFee = 1; // Should be gasLimitRight - estimatedGasFee = 1
         assertEq(fee, expectedFee, "Fee should be 1 when estimatedGasFee is just below right boundary");

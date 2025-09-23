@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.20;
 
-import {Cids} from "../src/Cids.sol";
-import {MerkleProve, MerkleVerify, Hashes} from "../src/Proofs.sol";
+import {MerkleProve} from "../src/Proofs.sol";
 
 // Methods for committing to data and generating proofs.
 // These are only used in tests (which verify proofs).
