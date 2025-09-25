@@ -28,7 +28,6 @@ jobs:
       - name: Install Dependencies
         run: |
           forge install
-          npm ci
 
       - name: Build & extract ABIs
         run: |
