@@ -236,7 +236,7 @@ contract PDPVerifierDataSetCreateDeleteTest is Test, PieceHelper {
     }
 
     function testNewDataSetSentinelValue() public {
-        assertEq(NEW_DATA_SET_SENTINEL, type(uint256).max, "Sentinel value should be type(uint256).max");
+        assertEq(NEW_DATA_SET_SENTINEL, 0, "Sentinel value should be 0");
 
         uint256 sybilFee = PDPFees.sybilFee();
         bytes memory combinedExtraData = abi.encode(empty, empty);

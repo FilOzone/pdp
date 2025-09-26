@@ -52,7 +52,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     bytes32 public constant FIL_USD_PRICE_FEED_ID = 0x150ac9b959aee0051e4091f0ef5216d941f590e1c5e7f91cf7635b5c11628c0e;
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
-    uint256 public constant NEW_DATA_SET_SENTINEL = type(uint256).max;
+    uint256 public constant NEW_DATA_SET_SENTINEL = 0;
 
     // Events
     event DataSetCreated(uint256 indexed setId, address indexed storageProvider);
@@ -434,25 +434,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             emit DataSetCreated(newSetId, msg.sender);
 
             // Add pieces to the newly created data set (if any)
-            uint256 nPieces = pieceData.length;
             require(addPayload.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
-            uint256 firstAddedNew = nextPieceId[newSetId];
 
-            if (nPieces > 0) {
-                uint256[] memory pieceIdsNew = new uint256[](pieceData.length);
-                Cids.Cid[] memory pieceCidsAddedNew = new Cids.Cid[](pieceData.length);
-
-                for (uint256 i = 0; i < nPieces; i++) {
-                    addOnePiece(newSetId, i, pieceData[i]);
-                    pieceIdsNew[i] = firstAddedNew + i;
-                    pieceCidsAddedNew[i] = pieceData[i];
-                }
-                emit PiecesAdded(newSetId, pieceIdsNew, pieceCidsAddedNew);
-
-                address listenerAddrNew = dataSetListener[newSetId];
-                if (listenerAddrNew != address(0)) {
-                    PDPListener(listenerAddrNew).piecesAdded(newSetId, firstAddedNew, pieceData, addPayload);
-                }
+            if (pieceData.length > 0) {
+                _addPiecesToDataSet(newSetId, pieceData, addPayload);
             }
 
             // Return the at the end to avoid any possible re-entrency issues.
@@ -467,26 +452,37 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             require(listenerAddr == address(0), "listener must be zero for existing dataset");
             require(msg.value == 0, "no fee on add to existing dataset");
 
-            uint256 nPieces = pieceData.length;
             require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
             require(dataSetLive(setId), "Data set not live");
-            require(nPieces > 0, "Must add at least one piece");
             require(storageProvider[setId] == msg.sender, "Only the storage provider can add pieces");
-            uint256 firstAdded = nextPieceId[setId];
-            uint256[] memory pieceIds = new uint256[](pieceData.length);
-            Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](pieceData.length);
 
-            for (uint256 i = 0; i < nPieces; i++) {
-                addOnePiece(setId, i, pieceData[i]);
-                pieceIds[i] = firstAdded + i;
-                pieceCidsAdded[i] = pieceData[i];
-            }
-            emit PiecesAdded(setId, pieceIds, pieceCidsAdded);
-            address listenerAddrExisting = dataSetListener[setId];
-            if (listenerAddrExisting != address(0)) {
-                PDPListener(listenerAddrExisting).piecesAdded(setId, firstAdded, pieceData, extraData);
-            }
-            return firstAdded;
+            return _addPiecesToDataSet(setId, pieceData, extraData);
+        }
+    }
+
+    // Internal function to add pieces to a data set and handle events/listeners
+    function _addPiecesToDataSet(uint256 setId, Cids.Cid[] calldata pieceData, bytes memory extraData)
+        internal
+        returns (uint256 firstAdded)
+    {
+        uint256 nPieces = pieceData.length;
+        require(nPieces > 0, "Must add at least one piece");
+
+        firstAdded = nextPieceId[setId];
+        uint256[] memory pieceIds = new uint256[](pieceData.length);
+        Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](pieceData.length);
+
+        for (uint256 i = 0; i < nPieces; i++) {
+            addOnePiece(setId, i, pieceData[i]);
+            pieceIds[i] = firstAdded + i;
+            pieceCidsAdded[i] = pieceData[i];
+        }
+
+        emit PiecesAdded(setId, pieceIds, pieceCidsAdded);
+
+        address listenerAddr = dataSetListener[setId];
+        if (listenerAddr != address(0)) {
+            PDPListener(listenerAddr).piecesAdded(setId, firstAdded, pieceData, extraData);
         }
     }
 

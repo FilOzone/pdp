@@ -5,7 +5,7 @@ import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {Test} from "forge-std/Test.sol";
 import {Cids} from "../src/Cids.sol";
-import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
+import {PDPVerifier} from "../src/PDPVerifier.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {ProofUtil} from "./ProofUtil.sol";
 import {PDPFees} from "../src/Fees.sol";
