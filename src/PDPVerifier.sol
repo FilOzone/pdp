@@ -9,6 +9,8 @@ import {ERC1967Utils} from "../lib/openzeppelin-contracts/contracts/proxy/ERC196
 import {Initializable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+
+import {FVMPay} from "fvm-solidity/FVMPay.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
@@ -38,6 +40,9 @@ interface PDPListener {
 }
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+    using FVMPay for address;
+    using FVMPay for uint256;
+
     // Constants
     address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
     uint256 public constant LEAF_SIZE = 32;
@@ -168,7 +173,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function burnFee(uint256 amount) internal {
         require(msg.value >= amount, "Incorrect fee amount");
-        (bool success,) = BURN_ACTOR.call{value: amount}("");
+        bool success = amount.burn();
         require(success, "Burn failed");
     }
 
@@ -405,7 +410,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // Return the at the end to avoid any possible re-entrency issues.
         if (msg.value > sybilFee) {
-            (bool success,) = msg.sender.call{value: msg.value - sybilFee}("");
+            bool success = msg.sender.pay(msg.value - sybilFee);
             require(success, "Transfer failed.");
         }
         return setId;
@@ -573,7 +578,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Return the overpayment after doing everything else to avoid re-entrancy issues (all state has been updated by this point). If this
         // call fails, the entire operation reverts.
         if (refund > 0) {
-            (bool success,) = msg.sender.call{value: refund}("");
+            bool success = msg.sender.pay(refund);
             require(success, "Transfer failed.");
         }
     }

@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {Test} from "forge-std/Test.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
@@ -14,13 +15,14 @@ import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
 
-contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
+contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
     uint256 constant CHALLENGE_FINALITY_DELAY = 2;
     bytes empty = new bytes(0);
     PDPVerifier pdpVerifier;
     PDPListener listener;
 
-    function setUp() public {
+    function setUp() public override {
+        super.setUp();
         PDPVerifier pdpVerifierImpl = new PDPVerifier();
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
