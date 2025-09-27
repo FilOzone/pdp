@@ -71,9 +71,9 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), challengeEpoch);
 
         // Verify the next challenge is in a subsequent epoch after nextProvingPeriod
-        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), block.number + CHALLENGE_FINALITY_DELAY);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY);
     }
 
     receive() external payable {}
@@ -275,7 +275,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
 
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
-        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty); // resample
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); // resample
 
         uint256 nextChallengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         assertNotEq(nextChallengeEpoch, challengeEpoch);
@@ -322,7 +322,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         removePieces[0] = newPieceId;
         pdpVerifier.schedulePieceDeletions(setId, removePieces, empty);
         // flush removes
-        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         // Make a new proof that is valid with two pieces
         challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
@@ -376,14 +376,14 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         (uint256 setId, bytes32[][] memory tree) = makeDataSetWithOnePiece(leafCount);
 
         // Set challenge sampling far in the future
-        uint256 farFutureBlock = block.number + 1000;
+        uint256 farFutureBlock = vm.getBlockNumber() + 1000;
         pdpVerifier.nextProvingPeriod(setId, farFutureBlock, empty);
         assertEq(
             pdpVerifier.getNextChallengeEpoch(setId), farFutureBlock, "Challenge epoch should be set to far future"
         );
 
         // Reset to a closer block
-        uint256 nearerBlock = block.number + CHALLENGE_FINALITY_DELAY;
+        uint256 nearerBlock = vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY;
         pdpVerifier.nextProvingPeriod(setId, nearerBlock, empty);
         assertEq(
             pdpVerifier.getNextChallengeEpoch(setId), nearerBlock, "Challenge epoch should be reset to nearer block"
@@ -451,7 +451,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         // Create new data set and add pieces.
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         pdpVerifier.addPieces(setId, pieces, empty);
-        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty); // flush adds
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); // flush adds
         return (setId, trees);
     }
 
@@ -470,7 +470,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makePiece(tree, leafCount);
         uint256 pieceId = pdpVerifier.addPieces(setId, pieces, empty);
-        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty); // flush adds
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); // flush adds
         return (tree, pieceId);
     }
 
