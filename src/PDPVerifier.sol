@@ -465,8 +465,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(nPieces > 0, "Must add at least one piece");
 
         firstAdded = nextPieceId[setId];
-        uint256[] memory pieceIds = new uint256[](pieceData.length);
-        Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](pieceData.length);
+        uint256[] memory pieceIds = new uint256[](nPieces);
+        Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](nPieces);
 
         for (uint256 i = 0; i < nPieces; i++) {
             addOnePiece(setId, i, pieceData[i]);
