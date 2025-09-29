@@ -12,6 +12,7 @@ import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/cont
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
+import {NEW_DATA_SET_SENTINEL} from "../test/TestConstants.sol";
 
 /// @title PDPListener
 /// @notice Interface for PDP Service applications managing data storage.
@@ -52,7 +53,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     bytes32 public constant FIL_USD_PRICE_FEED_ID = 0x150ac9b959aee0051e4091f0ef5216d941f590e1c5e7f91cf7635b5c11628c0e;
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
-    uint256 public constant NEW_DATA_SET_SENTINEL = 0;
 
     // Events
     event DataSetCreated(uint256 indexed setId, address indexed storageProvider);
@@ -422,11 +422,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             require(listenerAddr != address(0), "listener required for new dataset");
             uint256 newSetId = nextDataSetId++;
-            dataSetLeafCount[newSetId] = 0;
-            nextChallengeEpoch[newSetId] = NO_CHALLENGE_SCHEDULED; // Initialized on first call to NextProvingPeriod
             storageProvider[newSetId] = msg.sender;
             dataSetListener[newSetId] = listenerAddr;
-            dataSetLastProvenEpoch[newSetId] = NO_PROVEN_EPOCH;
 
             if (listenerAddr != address(0)) {
                 PDPListener(listenerAddr).dataSetCreated(newSetId, msg.sender, createPayload);
@@ -434,8 +431,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             emit DataSetCreated(newSetId, msg.sender);
 
             // Add pieces to the newly created data set (if any)
-            require(addPayload.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
-
             if (pieceData.length > 0) {
                 _addPiecesToDataSet(newSetId, pieceData, addPayload);
             }
@@ -452,7 +447,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             require(listenerAddr == address(0), "listener must be zero for existing dataset");
             require(msg.value == 0, "no fee on add to existing dataset");
 
-            require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
             require(dataSetLive(setId), "Data set not live");
             require(storageProvider[setId] == msg.sender, "Only the storage provider can add pieces");
 
@@ -465,6 +459,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         internal
         returns (uint256 firstAdded)
     {
+        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         uint256 nPieces = pieceData.length;
         require(nPieces > 0, "Must add at least one piece");
 
