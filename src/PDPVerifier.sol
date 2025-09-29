@@ -12,7 +12,6 @@ import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/cont
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
-import {NEW_DATA_SET_SENTINEL} from "../test/TestConstants.sol";
 
 /// @title PDPListener
 /// @notice Interface for PDP Service applications managing data storage.
@@ -37,6 +36,8 @@ interface PDPListener {
         bytes calldata extraData
     ) external;
 }
+
+uint256 constant NEW_DATA_SET_SENTINEL = 0;
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
