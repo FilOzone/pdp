@@ -15,7 +15,7 @@ import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
-import {NEW_DATA_SET_SENTINEL} from "./TestConstants.sol";
+import {NEW_DATA_SET_SENTINEL} from "../src/PDPVerifier.sol";
 
 contract PDPVerifierDataSetCreateDeleteTest is Test, PieceHelper {
     TestingRecordKeeperService listener;

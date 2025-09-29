@@ -14,7 +14,7 @@ import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
 import {TestingRecordKeeperService} from "./PDPVerifier.t.sol";
-import {NEW_DATA_SET_SENTINEL} from "./TestConstants.sol";
+import {NEW_DATA_SET_SENTINEL} from "../src/PDPVerifier.sol";
 
 contract PDPVerifierProofTest is Test, ProofBuilderHelper, PieceHelper {
     uint256 constant CHALLENGE_FINALITY_DELAY = 2;
