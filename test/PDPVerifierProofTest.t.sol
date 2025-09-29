@@ -5,7 +5,7 @@ import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {Cids} from "../src/Cids.sol";
-import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
+import {PDPVerifier} from "../src/PDPVerifier.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {ProofUtil} from "./ProofUtil.sol";
 import {PDPFees} from "../src/Fees.sol";
@@ -13,12 +13,14 @@ import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
+import {TestingRecordKeeperService} from "./PDPVerifier.t.sol";
+import {NEW_DATA_SET_SENTINEL} from "../src/PDPVerifier.sol";
 
 contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
     uint256 constant CHALLENGE_FINALITY_DELAY = 2;
     bytes empty = new bytes(0);
     PDPVerifier pdpVerifier;
-    PDPListener listener;
+    TestingRecordKeeperService listener;
 
     function setUp() public override {
         super.setUp();
@@ -26,6 +28,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        listener = new TestingRecordKeeperService();
         vm.fee(1 wei);
         vm.deal(address(pdpVerifierImpl), 100 ether);
     }
@@ -135,7 +138,9 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
 
     function testDataSetLastProvenEpochOnPieceRemoval() public {
         // Create a data set and verify initial lastProvenEpoch is 0
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), 0, "Initial lastProvenEpoch should be 0");
 
         // Mock block.number to 2881
@@ -145,7 +150,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
 
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
         pdpVerifier.nextProvingPeriod(setId, blockNumber + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(
             pdpVerifier.getDataSetLastProvenEpoch(setId),
@@ -224,10 +229,12 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
     }
 
     function testProvePossessionFailsWithNoScheduledChallenge() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
         // Don't sample challenge (i.e. call nextProvingPeriod)
 
@@ -244,7 +251,9 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
     }
 
     function testEmptyProofRejected() public {
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
         IPDPTypes.Proof[] memory emptyProof = new IPDPTypes.Proof[](0);
 
         // Rejected with no pieces
@@ -448,8 +457,10 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         }
 
         // Create new data set and add pieces.
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
-        pdpVerifier.addPieces(setId, pieces, empty);
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); // flush adds
         return (setId, trees);
     }
@@ -468,7 +479,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         bytes32[][] memory tree = ProofUtil.makeTree(leafCount);
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makePiece(tree, leafCount);
-        uint256 pieceId = pdpVerifier.addPieces(setId, pieces, empty);
+        uint256 pieceId = pdpVerifier.addPieces(setId, address(0), pieces, empty);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); // flush adds
         return (tree, pieceId);
     }

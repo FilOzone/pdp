@@ -39,6 +39,8 @@ interface PDPListener {
     ) external;
 }
 
+uint256 constant NEW_DATA_SET_SENTINEL = 0;
+
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     using FVMPay for address;
     using FVMPay for uint256;
@@ -386,35 +388,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    // A data set is created empty, with no pieces. Creation yields a data set ID
-    // for referring to the data set later.
-    // Sender of create message is storage provider.
-    function createDataSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
-        uint256 sybilFee = PDPFees.sybilFee();
-        require(msg.value >= sybilFee, "sybil fee not met");
-        burnFee(sybilFee);
-
-        uint256 setId = nextDataSetId++;
-        dataSetLeafCount[setId] = 0;
-        nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED; // Initialized on first call to NextProvingPeriod
-        storageProvider[setId] = msg.sender;
-        dataSetListener[setId] = listenerAddr;
-        dataSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
-
-        if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).dataSetCreated(setId, msg.sender, extraData);
-        }
-        emit DataSetCreated(setId, msg.sender);
-
-        // Return the at the end to avoid any possible re-entrency issues.
-        if (msg.value > sybilFee) {
-            bool success = msg.sender.pay(msg.value - sybilFee);
-            require(success, "Transfer failed.");
-        }
-        return setId;
-    }
-
     // Removes a data set. Must be called by the storage provider.
     function deleteDataSet(uint256 setId, bytes calldata extraData) public {
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
@@ -436,35 +409,81 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit DataSetDeleted(setId, deletedLeafCount);
     }
 
-    // Appends new pieces to the collection managed by a data set.
-    // These pieces won't be challenged until the next proving period is
-    // started by calling nextProvingPeriod.
-    function addPieces(uint256 setId, Cids.Cid[] calldata pieceData, bytes calldata extraData)
+    // Create Dataset and Add Pieces, When setId == NEW_DATA_SET_SENTINEL, this will create a new dataset with piece data provided
+    // with the provided listenerAddr and expect extraData to be abi.encode(bytes createPayload, bytes addPayload).
+    // When adding to an existing set, pass listenerAddr == address(0) and setId to the live dataset.
+    function addPieces(uint256 setId, address listenerAddr, Cids.Cid[] calldata pieceData, bytes calldata extraData)
         public
+        payable
         returns (uint256)
     {
-        uint256 nPieces = pieceData.length;
+        if (setId == NEW_DATA_SET_SENTINEL) {
+            (bytes memory createPayload, bytes memory addPayload) = abi.decode(extraData, (bytes, bytes));
+
+            require(createPayload.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
+            uint256 sybilFee = PDPFees.sybilFee();
+            require(msg.value >= sybilFee, "sybil fee not met");
+            burnFee(sybilFee);
+
+            require(listenerAddr != address(0), "listener required for new dataset");
+            uint256 newSetId = nextDataSetId++;
+            storageProvider[newSetId] = msg.sender;
+            dataSetListener[newSetId] = listenerAddr;
+
+            if (listenerAddr != address(0)) {
+                PDPListener(listenerAddr).dataSetCreated(newSetId, msg.sender, createPayload);
+            }
+            emit DataSetCreated(newSetId, msg.sender);
+
+            // Add pieces to the newly created data set (if any)
+            if (pieceData.length > 0) {
+                _addPiecesToDataSet(newSetId, pieceData, addPayload);
+            }
+
+            // Return the at the end to avoid any possible re-entrency issues.
+            if (msg.value > sybilFee) {
+                (bool success,) = msg.sender.call{value: msg.value - sybilFee}("");
+                require(success, "Transfer failed.");
+            }
+
+            return newSetId;
+        } else {
+            // Adding to an existing set; no fee should be sent and listenerAddr must be zero
+            require(listenerAddr == address(0), "listener must be zero for existing dataset");
+            require(msg.value == 0, "no fee on add to existing dataset");
+
+            require(dataSetLive(setId), "Data set not live");
+            require(storageProvider[setId] == msg.sender, "Only the storage provider can add pieces");
+
+            return _addPiecesToDataSet(setId, pieceData, extraData);
+        }
+    }
+
+    // Internal function to add pieces to a data set and handle events/listeners
+    function _addPiecesToDataSet(uint256 setId, Cids.Cid[] calldata pieceData, bytes memory extraData)
+        internal
+        returns (uint256 firstAdded)
+    {
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
-        require(dataSetLive(setId), "Data set not live");
+        uint256 nPieces = pieceData.length;
         require(nPieces > 0, "Must add at least one piece");
-        require(storageProvider[setId] == msg.sender, "Only the storage provider can add pieces");
-        uint256 firstAdded = nextPieceId[setId];
-        uint256[] memory pieceIds = new uint256[](pieceData.length);
-        Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](pieceData.length);
+
+        firstAdded = nextPieceId[setId];
+        uint256[] memory pieceIds = new uint256[](nPieces);
+        Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](nPieces);
 
         for (uint256 i = 0; i < nPieces; i++) {
             addOnePiece(setId, i, pieceData[i]);
             pieceIds[i] = firstAdded + i;
             pieceCidsAdded[i] = pieceData[i];
         }
+
         emit PiecesAdded(setId, pieceIds, pieceCidsAdded);
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).piecesAdded(setId, firstAdded, pieceData, extraData);
         }
-
-        return firstAdded;
     }
 
     error IndexedError(uint256 idx, string msg);
