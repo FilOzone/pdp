@@ -59,7 +59,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, challengeCount, tree, leafCount);
 
         // Submit proof.
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         vm.expectEmit(true, true, false, false);
         IPDPTypes.PieceIdAndOffset[] memory challenges = new IPDPTypes.PieceIdAndOffset[](challengeCount);
         for (uint256 i = 0; i < challengeCount; i++) {
@@ -100,7 +100,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         uint256 challengeEpoch = pdpVerifier.getNextChallengeEpoch(setId);
         vm.roll(challengeEpoch);
 
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
 
         // Build a proof with multiple challenges to single tree.
         uint256 challengeCount = 3;
@@ -125,7 +125,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         pdpVerifier.provePossession{value: correctFee - 1}(setId, proofs);
 
         // Test 2: Sending more than the required fee
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         pdpVerifier.provePossession{value: correctFee + 1}(setId, proofs);
 
         // Verify that the proof was accepted
@@ -188,7 +188,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof.
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
     }
 
@@ -208,7 +208,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof.
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
     }
 
@@ -277,7 +277,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 3, tree, leafCount);
 
         // Submit proof successfully, advancing the data set to a new challenge epoch.
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         // Mock Pyth oracle call to return $5 USD/FIL
         (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
         vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
@@ -321,7 +321,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         IPDPTypes.Proof[] memory proofsOneRoot = buildProofsForSingleton(setId, 3, trees[0], leafCounts[0]);
 
         // The proof for one piece should be invalid against the set with two.
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         vm.expectRevert();
         pdpVerifier.provePossession{value: 1e18}(setId, proofsOneRoot);
 
@@ -339,13 +339,13 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
 
         // A proof for two pieces should be invalid against the set with one.
         proofsTwoRoots = buildProofs(pdpVerifier, setId, 10, trees, leafCounts); // regen as removal forced resampling challenge seed
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         vm.expectRevert();
         pdpVerifier.provePossession{value: 1e18}(setId, proofsTwoRoots);
 
         // But the single piece proof is now good again.
         proofsOneRoot = buildProofsForSingleton(setId, 1, trees[0], leafCounts[0]); // regen as removal forced resampling challenge seed
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         pdpVerifier.provePossession{value: 1e18}(setId, proofsOneRoot);
     }
 
@@ -370,7 +370,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         uint256 challengeCount = 11;
         IPDPTypes.Proof[] memory proofs = buildProofs(pdpVerifier, setId, challengeCount, trees, leafCounts);
         // Submit proof.
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
     }
 
@@ -401,10 +401,8 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         vm.roll(nearerBlock);
 
         IPDPTypes.Proof[] memory proofs = buildProofsForSingleton(setId, 5, tree, 10);
-        vm.mockCall(
-            pdpVerifier.RANDOMNESS_PRECOMPILE(),
-            abi.encode(pdpVerifier.getNextChallengeEpoch(setId)),
-            abi.encode(pdpVerifier.getNextChallengeEpoch(setId))
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(
+            pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.getNextChallengeEpoch(setId)
         );
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
     }
@@ -429,7 +427,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         }
 
         // Submit proof.
-        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
         IPDPTypes.PieceIdAndOffset[] memory challenges = new IPDPTypes.PieceIdAndOffset[](challengeCount);
         for (uint256 i = 0; i < challengeCount; i++) {
             challenges[i] = IPDPTypes.PieceIdAndOffset(0, 0);

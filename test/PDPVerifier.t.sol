@@ -1837,10 +1837,8 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         // Proving trees for ProofPeriod1 are just treesA
         IPDPTypes.Proof[] memory proofsProofPeriod1 = buildProofs(pdpVerifier, setId, 5, treesA, leafCountsA);
 
-        vm.mockCall(
-            pdpVerifier.RANDOMNESS_PRECOMPILE(),
-            abi.encode(pdpVerifier.getNextChallengeEpoch(setId)),
-            abi.encode(pdpVerifier.getNextChallengeEpoch(setId))
+        RANDOMNESS_PRECOMPILE.mockBeaconRandomness(
+            pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.getNextChallengeEpoch(setId)
         );
 
         pdpVerifier.provePossession{value: 1e18}(setId, proofsProofPeriod1);

@@ -11,6 +11,7 @@ import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contrac
 import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import {FVMPay} from "fvm-solidity/FVMPay.sol";
+import {FVMRandom} from "fvm-solidity/FVMRandom.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
@@ -44,12 +45,12 @@ uint256 constant NEW_DATA_SET_SENTINEL = 0;
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     using FVMPay for address;
     using FVMPay for uint256;
+    using FVMRandom for uint256;
 
     // Constants
     uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
-    address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
     uint256 public constant SECONDS_IN_DAY = 86400;
     IPyth public constant PYTH = IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
@@ -635,13 +636,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function getRandomness(uint256 epoch) public view returns (uint256) {
         // Call the precompile
-        (bool success, bytes memory result) = RANDOMNESS_PRECOMPILE.staticcall(abi.encodePacked(epoch));
-
-        // Check if the call was successful
-        require(success, "Randomness precompile call failed");
-
-        // Decode and return the result
-        return abi.decode(result, (uint256));
+        return epoch.getBeaconRandomness();
     }
 
     function drawChallengeSeed(uint256 setId) internal view returns (uint256) {
