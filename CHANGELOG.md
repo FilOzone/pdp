@@ -5,6 +5,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [2.2.0-rc1] - 2025-10-02
+
+### Deployed
+
+**Mainnet:**
+- PDPVerifier Implementation: [Address_To_Be_Published]
+- PDPVerifier Proxy: [Address_To_Be_Published]
+
+**Calibnet:**
+- PDPVerifier Implementation: [Address_To_Be_Published]
+- PDPVerifier Proxy: [Address_To_Be_Published]
+
+### 💥 Breaking Changes
+- Merged `createDataset` and `addPieces` functions for streamlined dataset creation ([#201](https://github.com/FilOzone/pdp/pull/201))
+  - **Removed**: `createDataset()` function no longer exists
+  - **Changed**: `addPieces()` now handles both creating new datasets AND adding pieces to existing datasets
+  - **Migration Guide**:
+    - To create a new dataset with pieces: Call `addPieces(type(uint256).max, listenerAddress, pieces, extraData)`
+    - To add pieces to existing dataset: Call `addPieces(datasetID, address(0), pieces, extraData)`
+  - **Benefits**: Single transaction replaces the previous two-step process (create, then add), reducing wait times and gas costs
+
+### 🐛 Fixed
+- Fixed `vm.getBlockNumber` in test environments ([#206](https://github.com/FilOzone/pdp/pull/206))
+
+### 📝 Changelog
+
+For the full set of changes since the last tag:
+
+**[View all changes between v2.1.0 and v2.2.0-rc1](https://github.com/FilOzone/pdp/compare/v2.1.0...v2.2.0-rc1)**
+
 ## [2.1.0] - 2025-09-17
 
 ### Deployed
