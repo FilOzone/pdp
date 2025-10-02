@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 library Cids {
-    uint256 public constant COMMP_LEAF_SIZE = 32;
     //  0x01    0x55                0x9120
     // (cidv1)  (raw)  (fr32-sha2-256-trunc254-padded-binary-tree)
     bytes4 public constant COMMP_V2_PREFIX = hex"01559120";

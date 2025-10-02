@@ -42,12 +42,10 @@ uint256 constant NEW_DATA_SET_SENTINEL = 0;
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
-    uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
-    uint256 public constant SECONDS_IN_DAY = 86400;
     IPyth public constant PYTH = IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
 
     // FIL/USD price feed query ID on the Pyth network
