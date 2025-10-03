@@ -1969,3 +1969,133 @@ contract PDPVerifierStorageProviderListenerTest is Test {
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
     }
 }
+
+contract PDPVerifierFeeUpdateTest is Test {
+    PDPVerifier pdpVerifier;
+    address owner;
+    address notOwner;
+
+    function setUp() public {
+        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        uint256 challengeFinality = 2;
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinality);
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
+        pdpVerifier = PDPVerifier(address(proxy));
+        
+        // Call migrate to initialize fee variables
+        pdpVerifier.migrate();
+        
+        owner = address(this);
+        notOwner = address(0x1234);
+    }
+
+    function testInitialFeeIsDefault() public view {
+        uint256 activeFee = pdpVerifier.getActiveProofFeePerTiB();
+        assertEq(activeFee, PDPFees.FEE_PER_TIB, "Initial fee should equal default FEE_PER_TIB");
+    }
+
+    function testUpdateProofFeeAsOwner() public {
+        uint256 newFee = 500000000000000000; // 0.0005 FIL per TiB
+        uint256 currentTime = block.timestamp;
+        
+        vm.expectEmit(true, true, true, true);
+        emit IPDPEvents.FeeUpdateProposed(PDPFees.FEE_PER_TIB, newFee, currentTime + 604800);
+        
+        pdpVerifier.updateProofFee(newFee);
+        
+        // Fee should not be effective yet
+        assertEq(pdpVerifier.getActiveProofFeePerTiB(), PDPFees.FEE_PER_TIB, "Fee should not change immediately");
+        
+        // Proposed fee should be set
+        assertEq(pdpVerifier.proposedProofFeePerTiB(), newFee, "Proposed fee should be set");
+        assertEq(pdpVerifier.feeUpdateEffectiveTime(), currentTime + 604800, "Effective time should be set");
+    }
+
+    function testUpdateProofFeeNotOwner() public {
+        uint256 newFee = 500000000000000000;
+        
+        vm.prank(notOwner);
+        vm.expectRevert();
+        pdpVerifier.updateProofFee(newFee);
+    }
+
+    function testFeeBecomesEffectiveAfter7Days() public {
+        uint256 newFee = 500000000000000000;
+        uint256 currentTime = block.timestamp;
+        
+        pdpVerifier.updateProofFee(newFee);
+        
+        // Still not effective
+        assertEq(pdpVerifier.getActiveProofFeePerTiB(), PDPFees.FEE_PER_TIB);
+        
+        // Advance time by 7 days
+        vm.warp(currentTime + 604800);
+        
+        // Now it should be effective
+        assertEq(pdpVerifier.getActiveProofFeePerTiB(), newFee, "Fee should be effective after 7 days");
+    }
+
+    function testFeeNotEffectiveBefore7Days() public {
+        uint256 newFee = 500000000000000000;
+        uint256 currentTime = block.timestamp;
+        
+        pdpVerifier.updateProofFee(newFee);
+        
+        // Advance time by 6 days
+        vm.warp(currentTime + 604800 - 1);
+        
+        // Should still be old fee
+        assertEq(pdpVerifier.getActiveProofFeePerTiB(), PDPFees.FEE_PER_TIB, "Fee should not be effective before 7 days");
+    }
+
+    function testUpdateProofFeeZeroReverts() public {
+        vm.expectRevert("Fee must be greater than 0");
+        pdpVerifier.updateProofFee(0);
+    }
+
+    function testMultipleFeeUpdates() public {
+        uint256 newFee1 = 500000000000000000;
+        uint256 newFee2 = 700000000000000000;
+        uint256 currentTime = block.timestamp;
+        
+        // First update
+        pdpVerifier.updateProofFee(newFee1);
+        
+        // Advance time by 7 days to make first update effective
+        vm.warp(currentTime + 604800);
+        assertEq(pdpVerifier.getActiveProofFeePerTiB(), newFee1);
+        
+        // Second update (should apply the pending first update and set new one)
+        pdpVerifier.updateProofFee(newFee2);
+        
+        // Should still see newFee1 as active
+        assertEq(pdpVerifier.getActiveProofFeePerTiB(), newFee1);
+        
+        // Advance another 7 days
+        vm.warp(currentTime + 604800 + 604800);
+        
+        // Now newFee2 should be active
+        assertEq(pdpVerifier.getActiveProofFeePerTiB(), newFee2);
+    }
+
+    function testProposeFeeUpdateBeforePreviousBecameEffective() public {
+        uint256 newFee1 = 500000000000000000;
+        uint256 newFee2 = 700000000000000000;
+        uint256 currentTime = block.timestamp;
+        
+        // First update
+        pdpVerifier.updateProofFee(newFee1);
+        
+        // Advance time by 3 days (not enough for first to be effective)
+        vm.warp(currentTime + 3 days);
+        
+        // Second update (should keep first as proposed until it's effective)
+        pdpVerifier.updateProofFee(newFee2);
+        
+        // Should still see default fee
+        assertEq(pdpVerifier.getActiveProofFeePerTiB(), PDPFees.FEE_PER_TIB);
+        
+        // The new proposed fee should be newFee2
+        assertEq(pdpVerifier.proposedProofFeePerTiB(), newFee2);
+    }
+}

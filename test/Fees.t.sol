@@ -197,4 +197,73 @@ contract PDPFeesTest is Test {
         uint256 expectedFee = 1; // Should be gasLimitRight - estimatedGasFee = 1
         assertEq(fee, expectedFee, "Fee should be 1 when estimatedGasFee is just below right boundary");
     }
+
+    // Tests for new flat fee calculation
+    function testFlatProofFeeOneTiB() public pure {
+        uint256 rawSize = PDPFees.TIB_IN_BYTES; // 1 TiB
+        uint256 feePerTiB = PDPFees.FEE_PER_TIB;
+        
+        uint256 fee = PDPFees.flatProofFee(rawSize, feePerTiB);
+        
+        assertEq(fee, PDPFees.FEE_PER_TIB, "Fee for 1 TiB should equal FEE_PER_TIB");
+    }
+
+    function testFlatProofFeeTwoTiB() public pure {
+        uint256 rawSize = 2 * PDPFees.TIB_IN_BYTES; // 2 TiB
+        uint256 feePerTiB = PDPFees.FEE_PER_TIB;
+        
+        uint256 fee = PDPFees.flatProofFee(rawSize, feePerTiB);
+        
+        assertEq(fee, 2 * PDPFees.FEE_PER_TIB, "Fee for 2 TiB should be twice FEE_PER_TIB");
+    }
+
+    function testFlatProofFeeHalfTiB() public pure {
+        uint256 rawSize = PDPFees.TIB_IN_BYTES / 2; // 0.5 TiB
+        uint256 feePerTiB = PDPFees.FEE_PER_TIB;
+        
+        uint256 fee = PDPFees.flatProofFee(rawSize, feePerTiB);
+        
+        assertEq(fee, PDPFees.FEE_PER_TIB / 2, "Fee for 0.5 TiB should be half of FEE_PER_TIB");
+    }
+
+    function testFlatProofFeeSmallSize() public pure {
+        uint256 rawSize = 32 * 1000; // 1000 leaves (32 bytes each)
+        uint256 feePerTiB = PDPFees.FEE_PER_TIB;
+        
+        uint256 fee = PDPFees.flatProofFee(rawSize, feePerTiB);
+        uint256 expectedFee = (rawSize * feePerTiB) / PDPFees.TIB_IN_BYTES;
+        
+        assertEq(fee, expectedFee, "Fee should be proportional to size");
+        assertTrue(fee > 0, "Fee should be positive even for small datasets");
+    }
+
+    function testFlatProofFeeLargeSize() public pure {
+        uint256 rawSize = 100 * PDPFees.TIB_IN_BYTES; // 100 TiB
+        uint256 feePerTiB = PDPFees.FEE_PER_TIB;
+        
+        uint256 fee = PDPFees.flatProofFee(rawSize, feePerTiB);
+        
+        assertEq(fee, 100 * PDPFees.FEE_PER_TIB, "Fee for 100 TiB should be 100x FEE_PER_TIB");
+    }
+
+    function testFlatProofFeeCustomRate() public pure {
+        uint256 rawSize = PDPFees.TIB_IN_BYTES; // 1 TiB
+        uint256 customFee = 500000000000000000; // 0.0005 FIL per TiB
+        
+        uint256 fee = PDPFees.flatProofFee(rawSize, customFee);
+        
+        assertEq(fee, customFee, "Fee should use custom rate");
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testFlatProofFeeZeroSize() public {
+        vm.expectRevert("failed to validate: raw size must be greater than 0");
+        PDPFees.flatProofFee(0, PDPFees.FEE_PER_TIB);
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testFlatProofFeeZeroRate() public {
+        vm.expectRevert("failed to validate: fee per TiB must be greater than 0");
+        PDPFees.flatProofFee(PDPFees.TIB_IN_BYTES, 0);
+    }
 }
