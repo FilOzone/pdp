@@ -66,7 +66,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
 
-    event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
+    event ProofFeePaid(uint256 indexed setId, uint256 fee);
+    event FeeUpdateProposed(uint256 currentFee, uint256 newFee, uint256 effectiveTime);
 
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
@@ -143,6 +144,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) storageProvider;
     mapping(uint256 => address) dataSetProposedStorageProvider;
     mapping(uint256 => uint256) dataSetLastProvenEpoch;
+    
+    // Fee update mechanism
+    uint256 public proofFeePerTiB;
+    uint256 public proposedProofFeePerTiB;
+    uint256 public feeUpdateEffectiveTime;
 
     // Methods
 
@@ -158,11 +164,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         nextDataSetId = 1; // Data sets start at 1
     }
 
-    string public constant VERSION = "2.1.0";
+    string public constant VERSION = "2.2.0";
 
     event ContractUpgraded(string version, address implementation);
 
-    function migrate() external onlyOwner reinitializer(2) {
+    function migrate() external onlyOwner reinitializer(3) {
+        // Initialize the proof fee per TiB with the default value
+        proofFeePerTiB = PDPFees.FEE_PER_TIB;
+        proposedProofFeePerTiB = 0;
+        feeUpdateEffectiveTime = 0;
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
@@ -172,6 +182,37 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(msg.value >= amount, "Incorrect fee amount");
         (bool success,) = BURN_ACTOR.call{value: amount}("");
         require(success, "Burn failed");
+    }
+
+    /// @notice Get the currently active proof fee per TiB
+    /// @return The active proof fee per TiB in AttoFIL
+    function getActiveProofFeePerTiB() public view returns (uint256) {
+        // If there's a proposed fee and it's now effective, return it
+        if (proposedProofFeePerTiB > 0 && block.timestamp >= feeUpdateEffectiveTime) {
+            return proposedProofFeePerTiB;
+        }
+        // Otherwise return the current fee (or default if not set)
+        return proofFeePerTiB > 0 ? proofFeePerTiB : PDPFees.FEE_PER_TIB;
+    }
+
+    /// @notice Propose a new proof fee per TiB (owner only)
+    /// @param newFeePerTiB The new fee per TiB in AttoFIL
+    /// @dev The new fee becomes effective 7 days after proposal
+    function updateProofFee(uint256 newFeePerTiB) external onlyOwner {
+        require(newFeePerTiB > 0, "Fee must be greater than 0");
+        
+        uint256 currentFee = getActiveProofFeePerTiB();
+        
+        // Apply any pending fee update before proposing a new one
+        if (proposedProofFeePerTiB > 0 && block.timestamp >= feeUpdateEffectiveTime) {
+            proofFeePerTiB = proposedProofFeePerTiB;
+        }
+        
+        // Set the new proposed fee with 7 days delay (7 * 24 * 60 * 60 = 604800 seconds)
+        proposedProofFeePerTiB = newFeePerTiB;
+        feeUpdateEffectiveTime = block.timestamp + 604800;
+        
+        emit FeeUpdateProposed(currentFee, newFeePerTiB, feeUpdateEffectiveTime);
     }
 
     // Returns the current challenge finality value
@@ -599,23 +640,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
         uint256 rawSize = 32 * challengeRange[setId];
-        (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
-
-        return PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, block.number - dataSetLastProvenEpoch[setId]
-        );
+        uint256 feePerTiB = getActiveProofFeePerTiB();
+        
+        return PDPFees.flatProofFee(rawSize, feePerTiB);
     }
 
     function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal returns (uint256 refund) {
-        uint256 estimatedGasFee = gasUsed * block.basefee;
         uint256 rawSize = 32 * challengeRange[setId];
-        (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
+        uint256 feePerTiB = getActiveProofFeePerTiB();
 
-        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, block.number - dataSetLastProvenEpoch[setId]
-        );
+        uint256 proofFee = PDPFees.flatProofFee(rawSize, feePerTiB);
         burnFee(proofFee);
-        emit ProofFeePaid(setId, proofFee, filUsdPrice, filUsdPriceExpo);
+        emit ProofFeePaid(setId, proofFee);
 
         return msg.value - proofFee; // burnFee asserts that proofFee <= msg.value;
     }

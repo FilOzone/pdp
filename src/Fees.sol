@@ -10,6 +10,13 @@ library PDPFees {
     // 0.1 FIL
     uint256 constant SYBIL_FEE = FIL_TO_ATTO_FIL / 10;
 
+    // Fixed PDP proof fee per TiB (0.00023 FIL = 0.00023 * 1e18 AttoFIL = 230000000000000000 AttoFIL)
+    // Based on fixed conversion rate: 1 FIL = 2.88 USD, with fee = 0.00067 USD / 2.88 USD = 0.00023 FIL per TiB
+    uint256 public constant FEE_PER_TIB = 230000000000000000;
+
+    // 1 TiB in bytes (2^40)
+    uint256 constant TIB_IN_BYTES = 2 ** 40;
+
     // 2 USD/Tib/month is the current reward earned by Storage Providers
     uint256 constant ESTIMATED_MONTHLY_TIB_STORAGE_REWARD_USD = 2;
     // 1% of reward per period
@@ -19,9 +26,6 @@ library PDPFees {
     // 5% of reward per period for gas limit right bound
     uint256 constant GAS_LIMIT_RIGHT_PERCENTAGE = 5;
     uint256 constant USD_DECIMALS = 1e18;
-
-    // 1 TiB in bytes (2^40)
-    uint256 constant TIB_IN_BYTES = 2 ** 40;
     // Number of epochs per month (30 days * 2880 epochs per day)
     uint256 constant EPOCHS_PER_MONTH = 86400;
 
@@ -72,6 +76,21 @@ library PDPFees {
         } else {
             return (estimatedCurrentReward * PROOF_FEE_PERCENTAGE) / 100;
         }
+    }
+
+    /// @notice Calculates the proof fee based on a fixed fee per TiB.
+    /// @param rawSize The raw size of the proof in bytes.
+    /// @param feePerTiB The fee per TiB in AttoFIL (can be overridden or use default).
+    /// @return proof fee in AttoFIL
+    /// @dev The proof fee is calculated as: (rawSize / TIB_IN_BYTES) * feePerTiB
+    function flatProofFee(uint256 rawSize, uint256 feePerTiB) internal pure returns (uint256) {
+        require(rawSize > 0, "failed to validate: raw size must be greater than 0");
+        require(feePerTiB > 0, "failed to validate: fee per TiB must be greater than 0");
+        
+        // Calculate fee based on dataset size in TiB
+        // fee = (rawSize / TIB_IN_BYTES) * feePerTiB
+        // To avoid precision loss, we compute: (rawSize * feePerTiB) / TIB_IN_BYTES
+        return (rawSize * feePerTiB) / TIB_IN_BYTES;
     }
 
     // sybil fee adds cost to adding state to the pdp verifier contract to prevent
