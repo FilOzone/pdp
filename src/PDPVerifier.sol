@@ -43,10 +43,6 @@ interface PDPListener {
 uint256 constant NEW_DATA_SET_SENTINEL = 0;
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
-    using FVMPay for address;
-    using FVMPay for uint256;
-    using FVMRandom for uint256;
-
     // Constants
     uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
@@ -175,7 +171,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function burnFee(uint256 amount) internal {
         require(msg.value >= amount, "Incorrect fee amount");
-        bool success = amount.burn();
+        bool success = FVMPay.burn(amount);
         require(success, "Burn failed");
     }
 
@@ -597,7 +593,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Return the overpayment after doing everything else to avoid re-entrancy issues (all state has been updated by this point). If this
         // call fails, the entire operation reverts.
         if (refund > 0) {
-            bool success = msg.sender.pay(refund);
+            bool success = FVMPay.pay(msg.sender, refund);
             require(success, "Transfer failed.");
         }
     }
@@ -636,7 +632,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function getRandomness(uint256 epoch) public view returns (uint256) {
         // Call the precompile
-        return epoch.getBeaconRandomness();
+        return FVMRandom.getBeaconRandomness(epoch);
     }
 
     function drawChallengeSeed(uint256 setId) internal view returns (uint256) {
