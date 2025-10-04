@@ -86,7 +86,7 @@ library PDPFees {
     function flatProofFee(uint256 rawSize, uint256 feePerTiB) internal pure returns (uint256) {
         require(rawSize > 0, "failed to validate: raw size must be greater than 0");
         require(feePerTiB > 0, "failed to validate: fee per TiB must be greater than 0");
-        
+
         // Calculate fee based on dataset size in TiB
         // fee = (rawSize / TIB_IN_BYTES) * feePerTiB
         // To avoid precision loss, we compute: (rawSize * feePerTiB) / TIB_IN_BYTES

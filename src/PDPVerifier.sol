@@ -144,7 +144,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) storageProvider;
     mapping(uint256 => address) dataSetProposedStorageProvider;
     mapping(uint256 => uint256) dataSetLastProvenEpoch;
-    
+
     // Fee update mechanism
     uint256 public proofFeePerTiB;
     uint256 public proposedProofFeePerTiB;
@@ -164,7 +164,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         nextDataSetId = 1; // Data sets start at 1
     }
 
-    string public constant VERSION = "2.2.0";
+    string public constant VERSION = "2.1.0";
 
     event ContractUpgraded(string version, address implementation);
 
@@ -200,18 +200,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev The new fee becomes effective 7 days after proposal
     function updateProofFee(uint256 newFeePerTiB) external onlyOwner {
         require(newFeePerTiB > 0, "Fee must be greater than 0");
-        
+
         uint256 currentFee = getActiveProofFeePerTiB();
-        
+
         // Apply any pending fee update before proposing a new one
         if (proposedProofFeePerTiB > 0 && block.timestamp >= feeUpdateEffectiveTime) {
             proofFeePerTiB = proposedProofFeePerTiB;
         }
-        
+
         // Set the new proposed fee with 7 days delay (7 * 24 * 60 * 60 = 604800 seconds)
         proposedProofFeePerTiB = newFeePerTiB;
         feeUpdateEffectiveTime = block.timestamp + 604800;
-        
+
         emit FeeUpdateProposed(currentFee, newFeePerTiB, feeUpdateEffectiveTime);
     }
 
@@ -641,7 +641,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
         uint256 rawSize = 32 * challengeRange[setId];
         uint256 feePerTiB = getActiveProofFeePerTiB();
-        
+
         return PDPFees.flatProofFee(rawSize, feePerTiB);
     }
 
