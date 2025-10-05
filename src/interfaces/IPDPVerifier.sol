@@ -42,8 +42,6 @@ interface IPDPVerifier is IPDPEvents {
         returns (IPDPTypes.PieceIdAndOffset[] memory);
 
     // Fee update functions
-    function calculateProofFee(uint256 setId, uint256 estimatedGasFee) external returns (uint256);
-    function calculateProofFeeForSize(uint256 rawSize) external returns (uint256);
     function updateProofFee(uint256 newFeePerTiB) external;
     function applyFeeUpdate() external;
 }

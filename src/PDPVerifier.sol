@@ -155,7 +155,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
         nextDataSetId = 1; // Data sets start at 1
-        feePerTiB = PDPFees.FEE_PER_TIB; // Initialize with the default fee
+        feePerTiB = PDPFees.DEFAULT_FEE_PER_TIB; // Initialize with the default fee
     }
 
     string public constant VERSION = "2.1.0";
@@ -577,7 +577,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         //
         // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
         uint256 gasUsed = (initialGas - gasleft()) + ((calculateCallDataSize(proofs) + 32) * 1300);
-        uint256 refund = calculateAndBurnProofFee(setId, gasUsed);
+        uint256 refund = calculateAndBurnProofFee(setId);
 
         {
             address listenerAddr = dataSetListener[setId];
@@ -597,7 +597,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
+    function calculateProofFee(uint256 setId) public view returns (uint256) {
         uint256 rawSize = 32 * challengeRange[setId];
         return calculateProofFeeForSize(rawSize);
     }
@@ -609,11 +609,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 currentFeePerTiB =
             (block.timestamp >= feeEffectiveTime && proposedFeePerTiB > 0) ? proposedFeePerTiB : feePerTiB;
 
-        // Calculate fee as: currentFeePerTiB * (rawSize / TIB_IN_BYTES)
-        return (currentFeePerTiB * rawSize) / PDPFees.TIB_IN_BYTES;
+        return PDPFees.calculateProofFee(rawSize, currentFeePerTiB);
     }
 
-    function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal returns (uint256 refund) {
+    function calculateAndBurnProofFee(uint256 setId) internal returns (uint256 refund) {
         uint256 rawSize = 32 * challengeRange[setId];
         uint256 proofFee = calculateProofFeeForSize(rawSize);
 
