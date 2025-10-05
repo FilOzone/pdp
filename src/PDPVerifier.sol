@@ -9,8 +9,6 @@ import {ERC1967Utils} from "../lib/openzeppelin-contracts/contracts/proxy/ERC196
 import {Initializable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
-import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
 
 /// @title PDPListener
@@ -46,10 +44,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
-    IPyth public constant PYTH = IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
-
-    // FIL/USD price feed query ID on the Pyth network
-    bytes32 public constant FIL_USD_PRICE_FEED_ID = 0x150ac9b959aee0051e4091f0ef5216d941f590e1c5e7f91cf7635b5c11628c0e;
+    uint256 public constant SECONDS_IN_DAY = 86400;
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
 
@@ -64,7 +59,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
 
-    event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
+    event ProofFeePaid(uint256 indexed setId, uint256 fee);
+    event FeeUpdateProposed(uint256 currentFee, uint256 newFee, uint256 effectiveTime);
 
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
@@ -142,6 +138,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) dataSetProposedStorageProvider;
     mapping(uint256 => uint256) dataSetLastProvenEpoch;
 
+    // Upgradeable fee system
+    uint256 public feePerTiB;
+    uint256 public proposedFeePerTiB;
+    uint256 public feeEffectiveTime;
+
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -154,6 +155,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
         nextDataSetId = 1; // Data sets start at 1
+        feePerTiB = PDPFees.FEE_PER_TIB; // Initialize with the default fee
     }
 
     string public constant VERSION = "2.1.0";
@@ -597,23 +599,26 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
         uint256 rawSize = 32 * challengeRange[setId];
-        (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
+        return calculateProofFeeForSize(rawSize);
+    }
 
-        return PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, block.number - dataSetLastProvenEpoch[setId]
-        );
+    function calculateProofFeeForSize(uint256 rawSize) public view returns (uint256) {
+        require(rawSize > 0, "failed to validate: raw size must be greater than 0");
+
+        // Use current fee or proposed fee if it's effective
+        uint256 currentFeePerTiB =
+            (block.timestamp >= feeEffectiveTime && proposedFeePerTiB > 0) ? proposedFeePerTiB : feePerTiB;
+
+        // Calculate fee as: currentFeePerTiB * (rawSize / TIB_IN_BYTES)
+        return (currentFeePerTiB * rawSize) / PDPFees.TIB_IN_BYTES;
     }
 
     function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal returns (uint256 refund) {
-        uint256 estimatedGasFee = gasUsed * block.basefee;
         uint256 rawSize = 32 * challengeRange[setId];
-        (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
+        uint256 proofFee = calculateProofFeeForSize(rawSize);
 
-        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, block.number - dataSetLastProvenEpoch[setId]
-        );
         burnFee(proofFee);
-        emit ProofFeePaid(setId, proofFee, filUsdPrice, filUsdPriceExpo);
+        emit ProofFeePaid(setId, proofFee);
 
         return msg.value - proofFee; // burnFee asserts that proofFee <= msg.value;
     }
@@ -837,10 +842,25 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return BitOps.ctz(index + 1);
     }
 
-    // Add function to get FIL/USD price
-    function getFILUSDPrice() public view returns (uint64, int32) {
-        PythStructs.Price memory priceData = PYTH.getPriceUnsafe(FIL_USD_PRICE_FEED_ID);
-        require(priceData.price > 0, "failed to validate: price must be greater than 0");
-        return (uint64(priceData.price), priceData.expo);
+    /// @notice Proposes a new proof fee with 7-day delay
+    /// @param newFeePerTiB The new fee per TiB in AttoFIL
+    function updateProofFee(uint256 newFeePerTiB) external onlyOwner {
+        require(newFeePerTiB > 0, "Fee must be greater than 0");
+
+        uint256 effectiveTime = block.timestamp + 7 days;
+        proposedFeePerTiB = newFeePerTiB;
+        feeEffectiveTime = effectiveTime;
+
+        emit FeeUpdateProposed(feePerTiB, newFeePerTiB, effectiveTime);
+    }
+
+    /// @notice Applies the proposed fee after the 7-day delay
+    function applyFeeUpdate() external onlyOwner {
+        require(block.timestamp >= feeEffectiveTime, "Fee update not yet effective");
+        require(proposedFeePerTiB > 0, "No fee update proposed");
+
+        feePerTiB = proposedFeePerTiB;
+        proposedFeePerTiB = 0;
+        feeEffectiveTime = 0;
     }
 }

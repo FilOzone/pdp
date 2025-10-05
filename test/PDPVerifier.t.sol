@@ -13,8 +13,6 @@ import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
-import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
-import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {NEW_DATA_SET_SENTINEL} from "../src/PDPVerifier.sol";
 
 contract PDPVerifierDataSetCreateDeleteTest is Test, PieceHelper {
@@ -1717,38 +1715,7 @@ contract PDPVerifierE2ETest is Test, ProofBuilderHelper, PieceHelper {
 
     receive() external payable {}
 
-    function createPythCallData() internal view returns (bytes memory, PythStructs.Price memory) {
-        bytes memory pythCallData =
-            abi.encodeWithSelector(IPyth.getPriceUnsafe.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID());
-
-        PythStructs.Price memory price = PythStructs.Price({price: 5, conf: 0, expo: 0, publishTime: 0});
-
-        return (pythCallData, price);
-    }
-
-    function createPythAncientCallData() internal view returns (bytes memory, PythStructs.Price memory) {
-        bytes memory callData =
-            abi.encodeWithSelector(IPyth.getPriceUnsafe.selector, pdpVerifier.FIL_USD_PRICE_FEED_ID());
-
-        PythStructs.Price memory price = PythStructs.Price({price: 6, conf: 0, expo: 0, publishTime: 0});
-
-        return (callData, price);
-    }
-
-    function testGetOldPrice() public {
-        (bytes memory pythFallbackCallData, PythStructs.Price memory price) = createPythAncientCallData();
-        vm.mockCall(address(pdpVerifier.PYTH()), pythFallbackCallData, abi.encode(price));
-
-        (uint64 priceOut, int32 expoOut) = pdpVerifier.getFILUSDPrice();
-        assertEq(priceOut, uint64(6), "Price should be 6");
-        assertEq(expoOut, int32(0), "Expo should be 0");
-    }
-
     function testCompleteProvingPeriodE2E() public {
-        // Mock Pyth oracle call to return $5 USD/FIL
-        (bytes memory pythCallData, PythStructs.Price memory price) = createPythCallData();
-        vm.mockCall(address(pdpVerifier.PYTH()), pythCallData, abi.encode(price));
-
         // Step 1: Create a data set
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
@@ -1892,6 +1859,119 @@ contract PDPVerifierMigrateTest is Test {
         // Second call should fail because reinitializer(2) can only be called once
         vm.expectRevert("InvalidInitialization()");
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
+    }
+}
+
+contract PDPVerifierFeeTest is Test, PieceHelper, ProofBuilderHelper {
+    PDPVerifier pdpVerifier;
+    uint256 constant CHALLENGE_FINALITY_DELAY = 2;
+    bytes empty = new bytes(0);
+    TestingRecordKeeperService listener;
+
+    function setUp() public {
+        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
+        pdpVerifier = PDPVerifier(address(proxy));
+        vm.fee(1 gwei);
+        listener = new TestingRecordKeeperService();
+    }
+
+    receive() external payable {}
+
+    function testUpdateProofFeeWithDelayAndApply() public {
+        uint256 current = pdpVerifier.feePerTiB();
+        uint256 newFee = current + 1;
+
+        // Propose update and verify state
+        pdpVerifier.updateProofFee(newFee);
+        assertEq(pdpVerifier.proposedFeePerTiB(), newFee, "proposed fee not recorded");
+        uint256 eff = pdpVerifier.feeEffectiveTime();
+        assertGt(eff, block.timestamp, "effective time must be in future");
+
+        // Cannot apply before delay
+        vm.expectRevert("Fee update not yet effective");
+        pdpVerifier.applyFeeUpdate();
+
+        // Warp to just before and ensure still blocked
+        vm.warp(eff - 1);
+        vm.expectRevert("Fee update not yet effective");
+        pdpVerifier.applyFeeUpdate();
+
+        // Warp to effective time and apply
+        vm.warp(eff);
+        pdpVerifier.applyFeeUpdate();
+        assertEq(pdpVerifier.feePerTiB(), newFee, "feePerTiB not updated");
+        assertEq(pdpVerifier.proposedFeePerTiB(), 0, "proposed cleared");
+        assertEq(pdpVerifier.feeEffectiveTime(), 0, "effective cleared");
+    }
+
+    function testCalculateProofFeeForSizeBeforeAfterEffectiveTime() public {
+        // Use 1 TiB raw size
+        uint256 rawSize = PDPFees.TIB_IN_BYTES;
+        uint256 baseFee = pdpVerifier.calculateProofFeeForSize(rawSize);
+
+        // Propose higher fee and check value remains the same before effective time
+        uint256 newFeePerTiB = pdpVerifier.feePerTiB() + 10;
+        pdpVerifier.updateProofFee(newFeePerTiB);
+        uint256 eff = pdpVerifier.feeEffectiveTime();
+
+        uint256 beforeFee = pdpVerifier.calculateProofFeeForSize(rawSize);
+        assertEq(beforeFee, baseFee, "fee should not change before effective time");
+
+        // After effective time the new fee should be used automatically
+        vm.warp(eff);
+        uint256 afterFee = pdpVerifier.calculateProofFeeForSize(rawSize);
+        assertEq(afterFee, (newFeePerTiB * rawSize) / PDPFees.TIB_IN_BYTES, "fee should reflect effective value");
+    }
+
+    function testProvePossessionBurnsExpectedFeeAndRefunds() public {
+        // Create set and add one small piece (leaf = 32 bytes per leaf)
+        // Build a concrete tree and piece so proof generation matches the piece
+        uint256 leafCount = 10; // 10 leaves
+        bytes32[][] memory tree = ProofUtil.makeTree(leafCount);
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = makePiece(tree, leafCount);
+
+        bytes memory combinedExtra = abi.encode(empty, empty);
+
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), pieces, combinedExtra
+        );
+
+        // Start proving period so piece becomes challengeable
+        uint256 challengeEpoch = vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY;
+        pdpVerifier.nextProvingPeriod(setId, challengeEpoch, empty);
+
+        // Roll to challenge epoch and mock randomness precompile to return epoch
+        vm.roll(challengeEpoch);
+        vm.mockCall(pdpVerifier.RANDOMNESS_PRECOMPILE(), abi.encode(challengeEpoch), abi.encode(challengeEpoch));
+
+        // Build minimum valid proofs (3 challenges)
+        bytes32[][][] memory trees = new bytes32[][][](1);
+        trees[0] = tree;
+        uint256[] memory leafCounts = new uint256[](1);
+        leafCounts[0] = leafCount;
+        IPDPTypes.Proof[] memory proofs = buildProofs(pdpVerifier, setId, 3, trees, leafCounts);
+
+        // Expected fee = feePerTiB * rawSize/TiB, where rawSize = 32 * challengeRange
+        uint256 rawSize = 32 * pdpVerifier.getChallengeRange(setId);
+        uint256 expectedFee = (pdpVerifier.feePerTiB() * rawSize) / PDPFees.TIB_IN_BYTES;
+
+        // Send a known amount and verify refund equals msg.value - expectedFee
+        address sender = address(this);
+        uint256 startBalance = sender.balance;
+        uint256 sendValue = expectedFee + 1 ether;
+
+        // fund test contract
+        vm.deal(sender, startBalance + sendValue);
+
+        uint256 balBefore = sender.balance;
+        pdpVerifier.provePossession{value: sendValue}(setId, proofs);
+        uint256 balAfter = sender.balance;
+
+        // net spent should be expectedFee
+        assertEq(balBefore - balAfter, expectedFee, "net spent should equal expected fee");
     }
 }
 

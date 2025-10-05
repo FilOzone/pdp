@@ -15,7 +15,8 @@ interface IPDPEvents {
     event DataSetEmpty(uint256 indexed setId);
     event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
-    event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
+    event ProofFeePaid(uint256 indexed setId, uint256 fee);
+    event FeeUpdateProposed(uint256 currentFee, uint256 newFee, uint256 effectiveTime);
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
     event ContractUpgraded(string version, address newImplementation);
