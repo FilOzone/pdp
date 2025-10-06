@@ -40,4 +40,7 @@ interface IPDPVerifier is IPDPEvents {
         external
         view
         returns (IPDPTypes.PieceIdAndOffset[] memory);
+
+    // Fee view: returns the current effective fee per TiB
+    function feePerTiB() external view returns (uint96);
 }
