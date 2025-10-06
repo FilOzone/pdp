@@ -9,11 +9,8 @@ import {ERC1967Utils} from "../lib/openzeppelin-contracts/contracts/proxy/ERC196
 import {Initializable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-
 import {FVMPay} from "fvm-solidity/FVMPay.sol";
 import {FVMRandom} from "fvm-solidity/FVMRandom.sol";
-import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
-import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
 
 /// @title PDPListener
@@ -44,15 +41,9 @@ uint256 constant NEW_DATA_SET_SENTINEL = 0;
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
-    uint256 public constant LEAF_SIZE = 32;
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
-    uint256 public constant SECONDS_IN_DAY = 86400;
-    IPyth public constant PYTH = IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
-
-    // FIL/USD price feed query ID on the Pyth network
-    bytes32 public constant FIL_USD_PRICE_FEED_ID = 0x150ac9b959aee0051e4091f0ef5216d941f590e1c5e7f91cf7635b5c11628c0e;
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
 
@@ -67,7 +58,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
 
-    event ProofFeePaid(uint256 indexed setId, uint256 fee, uint64 price, int32 expo);
+    event ProofFeePaid(uint256 indexed setId, uint256 fee);
+    event FeeUpdateProposed(uint256 currentFee, uint256 newFee, uint256 effectiveTime);
 
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
@@ -145,6 +137,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) dataSetProposedStorageProvider;
     mapping(uint256 => uint256) dataSetLastProvenEpoch;
 
+    // Packed fee status
+    struct FeeStatus {
+        uint96 currentFeePerTiB;
+        uint96 nextFeePerTiB;
+        uint64 transitionTime;
+    }
+
+    FeeStatus private feeStatus;
+
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -157,6 +158,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
         nextDataSetId = 1; // Data sets start at 1
+        feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
     string public constant VERSION = "2.1.0";
@@ -578,7 +580,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         //
         // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
         uint256 gasUsed = (initialGas - gasleft()) + ((calculateCallDataSize(proofs) + 32) * 1300);
-        uint256 refund = calculateAndBurnProofFee(setId, gasUsed);
+        uint256 refund = calculateAndBurnProofFee(setId);
 
         {
             address listenerAddr = dataSetListener[setId];
@@ -598,27 +600,41 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function calculateProofFee(uint256 setId, uint256 estimatedGasFee) public view returns (uint256) {
+    function calculateProofFee(uint256 setId) public view returns (uint256) {
         uint256 rawSize = 32 * challengeRange[setId];
-        (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
-
-        return PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, block.number - dataSetLastProvenEpoch[setId]
-        );
+        return calculateProofFeeForSize(rawSize);
     }
 
-    function calculateAndBurnProofFee(uint256 setId, uint256 gasUsed) internal returns (uint256 refund) {
-        uint256 estimatedGasFee = gasUsed * block.basefee;
-        uint256 rawSize = 32 * challengeRange[setId];
-        (uint64 filUsdPrice, int32 filUsdPriceExpo) = getFILUSDPrice();
+    function calculateProofFeeForSize(uint256 rawSize) public view returns (uint256) {
+        require(rawSize > 0, "failed to validate: raw size must be greater than 0");
+        return PDPFees.calculateProofFee(rawSize, _currentFeePerTiB());
+    }
 
-        uint256 proofFee = PDPFees.proofFeeWithGasFeeBound(
-            estimatedGasFee, filUsdPrice, filUsdPriceExpo, rawSize, block.number - dataSetLastProvenEpoch[setId]
-        );
+    function calculateAndBurnProofFee(uint256 setId) internal returns (uint256 refund) {
+        uint256 rawSize = 32 * challengeRange[setId];
+        uint256 proofFee = calculateProofFeeForSize(rawSize);
+
         burnFee(proofFee);
-        emit ProofFeePaid(setId, proofFee, filUsdPrice, filUsdPriceExpo);
+        emit ProofFeePaid(setId, proofFee);
 
         return msg.value - proofFee; // burnFee asserts that proofFee <= msg.value;
+    }
+
+    function _currentFeePerTiB() internal view returns (uint96) {
+        return block.timestamp >= feeStatus.transitionTime ? feeStatus.nextFeePerTiB : feeStatus.currentFeePerTiB;
+    }
+
+    // Public getters for packed fee status
+    function feePerTiB() public view returns (uint96) {
+        return _currentFeePerTiB();
+    }
+
+    function proposedFeePerTiB() public view returns (uint96) {
+        return feeStatus.nextFeePerTiB;
+    }
+
+    function feeEffectiveTime() public view returns (uint64) {
+        return feeStatus.transitionTime;
     }
 
     function calculateCallDataSize(IPDPTypes.Proof[] calldata proofs) internal pure returns (uint256) {
@@ -834,10 +850,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return BitOps.ctz(index + 1);
     }
 
-    // Add function to get FIL/USD price
-    function getFILUSDPrice() public view returns (uint64, int32) {
-        PythStructs.Price memory priceData = PYTH.getPriceUnsafe(FIL_USD_PRICE_FEED_ID);
-        require(priceData.price > 0, "failed to validate: price must be greater than 0");
-        return (uint64(priceData.price), priceData.expo);
+    /// @notice Proposes a new proof fee with 7-day delay
+    /// @param newFeePerTiB The new fee per TiB in AttoFIL
+    function updateProofFee(uint256 newFeePerTiB) external onlyOwner {
+        // Auto-commit any pending update that has reached its transition time
+        if (block.timestamp >= feeStatus.transitionTime) {
+            feeStatus.currentFeePerTiB = feeStatus.nextFeePerTiB;
+        }
+        feeStatus.nextFeePerTiB = uint96(newFeePerTiB);
+        feeStatus.transitionTime = uint64(block.timestamp + 7 days);
+        emit FeeUpdateProposed(feeStatus.currentFeePerTiB, newFeePerTiB, feeStatus.transitionTime);
     }
 }
