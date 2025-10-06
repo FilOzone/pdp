@@ -10,8 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Deployed
 
 **Mainnet:**
-- PDPVerifier Implementation: [Address_To_Be_Published]
-- PDPVerifier Proxy: [Address_To_Be_Published]
+- PDPVerifier Implementation: [[0xfEFD001a9aFfb38Bba7f81e3FB37a1ab8F392A5A](https://filfox.info/en/address/0xfEFD001a9aFfb38Bba7f81e3FB37a1ab8F392A5A)
+- PDPVerifier Proxy: [0x9F1bc521A7C3cFeC76c32611Aab50a6dFfb93290](https://filfox.info/en/address/0x9F1bc521A7C3cFeC76c32611Aab50a6dFfb93290)
 
 **Calibnet:**
 - PDPVerifier Implementation: [0xCa92b746a7af215e0AaC7D0F956d74B522b295b6](https://calibration.filfox.info/en/address/0xCa92b746a7af215e0AaC7D0F956d74B522b295b6)
