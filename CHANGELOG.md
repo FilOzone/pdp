@@ -5,6 +5,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [2.2.0] - 2025-10-06
+
+### Deployed
+
+**Mainnet:**
+- PDPVerifier Implementation: [[0xfEFD001a9aFfb38Bba7f81e3FB37a1ab8F392A5A](https://filfox.info/en/address/0xfEFD001a9aFfb38Bba7f81e3FB37a1ab8F392A5A)
+- PDPVerifier Proxy: [0x9F1bc521A7C3cFeC76c32611Aab50a6dFfb93290](https://filfox.info/en/address/0x9F1bc521A7C3cFeC76c32611Aab50a6dFfb93290)
+
+**Calibnet:**
+- PDPVerifier Implementation: [0xCa92b746a7af215e0AaC7D0F956d74B522b295b6](https://calibration.filfox.info/en/address/0xCa92b746a7af215e0AaC7D0F956d74B522b295b6)
+- PDPVerifier Proxy: [0x9ecb84bB617a6Fd9911553bE12502a1B091CdfD8](https://calibration.filfox.info/en/address/0x9ecb84bB617a6Fd9911553bE12502a1B091CdfD8)
+
+### 💥 Breaking Changes
+- Merged `createDataset` and `addPieces` functions for streamlined dataset creation ([#201](https://github.com/FilOzone/pdp/pull/201))
+  - **Removed**: `createDataset()` function no longer exists
+  - **Changed**: `addPieces()` now handles both creating new datasets AND adding pieces to existing datasets
+  - **Migration Guide**:
+    - To create a new dataset with pieces: Call `addPieces(type(uint256).max, listenerAddress, pieces, extraData)`
+    - To add pieces to existing dataset: Call `addPieces(datasetID, address(0), pieces, extraData)`
+  - **Benefits**: Single transaction replaces the previous two-step process (create, then add), reducing wait times and gas costs
+
+### Added
+- feat: Update PDP proof fee ([#214](https://github.com/FilOzone/pdp/pull/214))
+
+### Changed
+- rm unused constants ([#211](https://github.com/FilOzone/pdp/pull/211))
+- remove seconds per day again ([#215](https://github.com/FilOzone/pdp/pull/215))
+- Fixed `vm.getBlockNumber` in test environments ([#206](https://github.com/FilOzone/pdp/pull/206))
+
+### 📝 Changelog
+
+For the full set of changes since the last tag:
+
+**[View all changes between v2.1.0 and v2.2.0-rc1](https://github.com/FilOzone/pdp/compare/v2.1.0...v2.2.0-rc1)**
+
 ## [2.1.0] - 2025-09-17
 
 ### Deployed

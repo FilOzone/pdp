@@ -19,6 +19,16 @@ The PDP service contract and the PDP verifier contracts are deployed on Filecoin
 
 > Disclaimer: ⚠️ These contracts are still in beta testing and might be upgraded for bug fixes and/or improvements. Please use with caution for production environments. ⚠️
 
+#### v2.2.0
+
+**Mainnet:**
+- PDPVerifier Implementation: [[0xfEFD001a9aFfb38Bba7f81e3FB37a1ab8F392A5A](https://filfox.info/en/address/0xfEFD001a9aFfb38Bba7f81e3FB37a1ab8F392A5A)
+- PDPVerifier Proxy: [0x9F1bc521A7C3cFeC76c32611Aab50a6dFfb93290](https://filfox.info/en/address/0x9F1bc521A7C3cFeC76c32611Aab50a6dFfb93290)
+
+**Calibnet:**
+- PDPVerifier Implementation: [0xCa92b746a7af215e0AaC7D0F956d74B522b295b6](https://calibration.filfox.info/en/address/0xCa92b746a7af215e0AaC7D0F956d74B522b295b6)
+- PDPVerifier Proxy: [0x9ecb84bB617a6Fd9911553bE12502a1B091CdfD8](https://calibration.filfox.info/en/address/0x9ecb84bB617a6Fd9911553bE12502a1B091CdfD8)
+
 #### v2.1.0
 
 **Mainnet:**
