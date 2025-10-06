@@ -1879,7 +1879,7 @@ contract PDPVerifierFeeTest is Test, PieceHelper, ProofBuilderHelper {
 
     receive() external payable {}
 
-    function testUpdateProofFeeWithDelayAndApply() public {
+    function testUpdateProofFeeWithDelayAutoApply() public {
         uint256 current = pdpVerifier.feePerTiB();
         uint256 newFee = current + 1;
 
@@ -1889,21 +1889,13 @@ contract PDPVerifierFeeTest is Test, PieceHelper, ProofBuilderHelper {
         uint256 eff = pdpVerifier.feeEffectiveTime();
         assertGt(eff, block.timestamp, "effective time must be in future");
 
-        // Cannot apply before delay
-        vm.expectRevert("Fee update not yet effective");
-        pdpVerifier.applyFeeUpdate();
-
-        // Warp to just before and ensure still blocked
+        // Warp to just before and ensure it hasn't taken effect yet
         vm.warp(eff - 1);
-        vm.expectRevert("Fee update not yet effective");
-        pdpVerifier.applyFeeUpdate();
+        assertEq(pdpVerifier.feePerTiB(), current, "fee should not change before effective time");
 
-        // Warp to effective time and apply
+        // Warp to effective time; fee auto-applies on read paths
         vm.warp(eff);
-        pdpVerifier.applyFeeUpdate();
         assertEq(pdpVerifier.feePerTiB(), newFee, "feePerTiB not updated");
-        assertEq(pdpVerifier.proposedFeePerTiB(), 0, "proposed cleared");
-        assertEq(pdpVerifier.feeEffectiveTime(), 0, "effective cleared");
     }
 
     function testCalculateProofFeeForSizeBeforeAfterEffectiveTime() public {

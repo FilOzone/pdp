@@ -37,7 +37,7 @@ contract PDPFeesTest is Test {
 
     function testFeePerTiBConstant() public pure {
         // Verify the fee constant is set to 0.00023 FIL
-        uint256 expectedFee = (23 * PDPFees.FIL_TO_ATTO_FIL) / 100000; // 0.00023 FIL
+        uint256 expectedFee = 0.00023 ether; // 0.00023 FIL in attoFIL
         assertEq(PDPFees.DEFAULT_FEE_PER_TIB, expectedFee, "DEFAULT_FEE_PER_TIB should be 0.00023 FIL");
     }
 

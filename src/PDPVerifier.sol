@@ -138,10 +138,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => address) dataSetProposedStorageProvider;
     mapping(uint256 => uint256) dataSetLastProvenEpoch;
 
-    // Upgradeable fee system
-    uint256 public feePerTiB;
-    uint256 public proposedFeePerTiB;
-    uint256 public feeEffectiveTime;
+    // Packed fee status
+    struct FeeStatus {
+        uint96 currentFeePerTiB;
+        uint96 nextFeePerTiB;
+        uint64 transitionTime;
+    }
+
+    FeeStatus private feeStatus;
 
     // Methods
 
@@ -155,7 +159,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
         nextDataSetId = 1; // Data sets start at 1
-        feePerTiB = PDPFees.DEFAULT_FEE_PER_TIB; // Initialize with the default fee
+        feeStatus.currentFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
     string public constant VERSION = "2.1.0";
@@ -604,12 +608,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function calculateProofFeeForSize(uint256 rawSize) public view returns (uint256) {
         require(rawSize > 0, "failed to validate: raw size must be greater than 0");
-
-        // Use current fee or proposed fee if it's effective
-        uint256 currentFeePerTiB =
-            (block.timestamp >= feeEffectiveTime && proposedFeePerTiB > 0) ? proposedFeePerTiB : feePerTiB;
-
-        return PDPFees.calculateProofFee(rawSize, currentFeePerTiB);
+        return PDPFees.calculateProofFee(rawSize, _currentFeePerTiB());
     }
 
     function calculateAndBurnProofFee(uint256 setId) internal returns (uint256 refund) {
@@ -620,6 +619,26 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit ProofFeePaid(setId, proofFee);
 
         return msg.value - proofFee; // burnFee asserts that proofFee <= msg.value;
+    }
+
+    function _currentFeePerTiB() internal view returns (uint96) {
+        if (feeStatus.transitionTime > 0 && block.timestamp >= feeStatus.transitionTime) {
+            return feeStatus.nextFeePerTiB;
+        }
+        return feeStatus.currentFeePerTiB;
+    }
+
+    // Public getters for packed fee status
+    function feePerTiB() public view returns (uint96) {
+        return _currentFeePerTiB();
+    }
+
+    function proposedFeePerTiB() public view returns (uint96) {
+        return feeStatus.nextFeePerTiB;
+    }
+
+    function feeEffectiveTime() public view returns (uint64) {
+        return feeStatus.transitionTime;
     }
 
     function calculateCallDataSize(IPDPTypes.Proof[] calldata proofs) internal pure returns (uint256) {
@@ -845,21 +864,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param newFeePerTiB The new fee per TiB in AttoFIL
     function updateProofFee(uint256 newFeePerTiB) external onlyOwner {
         require(newFeePerTiB > 0, "Fee must be greater than 0");
-
-        uint256 effectiveTime = block.timestamp + 7 days;
-        proposedFeePerTiB = newFeePerTiB;
-        feeEffectiveTime = effectiveTime;
-
-        emit FeeUpdateProposed(feePerTiB, newFeePerTiB, effectiveTime);
-    }
-
-    /// @notice Applies the proposed fee after the 7-day delay
-    function applyFeeUpdate() external onlyOwner {
-        require(block.timestamp >= feeEffectiveTime, "Fee update not yet effective");
-        require(proposedFeePerTiB > 0, "No fee update proposed");
-
-        feePerTiB = proposedFeePerTiB;
-        proposedFeePerTiB = 0;
-        feeEffectiveTime = 0;
+        // Auto-commit any pending update that has reached its transition time
+        if (feeStatus.transitionTime > 0 && block.timestamp >= feeStatus.transitionTime) {
+            feeStatus.currentFeePerTiB = feeStatus.nextFeePerTiB;
+            feeStatus.nextFeePerTiB = 0;
+            feeStatus.transitionTime = 0;
+        }
+        feeStatus.nextFeePerTiB = uint96(newFeePerTiB);
+        feeStatus.transitionTime = uint64(block.timestamp + 7 days);
+        emit FeeUpdateProposed(feeStatus.currentFeePerTiB, newFeePerTiB, feeStatus.transitionTime);
     }
 }

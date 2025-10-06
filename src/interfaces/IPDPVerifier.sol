@@ -41,7 +41,6 @@ interface IPDPVerifier is IPDPEvents {
         view
         returns (IPDPTypes.PieceIdAndOffset[] memory);
 
-    // Fee update functions
-    function updateProofFee(uint256 newFeePerTiB) external;
-    function applyFeeUpdate() external;
+    // Fee view: returns the current effective fee per TiB
+    function feePerTiB() external view returns (uint96);
 }

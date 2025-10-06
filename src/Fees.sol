@@ -12,7 +12,7 @@ library PDPFees {
 
     // Default FIL-based proof fee: 0.00023 FIL per TiB (used for initialization)
     // Based on: 0.00067 USD per TiB / 2.88 USD per FIL = 0.00023 FIL per TiB
-    uint256 constant DEFAULT_FEE_PER_TIB = (23 * FIL_TO_ATTO_FIL) / 100000;
+    uint96 constant DEFAULT_FEE_PER_TIB = 230000 gwei; // 0.00023 FIL in attoFIL
 
     // 1 TiB in bytes (2^40)
     uint256 constant TIB_IN_BYTES = 2 ** 40;
@@ -22,11 +22,11 @@ library PDPFees {
     /// @param feePerTiB The fee rate per TiB in AttoFIL (source of truth lives in PDPVerifier).
     /// @return proof fee in AttoFIL
     /// @dev The proof fee is calculated as: fee_perTiB * datasetSize_in_TiB
-    function calculateProofFee(uint256 rawSize, uint256 feePerTiB) internal pure returns (uint256) {
+    function calculateProofFee(uint256 rawSize, uint96 feePerTiB) internal pure returns (uint256) {
         require(rawSize > 0, "failed to validate: raw size must be greater than 0");
 
-        // Calculate fee as: feePerTiB * (rawSize / TIB_IN_BYTES)
-        return (feePerTiB * rawSize) / TIB_IN_BYTES;
+        // Calculate fee as: (feePerTiB * rawSize) >> 40 (since TIB_IN_BYTES == 2**40)
+        return (feePerTiB * rawSize) >> 40;
     }
 
     // sybil fee adds cost to adding state to the pdp verifier contract to prevent
