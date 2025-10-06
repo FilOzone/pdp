@@ -867,8 +867,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Auto-commit any pending update that has reached its transition time
         if (feeStatus.transitionTime > 0 && block.timestamp >= feeStatus.transitionTime) {
             feeStatus.currentFeePerTiB = feeStatus.nextFeePerTiB;
-            feeStatus.nextFeePerTiB = 0;
-            feeStatus.transitionTime = 0;
         }
         feeStatus.nextFeePerTiB = uint96(newFeePerTiB);
         feeStatus.transitionTime = uint64(block.timestamp + 7 days);
