@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-## [2.2.0-rc1] - 2025-10-02
+## [2.2.0] - 2025-10-06
 
 ### Deployed
 
@@ -26,7 +26,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
     - To add pieces to existing dataset: Call `addPieces(datasetID, address(0), pieces, extraData)`
   - **Benefits**: Single transaction replaces the previous two-step process (create, then add), reducing wait times and gas costs
 
-### 🐛 Fixed
+### Added
+- feat: Update PDP proof fee ([#214](https://github.com/FilOzone/pdp/pull/214))
+
+### Changed
+- rm unused constants ([#211](https://github.com/FilOzone/pdp/pull/211))
+- remove seconds per day again ([#215](https://github.com/FilOzone/pdp/pull/215))
 - Fixed `vm.getBlockNumber` in test environments ([#206](https://github.com/FilOzone/pdp/pull/206))
 
 ### 📝 Changelog
