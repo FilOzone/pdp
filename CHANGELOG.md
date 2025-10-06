@@ -14,8 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - PDPVerifier Proxy: [Address_To_Be_Published]
 
 **Calibnet:**
-- PDPVerifier Implementation: [Address_To_Be_Published]
-- PDPVerifier Proxy: [Address_To_Be_Published]
+- PDPVerifier Implementation: [0xCa92b746a7af215e0AaC7D0F956d74B522b295b6](https://calibration.filfox.info/en/address/0xCa92b746a7af215e0AaC7D0F956d74B522b295b6)
+- PDPVerifier Proxy: [0x9ecb84bB617a6Fd9911553bE12502a1B091CdfD8](https://calibration.filfox.info/en/address/0x9ecb84bB617a6Fd9911553bE12502a1B091CdfD8)
 
 ### 💥 Breaking Changes
 - Merged `createDataset` and `addPieces` functions for streamlined dataset creation ([#201](https://github.com/FilOzone/pdp/pull/201))
