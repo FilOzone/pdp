@@ -159,7 +159,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
         nextDataSetId = 1; // Data sets start at 1
-        feeStatus.currentFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
+        feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
     string public constant VERSION = "2.1.0";
