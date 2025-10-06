@@ -860,7 +860,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Proposes a new proof fee with 7-day delay
     /// @param newFeePerTiB The new fee per TiB in AttoFIL
     function updateProofFee(uint256 newFeePerTiB) external onlyOwner {
-        require(newFeePerTiB > 0, "Fee must be greater than 0");
         // Auto-commit any pending update that has reached its transition time
         if (block.timestamp >= feeStatus.transitionTime) {
             feeStatus.currentFeePerTiB = feeStatus.nextFeePerTiB;
