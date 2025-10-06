@@ -9,6 +9,8 @@ import {ERC1967Utils} from "../lib/openzeppelin-contracts/contracts/proxy/ERC196
 import {Initializable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {FVMPay} from "fvm-solidity/FVMPay.sol";
+import {FVMRandom} from "fvm-solidity/FVMRandom.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
 
 /// @title PDPListener
@@ -39,10 +41,8 @@ uint256 constant NEW_DATA_SET_SENTINEL = 0;
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
-    address public constant BURN_ACTOR = 0xff00000000000000000000000000000000000063;
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
-    address public constant RANDOMNESS_PRECOMPILE = 0xfE00000000000000000000000000000000000006;
     uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
@@ -173,7 +173,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function burnFee(uint256 amount) internal {
         require(msg.value >= amount, "Incorrect fee amount");
-        (bool success,) = BURN_ACTOR.call{value: amount}("");
+        bool success = FVMPay.burn(amount);
         require(success, "Burn failed");
     }
 
@@ -595,7 +595,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Return the overpayment after doing everything else to avoid re-entrancy issues (all state has been updated by this point). If this
         // call fails, the entire operation reverts.
         if (refund > 0) {
-            (bool success,) = msg.sender.call{value: refund}("");
+            bool success = FVMPay.pay(msg.sender, refund);
             require(success, "Transfer failed.");
         }
     }
@@ -648,13 +648,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function getRandomness(uint256 epoch) public view returns (uint256) {
         // Call the precompile
-        (bool success, bytes memory result) = RANDOMNESS_PRECOMPILE.staticcall(abi.encodePacked(epoch));
-
-        // Check if the call was successful
-        require(success, "Randomness precompile call failed");
-
-        // Decode and return the result
-        return abi.decode(result, (uint256));
+        return FVMRandom.getBeaconRandomness(epoch);
     }
 
     function drawChallengeSeed(uint256 setId) internal view returns (uint256) {
