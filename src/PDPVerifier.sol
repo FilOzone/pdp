@@ -862,7 +862,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function updateProofFee(uint256 newFeePerTiB) external onlyOwner {
         require(newFeePerTiB > 0, "Fee must be greater than 0");
         // Auto-commit any pending update that has reached its transition time
-        if (feeStatus.transitionTime > 0 && block.timestamp >= feeStatus.transitionTime) {
+        if (block.timestamp >= feeStatus.transitionTime) {
             feeStatus.currentFeePerTiB = feeStatus.nextFeePerTiB;
         }
         feeStatus.nextFeePerTiB = uint96(newFeePerTiB);
