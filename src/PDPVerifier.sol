@@ -622,10 +622,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function _currentFeePerTiB() internal view returns (uint96) {
-        if (feeStatus.transitionTime > 0 && block.timestamp >= feeStatus.transitionTime) {
-            return feeStatus.nextFeePerTiB;
-        }
-        return feeStatus.currentFeePerTiB;
+        return feeStatus.transitionTime >= block.timestamp ? feeStatus.nextFeePerTiB : feeStatus.currentFeePerTiB;
     }
 
     // Public getters for packed fee status
