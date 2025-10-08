@@ -5,6 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [2.2.1] - 2025-10-08
+
+### Deployed
+
+**Mainnet:**
+- PDPVerifier Implementation: [TO_ADD_AFTER_DEPLOYMENT](https://filfox.info/en/address/)
+- PDPVerifier Proxy: [TO_ADD_AFTER_DEPLOYMENT](https://filfox.info/en/address/)
+
+**Calibnet:**
+- PDPVerifier Implementation: [TO_ADD_AFTER_DEPLOYMENT](https://calibration.filfox.info/en/address/)
+- PDPVerifier Proxy: [TO_ADD_AFTER_DEPLOYMENT](https://calibration.filfox.info/en/address/)
+
+### Added
+
+- Restored `createDataSet()` function for enhanced flexibility in dataset initialization, enabling empty "bucket" creation, smoother Curio integration workflows, and synapse-sdk integration ([#219](https://github.com/FilOzone/pdp/pull/219))
+
 ## [2.2.0] - 2025-10-06
 
 ### Deployed

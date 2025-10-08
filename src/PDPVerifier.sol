@@ -161,7 +161,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
-    string public constant VERSION = "2.2.0";
+    string public constant VERSION = "2.2.1";
 
     event ContractUpgraded(string version, address implementation);
 
