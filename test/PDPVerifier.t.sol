@@ -37,9 +37,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
 
-        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         assertEq(setId, 1, "First data set ID should be 1");
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0, "Data set leaf count should be 0");
 
@@ -66,9 +64,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     function testDeleteDataSet() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetDeleted(setId, 0);
         pdpVerifier.deleteDataSet(setId, empty);
@@ -79,9 +75,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     function testOnlyStorageProviderCanDeleteDataSet() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         // Create a new address to act as a non-storage-provider
         address nonStorageProvider = address(0x1234);
         // Expect revert when non-storage-provider tries to delete the data set
@@ -111,9 +105,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     function testMethodsOnDeletedDataSetFails() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetDeleted(setId, 0);
@@ -139,14 +131,10 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     function testGetDataSetID() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(2, address(this));
-        pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         assertEq(3, pdpVerifier.getNextDataSetId(), "Next data set ID should be 3");
         assertEq(3, pdpVerifier.getNextDataSetId(), "Next data set ID should be 3");
     }
@@ -157,14 +145,10 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         // Test that data set IDs start from 1, not 0
         assertEq(pdpVerifier.getNextDataSetId(), 1, "Next data set ID should start at 1");
 
-        uint256 firstSetId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        uint256 firstSetId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         assertEq(firstSetId, 1, "First data set ID should be 1, not 0");
 
-        uint256 secondSetId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        uint256 secondSetId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
         assertEq(secondSetId, 2, "Second data set ID should be 2");
 
         assertEq(pdpVerifier.getNextDataSetId(), 3, "Next data set ID should be 3 after creating two data sets");
@@ -175,17 +159,13 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
 
         // Test 1: Fails when sending not enough for sybil fee
         vm.expectRevert("sybil fee not met");
-        pdpVerifier.addPieces{value: sybilFee - 1}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        pdpVerifier.createDataSet{value: sybilFee - 1}(address(listener), empty);
 
         // Test 2: Returns funds over the sybil fee back to the sender
         uint256 excessAmount = 1 ether;
         uint256 initialBalance = address(this).balance;
 
-        uint256 setId = pdpVerifier.addPieces{value: sybilFee + excessAmount}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
+        uint256 setId = pdpVerifier.createDataSet{value: sybilFee + excessAmount}(address(listener), empty);
 
         uint256 finalBalance = address(this).balance;
         uint256 refundedAmount = finalBalance - (initialBalance - sybilFee - excessAmount);
