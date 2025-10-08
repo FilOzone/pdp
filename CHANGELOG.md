@@ -14,8 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - PDPVerifier Proxy: [TO_ADD_AFTER_DEPLOYMENT](https://filfox.info/en/address/)
 
 **Calibnet:**
-- PDPVerifier Implementation: [TO_ADD_AFTER_DEPLOYMENT](https://calibration.filfox.info/en/address/)
-- PDPVerifier Proxy: [TO_ADD_AFTER_DEPLOYMENT](https://calibration.filfox.info/en/address/)
+- PDPVerifier Implementation: [0x4EC9a8ae6e6A419056b6C332509deEA371b182EF](https://calibration.filfox.info/en/address/0x4EC9a8ae6e6A419056b6C332509deEA371b182EF)
+- PDPVerifier Proxy: [0x579dD9E561D4Cd1776CF3e52E598616E77D5FBc](https://calibration.filfox.info/en/address/0x579dD9E561D4Cd1776CF3e52E598616E77D5FBc/)
 
 ### Added
 
