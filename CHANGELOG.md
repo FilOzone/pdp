@@ -5,6 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [2.2.1] - 2025-10-08
+
+### Deployed
+
+**Mainnet:**
+- PDPVerifier Implementation: [0xbeeD1aea4167787D0CA6d8989B9C7594749215AE](https://filfox.info/en/address/0xbeeD1aea4167787D0CA6d8989B9C7594749215AE)
+- PDPVerifier Proxy: [0x255cd1BFE3A83889607b8A7323709b24657d3534](https://filfox.info/en/address/0x255cd1BFE3A83889607b8A7323709b24657d3534)
+
+**Calibnet:**
+- PDPVerifier Implementation: [0x4EC9a8ae6e6A419056b6C332509deEA371b182EF](https://calibration.filfox.info/en/address/0x4EC9a8ae6e6A419056b6C332509deEA371b182EF)
+- PDPVerifier Proxy: [0x579dD9E561D4Cd1776CF3e52E598616E77D5FBcb](https://calibration.filfox.info/en/address/0x579dD9E561D4Cd1776CF3e52E598616E77D5FBcb/)
+
+### Added
+
+- Restored `createDataSet()` function for enhanced flexibility in dataset initialization, enabling empty "bucket" creation, smoother Curio integration workflows, and synapse-sdk integration ([#219](https://github.com/FilOzone/pdp/pull/219))
+- Implemented FVM precompiles for native payments, burn operations, and beacon randomness functionality ([#207](https://github.com/FilOzone/pdp/pull/207))
+
 ## [2.2.0] - 2025-10-06
 
 ### Deployed
@@ -194,7 +211,9 @@ For the set of changes since the last tag:
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/filozone/pdp/compare/v2.2.0...v2.2.1
+[2.2.0]: https://github.com/filozone/pdp/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/filozone/pdp/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/filozone/pdp/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/filozone/pdp/compare/v1.0.0...v1.1.0
