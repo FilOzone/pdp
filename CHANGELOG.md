@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Added
 
 - Restored `createDataSet()` function for enhanced flexibility in dataset initialization, enabling empty "bucket" creation, smoother Curio integration workflows, and synapse-sdk integration ([#219](https://github.com/FilOzone/pdp/pull/219))
+- Implemented FVM precompiles for native payments, burn operations, and beacon randomness functionality ([#207](https://github.com/FilOzone/pdp/pull/207))
 
 ## [2.2.0] - 2025-10-06
 
@@ -210,7 +211,9 @@ For the set of changes since the last tag:
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/filozone/pdp/compare/v2.2.0...v2.2.1
+[2.2.0]: https://github.com/filozone/pdp/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/filozone/pdp/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/filozone/pdp/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/filozone/pdp/compare/v1.0.0...v1.1.0
