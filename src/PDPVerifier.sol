@@ -177,6 +177,23 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(success, "Burn failed");
     }
 
+    // Validates msg.value meets sybil fee requirement and burns the fee.
+    // Returns the sybil fee amount for later refund calculation.
+    function _validateAndBurnSybilFee() internal returns (uint256 sybilFee) {
+        sybilFee = PDPFees.sybilFee();
+        require(msg.value >= sybilFee, "sybil fee not met");
+        burnFee(sybilFee);
+    }
+
+    // Refunds any amount sent over the sybil fee back to msg.sender.
+    // Must be called after all state changes to avoid re-entrancy issues.
+    function _refundExcessSybilFee(uint256 sybilFee) internal {
+        if (msg.value > sybilFee) {
+            (bool success,) = msg.sender.call{value: msg.value - sybilFee}("");
+            require(success, "Transfer failed.");
+        }
+    }
+
     // Returns the current challenge finality value
     function getChallengeFinality() public view returns (uint256) {
         return challengeFinality;
@@ -387,6 +404,45 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
+    // Internal helper to create a new data set and initialize its state.
+    // Returns the newly created data set ID.
+    function _createDataSet(address listenerAddr, bytes memory extraData) internal returns (uint256) {
+        uint256 setId = nextDataSetId++;
+        dataSetLeafCount[setId] = 0;
+        nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED; // initialized on first call to NextProvingPeriod
+        storageProvider[setId] = msg.sender;
+        dataSetListener[setId] = listenerAddr;
+        dataSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
+
+        if (listenerAddr != address(0)) {
+            PDPListener(listenerAddr).dataSetCreated(setId, msg.sender, extraData);
+        }
+        emit DataSetCreated(setId, msg.sender);
+
+        return setId;
+    }
+
+    // Creates a new empty data set with no pieces. Pieces can be added later via addPieces().
+    // This is the simpler alternative to creating and adding pieces atomically via addPieces(NEW_DATA_SET_SENTINEL, ...).
+    //
+    // Parameters:
+    //   - listenerAddr: Address of PDPListener contract to receive callbacks (can be address(0) for no listener)
+    //   - extraData: Arbitrary bytes passed to listener's dataSetCreated callback
+    //   - msg.value: Must include sybil fee (PDPFees.sybilFee()), excess is refunded
+    //
+    // Returns: The newly created data set ID
+    //
+    // Only the storage provider (msg.sender) can call this function.
+    function createDataSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
+        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
+        uint256 sybilFee = _validateAndBurnSybilFee();
+
+        uint256 setId = _createDataSet(listenerAddr, extraData);
+
+        _refundExcessSybilFee(sybilFee);
+        return setId;
+    }
+
     // Removes a data set. Must be called by the storage provider.
     function deleteDataSet(uint256 setId, bytes calldata extraData) public {
         require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
@@ -408,9 +464,28 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit DataSetDeleted(setId, deletedLeafCount);
     }
 
-    // Create Dataset and Add Pieces, When setId == NEW_DATA_SET_SENTINEL, this will create a new dataset with piece data provided
-    // with the provided listenerAddr and expect extraData to be abi.encode(bytes createPayload, bytes addPayload).
-    // When adding to an existing set, pass listenerAddr == address(0) and setId to the live dataset.
+    // Appends pieces to a data set. Optionally creates a new data set if setId == 0.
+    // These pieces won't be challenged until the next proving period is started by calling nextProvingPeriod.
+    //
+    // Two modes of operation:
+    // 1. Add to existing data set:
+    //    - setId: ID of the existing data set
+    //    - listenerAddr: must be address(0)
+    //    - extraData: arbitrary bytes passed to the listener's piecesAdded callback
+    //    - msg.value: must be 0 (no fee required)
+    //    - Returns: first piece ID added
+    //
+    // 2. Create new data set and add pieces (atomic operation):
+    //    - setId: must be NEW_DATA_SET_SENTINEL (0)
+    //    - listenerAddr: listener contract address (required, cannot be address(0))
+    //    - pieceData: array of pieces to add (can be empty to create empty data set)
+    //    - extraData: abi.encode(bytes createPayload, bytes addPayload) where:
+    //      - createPayload: passed to listener's dataSetCreated callback
+    //      - addPayload: passed to listener's piecesAdded callback (if pieces added)
+    //    - msg.value: must include sybil fee (PDPFees.sybilFee()), excess is refunded
+    //    - Returns: the newly created data set ID
+    //
+    // Only the storage provider can call this function.
     function addPieces(uint256 setId, address listenerAddr, Cids.Cid[] calldata pieceData, bytes calldata extraData)
         public
         payable
@@ -420,31 +495,17 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             (bytes memory createPayload, bytes memory addPayload) = abi.decode(extraData, (bytes, bytes));
 
             require(createPayload.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
-            uint256 sybilFee = PDPFees.sybilFee();
-            require(msg.value >= sybilFee, "sybil fee not met");
-            burnFee(sybilFee);
+            uint256 sybilFee = _validateAndBurnSybilFee();
 
             require(listenerAddr != address(0), "listener required for new dataset");
-            uint256 newSetId = nextDataSetId++;
-            storageProvider[newSetId] = msg.sender;
-            dataSetListener[newSetId] = listenerAddr;
-
-            if (listenerAddr != address(0)) {
-                PDPListener(listenerAddr).dataSetCreated(newSetId, msg.sender, createPayload);
-            }
-            emit DataSetCreated(newSetId, msg.sender);
+            uint256 newSetId = _createDataSet(listenerAddr, createPayload);
 
             // Add pieces to the newly created data set (if any)
             if (pieceData.length > 0) {
                 _addPiecesToDataSet(newSetId, pieceData, addPayload);
             }
 
-            // Return the at the end to avoid any possible re-entrency issues.
-            if (msg.value > sybilFee) {
-                (bool success,) = msg.sender.call{value: msg.value - sybilFee}("");
-                require(success, "Transfer failed.");
-            }
-
+            _refundExcessSybilFee(sybilFee);
             return newSetId;
         } else {
             // Adding to an existing set; no fee should be sent and listenerAddr must be zero
