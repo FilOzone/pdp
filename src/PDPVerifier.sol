@@ -592,7 +592,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // data set Merkle pieces at some epoch. The challenge seed is determined
     // by the epoch of the previous proof of possession.
     function provePossession(uint256 setId, IPDPTypes.Proof[] calldata proofs) public payable {
-        uint256 initialGas = gasleft();
         uint256 nProofs = proofs.length;
         require(msg.sender == storageProvider[setId], "Only the storage provider can prove possession");
         require(nProofs > 0, "empty proof");
@@ -640,7 +639,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // to do extraneous work just to inflate the gas fee.
         //
         // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
-        uint256 gasUsed = (initialGas - gasleft()) + ((calculateCallDataSize(proofs) + 32) * 1300);
         uint256 refund = calculateAndBurnProofFee(setId);
 
         {
@@ -696,15 +694,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function feeEffectiveTime() public view returns (uint64) {
         return feeStatus.transitionTime;
-    }
-
-    function calculateCallDataSize(IPDPTypes.Proof[] calldata proofs) internal pure returns (uint256) {
-        uint256 callDataSize = 0;
-        for (uint256 i = 0; i < proofs.length; i++) {
-            // 64 for the (leaf + abi encoding overhead ) + each element in the proof is 32 bytes
-            callDataSize += 64 + (proofs[i].proof.length * 32);
-        }
-        return callDataSize;
     }
 
     function getRandomness(uint256 epoch) public view returns (uint256) {
