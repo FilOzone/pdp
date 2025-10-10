@@ -888,7 +888,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         assertEq(sizes2[0], 6144, "First piece size on second page should be 6144 (1024 * 6)");
 
         // Test last page
-        (Cids.Cid[] memory pieces3, uint256[] memory ids3, uint256[] memory sizes3, bool hasMore3) =
+        (Cids.Cid[] memory pieces3, uint256[] memory ids3, /*uint256[] memory sizes3*/, bool hasMore3) =
             pdpVerifier.getActivePieces(setId, 10, 5);
         assertEq(pieces3.length, 5, "Last page should have 5 pieces");
         assertEq(hasMore3, false, "Should not have more items after last page");
@@ -919,7 +919,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + challengeFinality, empty);
 
         // Should return only 7 active pieces
-        (Cids.Cid[] memory pieces, uint256[] memory ids, uint256[] memory sizes, bool hasMore) =
+        (Cids.Cid[] memory pieces, uint256[] memory ids, /*uint256[] memory sizes*/, bool hasMore) =
             pdpVerifier.getActivePieces(setId, 0, 10);
         assertEq(pieces.length, 7, "Should have 7 active pieces after deletions");
         assertEq(hasMore, false, "Should not have more items");
@@ -951,7 +951,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getActivePieceCount(setId), 5, "Should have 5 active pieces");
 
         // Test offset beyond range
-        (Cids.Cid[] memory pieces1, uint256[] memory ids1, uint256[] memory sizes1, bool hasMore1) =
+        (Cids.Cid[] memory pieces1, /*uint256[] memory ids1*/, /*uint256[] memory sizes1*/, bool hasMore1) =
             pdpVerifier.getActivePieces(setId, 10, 5);
         assertEq(pieces1.length, 0, "Should return empty when offset beyond range");
         assertEq(hasMore1, false, "Should not have more items");
@@ -961,7 +961,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         pdpVerifier.getActivePieces(setId, 0, 0);
 
         // Test limit exceeding available
-        (Cids.Cid[] memory pieces3, uint256[] memory ids3, uint256[] memory sizes3, bool hasMore3) =
+        (Cids.Cid[] memory pieces3, uint256[] memory ids3, /*uint256[] memory sizes3*/, bool hasMore3) =
             pdpVerifier.getActivePieces(setId, 3, 10);
         assertEq(pieces3.length, 2, "Should return only 2 pieces from offset 3");
         assertEq(hasMore3, false, "Should not have more items");
