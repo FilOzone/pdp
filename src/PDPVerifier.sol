@@ -339,7 +339,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 if (activeCount >= offset && resultIndex < limit) {
                     tempPieces[resultIndex] = pieceCids[setId][i];
                     tempPieceIds[resultIndex] = i;
-                    tempRawSizes[resultIndex] = pieceLeafCounts[setId][i] * 32;
+                    (uint256 padding, uint8 height,) = Cids.validateCommPv2(tempPieces[resultIndex]);
+                    tempRawSizes[resultIndex] = Cids.pieceSize(padding, height);
                     resultIndex++;
                 } else if (activeCount >= offset + limit) {
                     // Found at least one more active piece beyond our limit
@@ -662,18 +663,20 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function calculateProofFee(uint256 setId) public view returns (uint256) {
-        uint256 rawSize = 32 * challengeRange[setId];
-        return calculateProofFeeForSize(rawSize);
+        // proofSize is the number of bytes that will be charged for the proof.
+        // challengeRange is a leaf count (32-byte chunks), so multiply by 32 to get bytes.
+        uint256 proofSize = 32 * challengeRange[setId];
+        return calculateProofFeeForSize(proofSize);
     }
 
-    function calculateProofFeeForSize(uint256 rawSize) public view returns (uint256) {
-        require(rawSize > 0, "failed to validate: raw size must be greater than 0");
-        return PDPFees.calculateProofFee(rawSize, _currentFeePerTiB());
+    function calculateProofFeeForSize(uint256 proofSize) public view returns (uint256) {
+        require(proofSize > 0, "failed to validate: proof size must be greater than 0");
+        return PDPFees.calculateProofFee(proofSize, _currentFeePerTiB());
     }
 
     function calculateAndBurnProofFee(uint256 setId) internal returns (uint256 refund) {
-        uint256 rawSize = 32 * challengeRange[setId];
-        uint256 proofFee = calculateProofFeeForSize(rawSize);
+        uint256 proofSize = 32 * challengeRange[setId];
+        uint256 proofFee = calculateProofFeeForSize(proofSize);
 
         burnFee(proofFee);
         emit ProofFeePaid(setId, proofFee);
