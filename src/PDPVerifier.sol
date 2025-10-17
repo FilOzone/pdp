@@ -312,13 +312,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @param limit Maximum number of pieces to return
      * @return pieces Array of active piece CIDs
      * @return pieceIds Array of corresponding piece IDs
-     * @return rawSizes Array of raw sizes for each piece (in bytes)
      * @return hasMore True if there are more pieces beyond this page
      */
     function getActivePieces(uint256 setId, uint256 offset, uint256 limit)
         public
         view
-        returns (Cids.Cid[] memory pieces, uint256[] memory pieceIds, uint256[] memory rawSizes, bool hasMore)
+        returns (Cids.Cid[] memory pieces, uint256[] memory pieceIds, bool hasMore)
     {
         require(dataSetLive(setId), "Data set not live");
         require(limit > 0, "Limit must be greater than 0");
@@ -329,7 +328,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Over-allocate arrays to limit size
         Cids.Cid[] memory tempPieces = new Cids.Cid[](limit);
         uint256[] memory tempPieceIds = new uint256[](limit);
-        uint256[] memory tempRawSizes = new uint256[](limit);
 
         uint256 activeCount = 0;
         uint256 resultIndex = 0;
@@ -339,8 +337,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 if (activeCount >= offset && resultIndex < limit) {
                     tempPieces[resultIndex] = pieceCids[setId][i];
                     tempPieceIds[resultIndex] = i;
-                    (uint256 padding, uint8 height,) = Cids.validateCommPv2(tempPieces[resultIndex]);
-                    tempRawSizes[resultIndex] = Cids.pieceSize(padding, height);
                     resultIndex++;
                 } else if (activeCount >= offset + limit) {
                     // Found at least one more active piece beyond our limit
@@ -354,23 +350,20 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Handle case where we found fewer items than limit
         if (resultIndex == 0) {
             // No items found
-            return (new Cids.Cid[](0), new uint256[](0), new uint256[](0), false);
+            return (new Cids.Cid[](0), new uint256[](0),false);
         } else if (resultIndex < limit) {
             // Found fewer items than limit - need to resize arrays
             pieces = new Cids.Cid[](resultIndex);
             pieceIds = new uint256[](resultIndex);
-            rawSizes = new uint256[](resultIndex);
 
             for (uint256 i = 0; i < resultIndex; i++) {
                 pieces[i] = tempPieces[i];
                 pieceIds[i] = tempPieceIds[i];
-                rawSizes[i] = tempRawSizes[i];
             }
         } else {
             // Found exactly limit items - use temp arrays directly
             pieces = tempPieces;
             pieceIds = tempPieceIds;
-            rawSizes = tempRawSizes;
         }
     }
 
