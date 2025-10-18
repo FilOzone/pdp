@@ -840,8 +840,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
         );
 
-        (Cids.Cid[] memory pieces, uint256[] memory ids, bool hasMore) =
-            pdpVerifier.getActivePieces(setId, 0, 10);
+        (Cids.Cid[] memory pieces, uint256[] memory ids, bool hasMore) = pdpVerifier.getActivePieces(setId, 0, 10);
 
         assertEq(pieces.length, 0, "Should return empty array for empty data set");
         assertEq(ids.length, 0, "Should return empty IDs array");
@@ -870,8 +869,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
 
         // Test first page
         uint256[] memory sizes1 = new uint256[](5);
-        (Cids.Cid[] memory pieces1, uint256[] memory ids1,bool hasMore1) =
-            pdpVerifier.getActivePieces(setId, 0, 5);
+        (Cids.Cid[] memory pieces1, uint256[] memory ids1, bool hasMore1) = pdpVerifier.getActivePieces(setId, 0, 5);
         for (uint256 i = 0; i < pieces1.length; i++) {
             (uint256 padding, uint8 height,) = Cids.validateCommPv2(pieces1[i]);
             sizes1[i] = Cids.pieceSize(padding, height);
@@ -884,8 +882,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
 
         // Test second page
         uint256[] memory sizes2 = new uint256[](5);
-        (Cids.Cid[] memory pieces2, uint256[] memory ids2, bool hasMore2) =
-            pdpVerifier.getActivePieces(setId, 5, 5);
+        (Cids.Cid[] memory pieces2, uint256[] memory ids2, bool hasMore2) = pdpVerifier.getActivePieces(setId, 5, 5);
         for (uint256 i = 0; i < pieces2.length; i++) {
             (uint256 padding, uint8 height,) = Cids.validateCommPv2(pieces2[i]);
             sizes2[i] = Cids.pieceSize(padding, height);
@@ -897,8 +894,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
 
         // Test last page
 
-        (Cids.Cid[] memory pieces3, uint256[] memory ids3, bool hasMore3) =
-            pdpVerifier.getActivePieces(setId, 10, 5);
+        (Cids.Cid[] memory pieces3, uint256[] memory ids3, bool hasMore3) = pdpVerifier.getActivePieces(setId, 10, 5);
         assertEq(pieces3.length, 5, "Last page should have 5 pieces");
         assertEq(hasMore3, false, "Should not have more items after last page");
         assertEq(ids3[0], 10, "First piece ID on last page should be 10");
@@ -928,8 +924,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + challengeFinality, empty);
 
         // Should return only 7 active pieces
-        (Cids.Cid[] memory pieces, uint256[] memory ids,bool hasMore) =
-            pdpVerifier.getActivePieces(setId, 0, 10);
+        (Cids.Cid[] memory pieces, uint256[] memory ids, bool hasMore) = pdpVerifier.getActivePieces(setId, 0, 10);
         assertEq(pieces.length, 7, "Should have 7 active pieces after deletions");
         assertEq(hasMore, false, "Should not have more items");
 
@@ -960,7 +955,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getActivePieceCount(setId), 5, "Should have 5 active pieces");
 
         // Test offset beyond range
-        (Cids.Cid[] memory pieces1, /*uint256[] memory ids1*/,bool hasMore1) =
+        (Cids.Cid[] memory pieces1, /*uint256[] memory ids1*/, bool hasMore1) =
             pdpVerifier.getActivePieces(setId, 10, 5);
         assertEq(pieces1.length, 0, "Should return empty when offset beyond range");
         assertEq(hasMore1, false, "Should not have more items");
@@ -970,8 +965,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         pdpVerifier.getActivePieces(setId, 0, 0);
 
         // Test limit exceeding available
-        (Cids.Cid[] memory pieces3, uint256[] memory ids3, bool hasMore3) =
-            pdpVerifier.getActivePieces(setId, 3, 10);
+        (Cids.Cid[] memory pieces3, uint256[] memory ids3, bool hasMore3) = pdpVerifier.getActivePieces(setId, 3, 10);
         assertEq(pieces3.length, 2, "Should return only 2 pieces from offset 3");
         assertEq(hasMore3, false, "Should not have more items");
         assertEq(ids3[0], 3, "First ID should be 3");
@@ -1001,7 +995,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         pdpVerifier.addPieces(setId, address(0), testPieces, empty);
 
         // Test exact boundary - requesting exactly all items
-        (,,bool hasMore1) = pdpVerifier.getActivePieces(setId, 0, 10);
+        (,, bool hasMore1) = pdpVerifier.getActivePieces(setId, 0, 10);
         assertEq(hasMore1, false, "Should not have more when requesting exactly all items");
 
         // Test one less than total - should have more
@@ -1038,13 +1032,13 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         uint256 pageSize = 20;
 
         while (offset < 100) {
-            (Cids.Cid[] memory pieces, uint256[] memory ids,bool hasMore) =
+            (Cids.Cid[] memory pieces, uint256[] memory ids, bool hasMore) =
                 pdpVerifier.getActivePieces(setId, offset, pageSize);
             uint256[] memory sizes = new uint256[](pieces.length);
             for (uint256 i = 0; i < pieces.length; i++) {
                 (uint256 padding, uint8 height,) = Cids.validateCommPv2(pieces[i]);
                 sizes[i] = Cids.pieceSize(padding, height);
-            }    
+            }
 
             if (offset + pageSize < 100) {
                 assertEq(hasMore, true, "Should have more pages");

@@ -350,7 +350,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Handle case where we found fewer items than limit
         if (resultIndex == 0) {
             // No items found
-            return (new Cids.Cid[](0), new uint256[](0),false);
+            return (new Cids.Cid[](0), new uint256[](0), false);
         } else if (resultIndex < limit) {
             // Found fewer items than limit - need to resize arrays
             pieces = new Cids.Cid[](resultIndex);
