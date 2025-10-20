@@ -640,8 +640,8 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
     }
 
     function testExtraDataMaxSizeLimit() public {
-        // Generate extra data that exceeds the max size (2KB)
-        bytes memory tooLargeExtraData = new bytes(2049); // 2KB + 1 byte
+        // Generate extra data that exceeds the max size (8KB)
+        bytes memory tooLargeExtraData = new bytes(8193); // 8KB + 1 byte
         for (uint256 i = 0; i < tooLargeExtraData.length; i++) {
             tooLargeExtraData[i] = 0x41; // ASCII 'A'
         }

@@ -43,7 +43,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
-    uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
+    uint256 public constant EXTRA_DATA_MAX_SIZE = 8192;
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
 
