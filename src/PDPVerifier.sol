@@ -43,7 +43,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
-    uint256 public constant EXTRA_DATA_MAX_SIZE = 2048;
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
 
@@ -428,7 +427,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     //
     // Only the storage provider (msg.sender) can call this function.
     function createDataSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         uint256 sybilFee = _validateAndBurnSybilFee();
 
         uint256 setId = _createDataSet(listenerAddr, extraData);
@@ -439,7 +437,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Removes a data set. Must be called by the storage provider.
     function deleteDataSet(uint256 setId, bytes calldata extraData) public {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         if (setId >= nextDataSetId) {
             revert("data set id out of bounds");
         }
@@ -488,7 +485,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (setId == NEW_DATA_SET_SENTINEL) {
             (bytes memory createPayload, bytes memory addPayload) = abi.decode(extraData, (bytes, bytes));
 
-            require(createPayload.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
             uint256 sybilFee = _validateAndBurnSybilFee();
 
             require(listenerAddr != address(0), "listener required for new dataset");
@@ -518,7 +514,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         internal
         returns (uint256 firstAdded)
     {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         uint256 nPieces = pieceData.length;
         require(nPieces > 0, "Must add at least one piece");
 
@@ -563,7 +558,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // schedulePieceDeletions schedules deletion of a batch of pieces from a data set for the start of the next
     // proving period. It must be called by the storage provider.
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(dataSetLive(setId), "Data set not live");
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
         require(
@@ -715,7 +709,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Note that this method can be called at any time but the pdpListener will likely consider it
     // a "fault" or other penalizeable behavior to call this method before calling provePossesion.
     function nextProvingPeriod(uint256 setId, uint256 challengeEpoch, bytes calldata extraData) public {
-        require(extraData.length <= EXTRA_DATA_MAX_SIZE, "Extra data too large");
         require(msg.sender == storageProvider[setId], "only the storage provider can move to next proving period");
         require(dataSetLeafCount[setId] > 0, "can only start proving once leaves are added");
 

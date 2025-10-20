@@ -639,48 +639,6 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(false, pdpVerifier.pieceLive(setId, 1));
     }
 
-    function testExtraDataMaxSizeLimit() public {
-        // Generate extra data that exceeds the max size (2KB)
-        bytes memory tooLargeExtraData = new bytes(2049); // 2KB + 1 byte
-        for (uint256 i = 0; i < tooLargeExtraData.length; i++) {
-            tooLargeExtraData[i] = 0x41; // ASCII 'A'
-        }
-
-        // First test createDataSet with too large extra data
-        vm.expectRevert("Extra data too large");
-        pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(tooLargeExtraData, empty)
-        );
-
-        // Now create data set
-        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
-            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
-        );
-        Cids.Cid[] memory pieces = new Cids.Cid[](1);
-
-        // Test addPieces with too large extra data
-        pieces[0] = makeSamplePiece(2);
-        vm.expectRevert("Extra data too large");
-        pdpVerifier.addPieces(setId, address(0), pieces, tooLargeExtraData);
-
-        // Now actually add piece id 0
-        pdpVerifier.addPieces(setId, address(0), pieces, empty);
-
-        // Test schedulePieceDeletions with too large extra data
-        uint256[] memory pieceIds = new uint256[](1);
-        pieceIds[0] = 0;
-        vm.expectRevert("Extra data too large");
-        pdpVerifier.schedulePieceDeletions(setId, pieceIds, tooLargeExtraData);
-
-        // Test nextProvingPeriod with too large extra data
-        vm.expectRevert("Extra data too large");
-        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + 10, tooLargeExtraData);
-
-        // Test deleteDataSet with too large extra data
-        vm.expectRevert("Extra data too large");
-        pdpVerifier.deleteDataSet(setId, tooLargeExtraData);
-    }
-
     function testOnlyStorageProviderCanModifyDataSet() public {
         // Setup a piece we can add
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
