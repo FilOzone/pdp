@@ -5,6 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [3.0.0] - 2025-10-21
+
+### 💥 Breaking Changes
+- **BREAKING**: Changed `getActivePieces()` return signature ([#223](https://github.com/FilOzone/pdp/pull/223))
+  - **Removed**: `rawSizes` array from return values
+  - **Before**: `returns (Cids.Cid[] memory pieces, uint256[] memory pieceIds, uint256[] memory rawSizes, bool hasMore)`
+  - **After**: `returns (Cids.Cid[] memory pieces, uint256[] memory pieceIds, bool hasMore)`
+  - **Migration Guide**: Remove any code that expects or uses the `rawSizes` return value from `getActivePieces()`. The raw size information was redundant as it can be derived from the piece CIDs themselves.
+
+### Changed
+- Removed `EXTRA_DATA_MAX_SIZE` limit (previously 2048 bytes) allowing unlimited extra data in function calls ([#225](https://github.com/FilOzone/pdp/pull/225))
+- Clarified naming: renamed `rawSize` parameter to `proofSize` in `calculateProofFeeForSize()` for better clarity ([#223](https://github.com/FilOzone/pdp/pull/223))
+
+### Removed  
+- Removed internal `calculateCallDataSize()` function and `gasUsed` calculation logic ([#222](https://github.com/FilOzone/pdp/pull/222)) 
+
 ## [2.2.1] - 2025-10-08
 
 ### Deployed
@@ -211,7 +227,8 @@ For the set of changes since the last tag:
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/filozone/pdp/compare/v2.2.1...v3.0.0
 [2.2.1]: https://github.com/filozone/pdp/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/filozone/pdp/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/filozone/pdp/compare/v2.0.0...v2.1.0
