@@ -131,7 +131,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Enqueued piece ids for removal when starting the next proving period
     mapping(uint256 => uint256[]) scheduledRemovals;
     // Track which pieces are scheduled for removal
-    mapping(uint256 => mapping(uint256 => bool)) isScheduledForRemoval;
+    mapping(uint256 dataSetId => mapping(uint256 pieceId => bool isScheduledForRemoval)) isScheduledForRemoval;
     // storage provider of data set is initialized upon creation to create message sender
     // storage provider has exclusive permission to add and remove pieces and delete the data set
     mapping(uint256 => address) storageProvider;
@@ -734,9 +734,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             uint256[] memory removalsToProcess = new uint256[](nRemovals);
 
             for (uint256 i = 0; i < nRemovals; i++) {
-                removalsToProcess[i] = removals[removals.length - 1];
-                removals.pop();
+                removalsToProcess[i] = removals[i];
             }
+
+            delete scheduledRemovals[setId];
 
             // Clear the mapping entries for the removed pieces
             for (uint256 i = 0; i < nRemovals; i++) {
