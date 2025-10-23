@@ -599,6 +599,89 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getPieceLeafCount(setId, 2), 0);
     }
 
+    function testSchedulePieceDeletionsDuplicatePrevention() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+        Cids.Cid[] memory pieces = new Cids.Cid[](3);
+        pieces[0] = makeSamplePiece(2);
+        pieces[1] = makeSamplePiece(2);
+        pieces[2] = makeSamplePiece(2);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        // Test 1: Duplicate piece IDs within the same call should fail
+        uint256[] memory duplicateIds = new uint256[](3);
+        duplicateIds[0] = 0;
+        duplicateIds[1] = 1;
+        duplicateIds[2] = 0; // Duplicate of first piece ID
+        vm.expectRevert("Piece ID already scheduled for removal");
+        pdpVerifier.schedulePieceDeletions(setId, duplicateIds, empty);
+
+        // Test 2: Scheduling the same piece ID in multiple calls should fail
+        uint256[] memory firstCall = new uint256[](1);
+        firstCall[0] = 0;
+        pdpVerifier.schedulePieceDeletions(setId, firstCall, empty);
+
+        uint256[] memory secondCall = new uint256[](1);
+        secondCall[0] = 0; // Same piece ID as first call
+        vm.expectRevert("Piece ID already scheduled for removal");
+        pdpVerifier.schedulePieceDeletions(setId, secondCall, empty);
+
+        // Test 3: Valid scheduling should work
+        uint256[] memory validIds = new uint256[](2);
+        validIds[0] = 1;
+        validIds[1] = 2;
+        pdpVerifier.schedulePieceDeletions(setId, validIds, empty);
+
+        // Verify scheduled removals contain all pieces
+        uint256[] memory scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
+        assertEq(scheduledRemovals.length, 3, "Should have 3 scheduled removals");
+        assertEq(scheduledRemovals[0], 0, "First scheduled removal should be piece 0");
+        assertEq(scheduledRemovals[1], 1, "Second scheduled removal should be piece 1");
+        assertEq(scheduledRemovals[2], 2, "Third scheduled removal should be piece 2");
+    }
+
+    function testMappingClearedAfterRemoval() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+        Cids.Cid[] memory pieces = new Cids.Cid[](3);
+        pieces[0] = makeSamplePiece(2);
+        pieces[1] = makeSamplePiece(2);
+        pieces[2] = makeSamplePiece(2);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        // Schedule pieces for removal
+        uint256[] memory pieceIds = new uint256[](2);
+        pieceIds[0] = 0;
+        pieceIds[1] = 1;
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
+
+        // Verify pieces are scheduled
+        uint256[] memory scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
+        assertEq(scheduledRemovals.length, 2, "Should have 2 scheduled removals");
+
+        // Call nextProvingPeriod to process removals
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
+
+        // Verify scheduled removals are cleared
+        scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
+        assertEq(scheduledRemovals.length, 0, "Scheduled removals should be cleared");
+
+        // Now we should be able to schedule the same pieces again
+        // (This tests that the mapping was properly cleared)
+        uint256[] memory newPieceIds = new uint256[](2);
+        newPieceIds[0] = 0; // Same piece ID as before
+        newPieceIds[1] = 2; // Different piece ID
+        pdpVerifier.schedulePieceDeletions(setId, newPieceIds, empty);
+
+        // Verify new scheduling worked
+        scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
+        assertEq(scheduledRemovals.length, 2, "Should have 2 new scheduled removals");
+        assertEq(scheduledRemovals[0], 0, "First scheduled removal should be piece 0");
+        assertEq(scheduledRemovals[1], 2, "Second scheduled removal should be piece 2");
+    }
+
     function testRemoveFuturePieces() public {
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
@@ -619,13 +702,11 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         // Scheduling both unchallengeable and challengeable pieces for removal succeeds
-        // scheduling duplicate ids in both cases succeeds
-        uint256[] memory toRemove2 = new uint256[](4);
+        // Note: duplicate IDs are prevented
+        uint256[] memory toRemove2 = new uint256[](2);
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
         toRemove2[0] = 0; // current challengeable piece
         toRemove2[1] = 1; // current unchallengeable piece
-        toRemove2[2] = 0; // duplicate challengeable
-        toRemove2[3] = 1; // duplicate unchallengeable
         // state exists for both pieces
         assertEq(true, pdpVerifier.pieceLive(setId, 0));
         assertEq(true, pdpVerifier.pieceLive(setId, 1));
