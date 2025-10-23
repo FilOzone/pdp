@@ -130,8 +130,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => uint256) challengeRange;
     // Enqueued piece ids for removal when starting the next proving period
     mapping(uint256 => uint256[]) scheduledRemovals;
-    // Track which pieces are scheduled for removal
-    mapping(uint256 dataSetId => mapping(uint256 pieceId => bool isScheduledForRemoval)) isScheduledForRemoval;
+    // Track which pieces are scheduled for removal with a bitmap
+    mapping(uint256 dataSetId => uint256 scheduledRemovalsBitmap) scheduledRemovalsBitmap;
     // storage provider of data set is initialized upon creation to create message sender
     // storage provider has exclusive permission to add and remove pieces and delete the data set
     mapping(uint256 => address) storageProvider;
@@ -571,11 +571,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             uint256 pieceId = pieceIds[i];
             require(pieceId < nextPieceId[setId], "Can only schedule removal of existing pieces");
 
-            // Check for duplicates within the current call using mapping
-            require(!isScheduledForRemoval[setId][pieceId], "Piece ID already scheduled for removal");
+            // Check piece ID is within bitmap range
+            require(pieceId < 256, "Piece ID too large for bitmap");
 
-            // Mark as scheduled for removal
-            isScheduledForRemoval[setId][pieceId] = true;
+            // Check for duplicates using bitmap
+            uint256 bitMask = 1 << pieceId;
+            require((scheduledRemovalsBitmap[setId] & bitMask) == 0, "Piece ID already scheduled for removal");
+
+            // Mark as scheduled for removal in bitmap
+            scheduledRemovalsBitmap[setId] |= bitMask;
 
             // Add to scheduled removals array
             scheduledRemovals[setId].push(pieceId);
@@ -739,9 +743,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             delete scheduledRemovals[setId];
 
-            // Clear the mapping entries for the removed pieces
+            // Clear the bitmap entries for the removed pieces
             for (uint256 i = 0; i < nRemovals; i++) {
-                isScheduledForRemoval[setId][removalsToProcess[i]] = false;
+                uint256 pieceId = removalsToProcess[i];
+                uint256 bitMask = 1 << pieceId;
+                scheduledRemovalsBitmap[setId] &= ~bitMask;
             }
 
             removePieces(setId, removalsToProcess);
