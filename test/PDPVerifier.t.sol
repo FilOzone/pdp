@@ -670,16 +670,14 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         // Now we should be able to schedule the same pieces again
         // (This tests that the mapping was properly cleared)
-        uint256[] memory newPieceIds = new uint256[](2);
-        newPieceIds[0] = 0; // Same piece ID as before
-        newPieceIds[1] = 2; // Different piece ID
+        uint256[] memory newPieceIds = new uint256[](1);
+        newPieceIds[0] = 2; // Different piece ID
         pdpVerifier.schedulePieceDeletions(setId, newPieceIds, empty);
 
         // Verify new scheduling worked
         scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
-        assertEq(scheduledRemovals.length, 2, "Should have 2 new scheduled removals");
-        assertEq(scheduledRemovals[0], 0, "First scheduled removal should be piece 0");
-        assertEq(scheduledRemovals[1], 2, "Second scheduled removal should be piece 2");
+        assertEq(scheduledRemovals.length, 1, "Should have 1 new scheduled removals");
+        assertEq(scheduledRemovals[0], 2, "Scheduled removal should be piece 2");
     }
 
     function testBitmapWithLargePieceIds() public {

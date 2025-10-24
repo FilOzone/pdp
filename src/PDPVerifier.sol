@@ -549,6 +549,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         uint256 leafCount = Cids.leafCount(padding, height);
+        if (leafCount == 0) {
+            // This is a redudant check as Cids.isPaddingExcessive already checks for pieces which would result in leafCount == 0
+            // but we keep it here for clarity
+            revert IndexedError(callIdx, "Leaf count of the pieece must be greater than 0");
+        }
+
         uint256 pieceId = nextPieceId[setId]++;
         sumTreeAdd(setId, leafCount, pieceId);
         pieceCids[setId][pieceId] = piece;
@@ -570,6 +576,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         for (uint256 i = 0; i < pieceIds.length; i++) {
             uint256 pieceId = pieceIds[i];
             require(pieceId < nextPieceId[setId], "Can only schedule removal of existing pieces");
+            require(pieceLeafCounts[setId][pieceId] > 0, "Can only schedule removal of live pieces");
 
             // Check for duplicates using bitmap
             uint256 slotIndex = pieceId >> 8;

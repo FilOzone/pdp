@@ -34,6 +34,20 @@ contract CidsTest is Test {
         assertEq(Cids.leafCount(128, 30), (1 << 30) - 4);
     }
 
+    function testIsPaddingExcessive() public pure {
+        assertEq(Cids.isPaddingExcessive(127, 2), true);
+        assertEq(Cids.leafCount(127, 2), 0);
+
+        assertEq(Cids.isPaddingExcessive(126, 2), false);
+        assertEq(Cids.leafCount(126, 2), 1);
+
+        assertEq(Cids.isPaddingExcessive(1024 * 127 / 128, 5), true);
+        assertEq(Cids.leafCount(1024 * 127 / 128, 5), 0);
+
+        assertEq(Cids.isPaddingExcessive(1024 * 127 / 128 - 1, 5), false);
+        assertEq(Cids.leafCount(1024 * 127 / 128 - 1, 5), 1);
+    }
+
     /// forge-config: default.allow_internal_expect_revert = true
     function testDigestTooShort() public {
         bytes memory byteArray = new bytes(31);
