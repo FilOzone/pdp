@@ -549,13 +549,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         uint256 leafCount = Cids.leafCount(padding, height);
-        if (leafCount == 0) {
-            // This is a redudant check as Cids.isPaddingExcessive already checks for pieces which would result in leafCount == 0
-            // but we keep it here for clarity
-            revert IndexedError(callIdx, "Leaf count of the pieece must be greater than 0");
-        }
-
         uint256 pieceId = nextPieceId[setId]++;
+
         sumTreeAdd(setId, leafCount, pieceId);
         pieceCids[setId][pieceId] = piece;
         pieceLeafCounts[setId][pieceId] = leafCount;

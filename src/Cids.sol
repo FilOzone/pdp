@@ -55,6 +55,7 @@ library Cids {
     }
 
     // isPaddingExcessive checks if the padding size exceeds the size of the tree
+    // When this is false, leafCount will never return zero
     function isPaddingExcessive(uint256 padding, uint8 height) internal pure returns (bool) {
         return (128 * padding) / 127 >= 1 << (height + 5);
     }
@@ -69,6 +70,8 @@ library Cids {
     }
 
     // leafCount returns the number of 32b leaves that contain any amount of data
+    // Utilize isPaddingExcessive to check if the padding size exceeds the size of the tree
+    // If isPaddingExcessive is false, leafCount will never return a zero.
     function leafCount(uint256 padding, uint8 height) internal pure returns (uint256) {
         // the padding itself is # of bytes before Fr32 expansion
         // so we need to expand it by factor 128/127
