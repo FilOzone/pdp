@@ -130,6 +130,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => uint256) challengeRange;
     // Enqueued piece ids for removal when starting the next proving period
     mapping(uint256 => uint256[]) scheduledRemovals;
+    // Track which pieces are scheduled for removal with a bitmap
+    mapping(uint256 dataSetId => mapping(uint256 slotIndex => uint256 bitmap)) scheduledRemovalsBitmap;
     // storage provider of data set is initialized upon creation to create message sender
     // storage provider has exclusive permission to add and remove pieces and delete the data set
     mapping(uint256 => address) storageProvider;
@@ -548,6 +550,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 leafCount = Cids.leafCount(padding, height);
         uint256 pieceId = nextPieceId[setId]++;
+
         sumTreeAdd(setId, leafCount, pieceId);
         pieceCids[setId][pieceId] = piece;
         pieceLeafCounts[setId][pieceId] = leafCount;
@@ -566,8 +569,24 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         );
 
         for (uint256 i = 0; i < pieceIds.length; i++) {
-            require(pieceIds[i] < nextPieceId[setId], "Can only schedule removal of existing pieces");
-            scheduledRemovals[setId].push(pieceIds[i]);
+            uint256 pieceId = pieceIds[i];
+            require(pieceId < nextPieceId[setId], "Can only schedule removal of existing pieces");
+            require(pieceLeafCounts[setId][pieceId] > 0, "Can only schedule removal of live pieces");
+
+            // Check for duplicates using bitmap
+            uint256 slotIndex = pieceId >> 8;
+            uint256 bitPosition = pieceId & 255;
+            uint256 bitMask = 1 << bitPosition;
+
+            require(
+                (scheduledRemovalsBitmap[setId][slotIndex] & bitMask) == 0, "Piece ID already scheduled for removal"
+            );
+
+            // Mark as scheduled for removal in bitmap
+            scheduledRemovalsBitmap[setId][slotIndex] |= bitMask;
+
+            // Add to scheduled removals array
+            scheduledRemovals[setId].push(pieceId);
         }
 
         address listenerAddr = dataSetListener[setId];
@@ -722,10 +741,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (nRemovals > 0) {
             uint256[] memory removalsToProcess = new uint256[](nRemovals);
 
+            // Copy removals to a memory array so we can clear the storage one
             for (uint256 i = 0; i < nRemovals; i++) {
-                removalsToProcess[i] = removals[removals.length - 1];
-                removals.pop();
+                uint256 pieceId = removals[i];
+                removalsToProcess[i] = pieceId;
+
+                // Clear the bitmap, as bitmap and array are in sync and we are going to delete everything from the array,
+                // we can remove by 256bit chunk
+                uint256 slotIndex = pieceId >> 8;
+                delete scheduledRemovalsBitmap[setId][slotIndex];
             }
+
+            delete scheduledRemovals[setId];
 
             removePieces(setId, removalsToProcess);
             emit PiecesRemoved(setId, removalsToProcess);
