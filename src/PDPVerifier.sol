@@ -739,20 +739,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (nRemovals > 0) {
             uint256[] memory removalsToProcess = new uint256[](nRemovals);
 
+            // Copy removals to a memory array so we can clear the storage one
             for (uint256 i = 0; i < nRemovals; i++) {
-                removalsToProcess[i] = removals[i];
+                uint256 pieceId = removals[i];
+                removalsToProcess[i] = pieceId;
+
+                // Clear the bitmap, as bitmap and array are in sync and we are going to delete everything from the array,
+                // we can remove by 256bit chunk
+                uint256 slotIndex = pieceId >> 8;
+                delete scheduledRemovalsBitmap[setId][slotIndex];
             }
 
             delete scheduledRemovals[setId];
-
-            // Clear the bitmap entries for the removed pieces
-            for (uint256 i = 0; i < nRemovals; i++) {
-                uint256 pieceId = removalsToProcess[i];
-                uint256 slotIndex = pieceId >> 8;
-                uint256 bitPosition = pieceId & 255;
-                uint256 bitMask = 1 << bitPosition;
-                scheduledRemovalsBitmap[setId][slotIndex] &= ~bitMask;
-            }
 
             removePieces(setId, removalsToProcess);
             emit PiecesRemoved(setId, removalsToProcess);
