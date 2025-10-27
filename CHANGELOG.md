@@ -5,6 +5,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [3.1.0] - 2025-10-27
+
+This release addresses an issue discovered during end-to-end testing of PDP v3.0.0. The `schedulePieceDeletions()` function lacked duplicate piece ID validation, which could lead to unexpected behavior when the same piece ID was scheduled for removal multiple times.
+
+The issue has been resolved with bitmap-based duplicate detection, and these contracts will be used for the GA release.
+
+### Deployed
+
+**Mainnet:**
+- PDPVerifier Implementation: [0xe2Dc211BffcA499761570E04e8143Be2BA66095f](https://filfox.info/en/address/0xe2Dc211BffcA499761570E04e8143Be2BA66095f)
+- PDPVerifier Proxy: [0xe2Dc211BffcA499761570E04e8143Be2BA66095f](https://filfox.info/en/address/0xe2Dc211BffcA499761570E04e8143Be2BA66095f)
+
+**Calibnet:**
+- PDPVerifier Implementation: [0x2355Cb19BA1eFF51673562E1a5fc5eE292AF9D42](https://calibration.filfox.info/en/address/0x2355Cb19BA1eFF51673562E1a5fc5eE292AF9D42)
+- PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://calibration.filfox.info/en/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C)
+
+### Added
+- Prevent duplicate piece IDs in schedulePieceDeletions ([#228](https://github.com/FilOzone/pdp/pull/228))
+  - Added two-level bitmap tracking for unlimited piece ID support in scheduled removals
+  - Prevents duplicate piece IDs from being added to scheduled deletion queue
+  - Enhanced validation to only allow live pieces to be scheduled for removal
+
 ## [3.0.0] - 2025-10-21
 
 ### Deployed
@@ -237,7 +259,8 @@ For the set of changes since the last tag:
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/filozone/pdp/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/filozone/pdp/compare/v2.2.1...v3.0.0
 [2.2.1]: https://github.com/filozone/pdp/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/filozone/pdp/compare/v2.1.0...v2.2.0
