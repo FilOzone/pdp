@@ -14,12 +14,12 @@ The issue has been resolved with bitmap-based duplicate detection, and these con
 ### Deployed
 
 **Mainnet:**
-- PDPVerifier Implementation: [[](https://filfox.info/en/address/)
-- PDPVerifier Proxy: [](https://filfox.info/en/address/)
+- PDPVerifier Implementation: [0xe2Dc211BffcA499761570E04e8143Be2BA66095f](https://filfox.info/en/address/0xe2Dc211BffcA499761570E04e8143Be2BA66095f)
+- PDPVerifier Proxy: [0xe2Dc211BffcA499761570E04e8143Be2BA66095f](https://filfox.info/en/address/0xe2Dc211BffcA499761570E04e8143Be2BA66095f)
 
 **Calibnet:**
-- PDPVerifier Implementation: [](https://calibration.filfox.info/en/address/)
-- PDPVerifier Proxy: [](https://calibration.filfox.info/en/address/)
+- PDPVerifier Implementation: [0x2355Cb19BA1eFF51673562E1a5fc5eE292AF9D42](https://calibration.filfox.info/en/address/0x2355Cb19BA1eFF51673562E1a5fc5eE292AF9D42)
+- PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://calibration.filfox.info/en/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C)
 
 ### Added
 - Prevent duplicate piece IDs in schedulePieceDeletions ([#228](https://github.com/FilOzone/pdp/pull/228))
