@@ -19,37 +19,15 @@ The PDP service contract and the PDP verifier contracts are deployed on Filecoin
 
 > Disclaimer: ⚠️ These contracts are still in beta testing and might be upgraded for bug fixes and/or improvements. Please use with caution for production environments. ⚠️
 
-#### v2.2.0
+#### v3.1.0 - https://github.com/FilOzone/pdp/releases/tag/v3.1.0
 
 **Mainnet:**
-- PDPVerifier Implementation: [[0xfEFD001a9aFfb38Bba7f81e3FB37a1ab8F392A5A](https://filfox.info/en/address/0xfEFD001a9aFfb38Bba7f81e3FB37a1ab8F392A5A)
-- PDPVerifier Proxy: [0x9F1bc521A7C3cFeC76c32611Aab50a6dFfb93290](https://filfox.info/en/address/0x9F1bc521A7C3cFeC76c32611Aab50a6dFfb93290)
+- PDPVerifier Implementation: [0xe2Dc211BffcA499761570E04e8143Be2BA66095f](https:/filfox.info/en/address/0xe2Dc211BffcA499761570E04e8143Be2BA66095f)
+- PDPVerifier Proxy: [0xBADd0B92C1c71d02E7d520f64c0876538fa2557F](https://filfox.info/en/address/0xBADd0B92C1c71d02E7d520f64c0876538fa2557F)
 
 **Calibnet:**
-- PDPVerifier Implementation: [0xCa92b746a7af215e0AaC7D0F956d74B522b295b6](https://calibration.filfox.info/en/address/0xCa92b746a7af215e0AaC7D0F956d74B522b295b6)
-- PDPVerifier Proxy: [0x9ecb84bB617a6Fd9911553bE12502a1B091CdfD8](https://calibration.filfox.info/en/address/0x9ecb84bB617a6Fd9911553bE12502a1B091CdfD8)
-
-#### v2.1.0
-
-**Mainnet:**
-- PDPVerifier Implementation: [0xf2a47b4136Ab2dfB6FA67Fb85c7a031f56F6f024](https://filfox.info/en/address/0xf2a47b4136Ab2dfB6FA67Fb85c7a031f56F6f024)
-- PDPVerifier Proxy: [0x31D87004Fc0C38D897725978e51BC06163603E5A](https://filfox.info/en/address/0x31D87004Fc0C38D897725978e51BC06163603E5A)
-
-**Calibnet:**
-- PDPVerifier Implementation: [0x648E8D9103Ec91542DcD0045A65Ef9679F886e82](https://calibration.filfox.info/en/address/0x648E8D9103Ec91542DcD0045A65Ef9679F886e82)
-- PDPVerifier Proxy: [0x445238Eca6c6aB8Dff1Aa6087d9c05734D22f137](https://calibration.filfox.info/en/address/0x445238Eca6c6aB8Dff1Aa6087d9c05734D22f137)
-
-#### v1.1.0
-
-⚠️ Deprecation Notice: The following contracts will be deprecated (read-only) by End of August. Please upgrade/migrate to the latest contracts as soon as they are available.
-
-**Mainnet**
-- [PDP Verifier]([url](https://github.com/FilOzone/pdp/blob/main/src/PDPVerifier.sol)): [0x9C65E8E57C98cCc040A3d825556832EA1e9f4Df6]([url](https://filfox.info/en/address/0x9C65E8E57C98cCc040A3d825556832EA1e9f4Df6))
-- [PDP Service]([url](https://github.com/FilOzone/pdp/blob/main/src/SimplePDPService.sol)): [0x805370387fA5Bd8053FD8f7B2da4055B9a4f8019]([url](https://filfox.info/en/address/0x805370387fA5Bd8053FD8f7B2da4055B9a4f8019))
-
-**Calibration Testnet**
-- [PDP Verifier]([url](https://github.com/FilOzone/pdp/blob/main/src/PDPVerifier.sol)): [0x5A23b7df87f59A291C26A2A1d684AD03Ce9B68DC]([url](https://calibration.filfox.info/en/address/0x5A23b7df87f59A291C26A2A1d684AD03Ce9B68DC))
-- [PDP Service]([url](https://github.com/FilOzone/pdp/blob/main/src/SimplePDPService.sol)): [0x6170dE2b09b404776197485F3dc6c968Ef948505]([url](https://calibration.filfox.info/en/address/0x6170dE2b09b404776197485F3dc6c968Ef948505)) Note this has proving period every 30 minutes instead of every day
+- PDPVerifier Implementation: [0x2355Cb19BA1eFF51673562E1a5fc5eE292AF9D42](https://calibration.filfox.info/en/address/0x2355Cb19BA1eFF51673562E1a5fc5eE292AF9D42)
+- PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://calibration.filfox.info/en/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C)
 
 ## Build
 Depends on [Foundry](https://github.com/foundry-rs/foundry) for development.
