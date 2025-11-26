@@ -44,7 +44,7 @@ if [ "$PROXY_OWNER" != "$ADDR" ]; then
 fi
 
 # Get the upgrade plan (if any)
-UPGRADE_PLAN=($(cast call --rpc-url "$RPC_URL" -f 0x0000000000000000000000000000000000000000 "$PDP_VERIFIER_PROXY_ADDRESS" "getNextUpgrade()(address,uint96)" 2>/dev/null))
+UPGRADE_PLAN=($(cast call --rpc-url "$RPC_URL" -f 0x0000000000000000000000000000000000000000 "$PDP_VERIFIER_PROXY_ADDRESS" "nextUpgrade()(address,uint96)" 2>/dev/null))
 
 PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS=${UPGRADE_PLAN[0]}
 AFTER_EPOCH=${UPGRADE_PLAN[1]}

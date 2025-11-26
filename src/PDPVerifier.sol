@@ -155,7 +155,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint96 afterEpoch;
     }
 
-    PlannedUpgrade private nextUpgrade;
+    PlannedUpgrade public nextUpgrade;
 
     // Methods
 
@@ -188,22 +188,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit UpgradeAnnounced(plannedUpgrade);
     }
 
-    function getNextUpgrade() external view returns (address nextImplementation, uint96 afterEpoch) {
-        return (nextUpgrade.nextImplementation, nextUpgrade.afterEpoch);
-    }
-
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
         // zero address already checked by ERC1967Utils._setImplementation
-
-        // If no planned upgrade is set (nextUpgrade.nextImplementation is zero), allow direct upgrade
-        // This supports the legacy one-step upgrade mechanism for contracts deployed before announcePlannedUpgrade
-        if (nextUpgrade.nextImplementation == address(0)) {
-            return;
-        }
-
-        // Two-step mechanism: require planned upgrade to match and epoch to be reached
-        require(newImplementation == nextUpgrade.nextImplementation, "Upgrade must match planned implementation");
-        require(block.number >= nextUpgrade.afterEpoch, "Upgrade epoch not reached");
+        require(newImplementation == nextUpgrade.nextImplementation);
+        require(block.number >= nextUpgrade.afterEpoch);
         delete nextUpgrade;
     }
 

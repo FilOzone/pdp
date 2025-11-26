@@ -1923,7 +1923,7 @@ contract PDPVerifierMigrateTest is Test {
 
     function testAnnouncePlannedUpgrade() public {
         // Initially, no upgrade is planned
-        (address nextImplementation, uint96 afterEpoch) = pdpVerifier.getNextUpgrade();
+        (address nextImplementation, uint96 afterEpoch) = pdpVerifier.nextUpgrade();
         assertEq(nextImplementation, address(0));
         assertEq(afterEpoch, uint96(0));
 
@@ -1940,7 +1940,7 @@ contract PDPVerifierMigrateTest is Test {
         pdpVerifier.announcePlannedUpgrade(plan);
 
         // Verify upgrade plan is stored
-        (nextImplementation, afterEpoch) = pdpVerifier.getNextUpgrade();
+        (nextImplementation, afterEpoch) = pdpVerifier.nextUpgrade();
         assertEq(nextImplementation, plan.nextImplementation);
         assertEq(afterEpoch, plan.afterEpoch);
 
@@ -1961,7 +1961,7 @@ contract PDPVerifierMigrateTest is Test {
         pdpVerifier.upgradeToAndCall(plan.nextImplementation, migrateData);
 
         // After upgrade, nextUpgrade should be cleared
-        (nextImplementation, afterEpoch) = pdpVerifier.getNextUpgrade();
+        (nextImplementation, afterEpoch) = pdpVerifier.nextUpgrade();
         assertEq(nextImplementation, address(0));
         assertEq(afterEpoch, uint96(0));
     }

@@ -69,6 +69,7 @@ TX_HASH=$(cast send --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PAS
 
 if [ -z "$TX_HASH" ]; then
   echo "Error: Failed to send announcePlannedUpgrade transaction"
+  exit 1
 fi
 
 echo "announcePlannedUpgrade transaction sent: $TX_HASH"
