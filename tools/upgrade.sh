@@ -44,37 +44,50 @@ if [ "$PROXY_OWNER" != "$ADDR" ]; then
 fi
 
 # Get the upgrade plan (if any)
-UPGRADE_PLAN=($(cast call --rpc-url "$RPC_URL" -f 0x0000000000000000000000000000000000000000 "$PDP_VERIFIER_PROXY_ADDRESS" "nextUpgrade()(address,uint96)" 2>/dev/null))
+# Try to call nextUpgrade() - this will fail if the method doesn't exist (old contracts)
+UPGRADE_PLAN_OUTPUT=$(cast call --rpc-url "$RPC_URL" -f 0x0000000000000000000000000000000000000000 "$PDP_VERIFIER_PROXY_ADDRESS" "nextUpgrade()(address,uint96)" 2>&1)
+CAST_CALL_EXIT_CODE=$?
 
-PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS=${UPGRADE_PLAN[0]}
-AFTER_EPOCH=${UPGRADE_PLAN[1]}
-
-# Check if there's a planned upgrade (new two-step mechanism)
-# If PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS is zero, fall back to one-step mechanism
 ZERO_ADDRESS="0x0000000000000000000000000000000000000000"
 
-if [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$ZERO_ADDRESS" ]; then
-  # New two-step mechanism: validate planned upgrade
-  echo "Detected planned upgrade (two-step mechanism)"
-  
-  if [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
-    echo "NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS) != planned ($PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
-    exit 1
-  else
-    echo "Upgrade plan matches ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
-  fi
+# Check if cast call succeeded (method exists)
+if [ $CAST_CALL_EXIT_CODE -eq 0 ] && [ -n "$UPGRADE_PLAN_OUTPUT" ]; then
+  # Method exists - parse the result
+  UPGRADE_PLAN=($UPGRADE_PLAN_OUTPUT)
+  PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS=${UPGRADE_PLAN[0]}
+  AFTER_EPOCH=${UPGRADE_PLAN[1]}
 
-  CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL" 2>/dev/null)
+  # Check if there's a planned upgrade (non-zero address)
+  # Zero address means either no upgrade was announced or the upgrade was already completed
+  if [ -n "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" ] && [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$ZERO_ADDRESS" ]; then
+    # New two-step mechanism: validate planned upgrade
+    echo "Detected planned upgrade (two-step mechanism)"
+    
+    if [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
+      echo "NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS) != planned ($PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
+      exit 1
+    else
+      echo "Upgrade plan matches ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
+    fi
 
-  if [ "$CURRENT_EPOCH" -lt "$AFTER_EPOCH" ]; then
-    echo "Not time yet ($CURRENT_EPOCH < $AFTER_EPOCH)"
-    exit 1
+    CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL" 2>/dev/null)
+
+    if [ "$CURRENT_EPOCH" -lt "$AFTER_EPOCH" ]; then
+      echo "Not time yet ($CURRENT_EPOCH < $AFTER_EPOCH)"
+      exit 1
+    else
+      echo "Upgrade ready ($CURRENT_EPOCH >= $AFTER_EPOCH)"
+    fi
   else
-    echo "Upgrade ready ($CURRENT_EPOCH >= $AFTER_EPOCH)"
+    # Method exists but returns zero - no planned upgrade or already completed
+    # On new contracts, _authorizeUpgrade requires a planned upgrade, so one-step will fail
+    echo "No planned upgrade detected (nextUpgrade returns zero)"
+    echo "Error: This contract requires a planned upgrade. Please call announce-planned-upgrade.sh first."
+    exit 1
   fi
 else
-  # Old one-step mechanism: direct upgrade without announcement
-  echo "No planned upgrade detected, using one-step mechanism (direct upgrade)"
+  # Method doesn't exist (old contract without nextUpgrade) or call failed
+  echo "nextUpgrade() method not found or call failed, using one-step mechanism (direct upgrade)"
   echo "WARNING: This is the legacy upgrade path. For new deployments, use announce-planned-upgrade.sh first."
 fi
 
