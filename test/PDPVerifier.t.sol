@@ -1911,19 +1911,114 @@ contract PDPVerifierMigrateTest is Test {
     PDPVerifier implementation;
     PDPVerifier newImplementation;
     MyERC1967Proxy proxy;
+    PDPVerifier pdpVerifier;
 
     function setUp() public {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
         implementation = new PDPVerifier();
         newImplementation = new PDPVerifier();
         proxy = new MyERC1967Proxy(address(implementation), initializeData);
+        pdpVerifier = PDPVerifier(address(proxy));
+    }
+
+    function testAnnouncePlannedUpgrade() public {
+        // Initially, no upgrade is planned
+        (address nextImplementation, uint96 afterEpoch) = pdpVerifier.nextUpgrade();
+        assertEq(nextImplementation, address(0));
+        assertEq(afterEpoch, uint96(0));
+
+        // Deploy new implementation
+        PDPVerifier newImpl = new PDPVerifier();
+
+        // Announce upgrade
+        PDPVerifier.PlannedUpgrade memory plan;
+        plan.nextImplementation = address(newImpl);
+        plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
+
+        vm.expectEmit(false, false, false, true);
+        emit PDPVerifier.UpgradeAnnounced(plan);
+        pdpVerifier.announcePlannedUpgrade(plan);
+
+        // Verify upgrade plan is stored
+        (nextImplementation, afterEpoch) = pdpVerifier.nextUpgrade();
+        assertEq(nextImplementation, plan.nextImplementation);
+        assertEq(afterEpoch, plan.afterEpoch);
+
+        // Cannot upgrade before afterEpoch
+        bytes memory migrateData = abi.encodeWithSelector(PDPVerifier.migrate.selector);
+        vm.expectRevert();
+        pdpVerifier.upgradeToAndCall(plan.nextImplementation, migrateData);
+
+        // Still cannot upgrade at afterEpoch - 1
+        vm.roll(plan.afterEpoch - 1);
+        vm.expectRevert();
+        pdpVerifier.upgradeToAndCall(plan.nextImplementation, migrateData);
+
+        // Can upgrade at afterEpoch
+        vm.roll(plan.afterEpoch);
+        vm.expectEmit(false, false, false, true);
+        emit PDPVerifier.ContractUpgraded(newImpl.VERSION(), plan.nextImplementation);
+        pdpVerifier.upgradeToAndCall(plan.nextImplementation, migrateData);
+
+        // After upgrade, nextUpgrade should be cleared
+        (nextImplementation, afterEpoch) = pdpVerifier.nextUpgrade();
+        assertEq(nextImplementation, address(0));
+        assertEq(afterEpoch, uint96(0));
+    }
+
+    function testAnnouncePlannedUpgradeOnlyOwner() public {
+        PDPVerifier newImpl = new PDPVerifier();
+        PDPVerifier.PlannedUpgrade memory plan;
+        plan.nextImplementation = address(newImpl);
+        plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
+
+        // Non-owner cannot announce upgrade
+        vm.prank(address(0x1234));
+        vm.expectRevert();
+        pdpVerifier.announcePlannedUpgrade(plan);
+    }
+
+    function testAnnouncePlannedUpgradeInvalidImplementation() public {
+        PDPVerifier.PlannedUpgrade memory plan;
+        plan.nextImplementation = address(0x123); // Invalid address with no code
+        plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
+
+        vm.expectRevert();
+        pdpVerifier.announcePlannedUpgrade(plan);
+    }
+
+    function testAnnouncePlannedUpgradeInvalidEpoch() public {
+        PDPVerifier newImpl = new PDPVerifier();
+        PDPVerifier.PlannedUpgrade memory plan;
+        plan.nextImplementation = address(newImpl);
+        plan.afterEpoch = uint96(vm.getBlockNumber()); // Must be in the future
+
+        vm.expectRevert();
+        pdpVerifier.announcePlannedUpgrade(plan);
     }
 
     function testMigrate() public {
+        // Announce upgrade first (required by new upgrade pattern)
+        PDPVerifier.PlannedUpgrade memory plan;
+        plan.nextImplementation = address(newImplementation);
+        plan.afterEpoch = uint96(vm.getBlockNumber()) + 1;
+        pdpVerifier.announcePlannedUpgrade(plan);
+
+        // Roll to afterEpoch
+        vm.roll(plan.afterEpoch);
+
         vm.expectEmit(true, true, true, true);
         emit IPDPEvents.ContractUpgraded(newImplementation.VERSION(), address(newImplementation));
         bytes memory migrationCall = abi.encodeWithSelector(PDPVerifier.migrate.selector);
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
+
+        // Announce a second upgrade to test reinitializer behavior
+        PDPVerifier.PlannedUpgrade memory plan2;
+        plan2.nextImplementation = address(newImplementation);
+        plan2.afterEpoch = uint96(vm.getBlockNumber()) + 1;
+        pdpVerifier.announcePlannedUpgrade(plan2);
+        vm.roll(plan2.afterEpoch);
+
         // Second call should fail because reinitializer(2) can only be called once
         vm.expectRevert("InvalidInitialization()");
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
