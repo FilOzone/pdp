@@ -45,6 +45,15 @@ contract ERC1967ProxyTest is Test {
         // Deploy new implementation
         PDPVerifier newImplementation = new PDPVerifier();
 
+        // Announce upgrade first (required by new upgrade pattern)
+        PDPVerifier.PlannedUpgrade memory plan;
+        plan.nextImplementation = address(newImplementation);
+        plan.afterEpoch = uint96(vm.getBlockNumber()) + 1;
+        proxy.announcePlannedUpgrade(plan);
+
+        // Roll to afterEpoch
+        vm.roll(plan.afterEpoch);
+
         // Upgrade proxy to new implementation
         proxy.upgradeToAndCall(address(newImplementation), "");
 
@@ -57,6 +66,15 @@ contract ERC1967ProxyTest is Test {
     function testUpgradeFromNonOwnerNoGood() public {
         PDPVerifier newImplementation = new PDPVerifier();
 
+        // Announce upgrade first (as owner)
+        PDPVerifier.PlannedUpgrade memory plan;
+        plan.nextImplementation = address(newImplementation);
+        plan.afterEpoch = uint96(vm.getBlockNumber()) + 1;
+        proxy.announcePlannedUpgrade(plan);
+
+        vm.roll(plan.afterEpoch);
+
+        // Try to upgrade as non-owner
         vm.stopPrank();
         vm.startPrank(address(0xdead));
 

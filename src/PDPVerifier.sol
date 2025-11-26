@@ -147,6 +147,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     FeeStatus private feeStatus;
 
+    // Used for announcing upgrades, packed into one slot
+    struct PlannedUpgrade {
+        // Address of the new implementation contract
+        address nextImplementation;
+        // Upgrade will not occur until at least this epoch
+        uint96 afterEpoch;
+    }
+
+    PlannedUpgrade private nextUpgrade;
+
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -165,12 +175,29 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     string public constant VERSION = "3.1.0";
 
     event ContractUpgraded(string version, address implementation);
+    event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
 
-    function migrate() external onlyOwner reinitializer(2) {
+    function migrate() external onlyProxy onlyOwner reinitializer(2) {
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function announcePlannedUpgrade(PlannedUpgrade calldata plannedUpgrade) external onlyOwner {
+        require(plannedUpgrade.nextImplementation.code.length > 3000);
+        require(plannedUpgrade.afterEpoch > block.number);
+        nextUpgrade = plannedUpgrade;
+        emit UpgradeAnnounced(plannedUpgrade);
+    }
+
+    function getNextUpgrade() external view returns (address nextImplementation, uint96 afterEpoch) {
+        return (nextUpgrade.nextImplementation, nextUpgrade.afterEpoch);
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        // zero address already checked by ERC1967Utils._setImplementation
+        require(newImplementation == nextUpgrade.nextImplementation);
+        require(block.number >= nextUpgrade.afterEpoch);
+        delete nextUpgrade;
+    }
 
     function burnFee(uint256 amount) internal {
         require(msg.value >= amount, "Incorrect fee amount");
