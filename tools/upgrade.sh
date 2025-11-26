@@ -43,26 +43,39 @@ if [ "$PROXY_OWNER" != "$ADDR" ]; then
   exit 1
 fi
 
-# Get the upgrade plan
+# Get the upgrade plan (if any)
 UPGRADE_PLAN=($(cast call --rpc-url "$RPC_URL" -f 0x0000000000000000000000000000000000000000 "$PDP_VERIFIER_PROXY_ADDRESS" "getNextUpgrade()(address,uint96)" 2>/dev/null))
 
 PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS=${UPGRADE_PLAN[0]}
 AFTER_EPOCH=${UPGRADE_PLAN[1]}
 
-if [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
-  echo "NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS) != planned ($PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
-  exit 1
-else
-  echo "Upgrade plan matches ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
-fi
+# Check if there's a planned upgrade (new two-step mechanism)
+# If PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS is zero, fall back to one-step mechanism
+ZERO_ADDRESS="0x0000000000000000000000000000000000000000"
 
-CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL" 2>/dev/null)
+if [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$ZERO_ADDRESS" ]; then
+  # New two-step mechanism: validate planned upgrade
+  echo "Detected planned upgrade (two-step mechanism)"
+  
+  if [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
+    echo "NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS) != planned ($PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
+    exit 1
+  else
+    echo "Upgrade plan matches ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
+  fi
 
-if [ "$CURRENT_EPOCH" -lt "$AFTER_EPOCH" ]; then
-  echo "Not time yet ($CURRENT_EPOCH < $AFTER_EPOCH)"
-  exit 1
+  CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL" 2>/dev/null)
+
+  if [ "$CURRENT_EPOCH" -lt "$AFTER_EPOCH" ]; then
+    echo "Not time yet ($CURRENT_EPOCH < $AFTER_EPOCH)"
+    exit 1
+  else
+    echo "Upgrade ready ($CURRENT_EPOCH >= $AFTER_EPOCH)"
+  fi
 else
-  echo "Upgrade ready ($CURRENT_EPOCH >= $AFTER_EPOCH)"
+  # Old one-step mechanism: direct upgrade without announcement
+  echo "No planned upgrade detected, using one-step mechanism (direct upgrade)"
+  echo "WARNING: This is the legacy upgrade path. For new deployments, use announce-planned-upgrade.sh first."
 fi
 
 MIGRATE_DATA=$(cast calldata "migrate()")
