@@ -64,6 +64,5 @@ if [ "$NEW_OWNER_ADDRESS_LOWERCASE" != "$NEW_OWNER_LOWERCASE" ]; then
     exit 1
 fi
 
-
 echo "✓ Ownership transferred successfully to ${NEW_OWNER}"
 echo
