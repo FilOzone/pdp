@@ -54,12 +54,16 @@ NEW_OWNER_ADDRESS=$(
     "owner()(address)"
 )
 
-if [ "${NEW_OWNER_ADDRESS,,}" != "${NEW_OWNER,,}" ]; then
+NEW_OWNER_ADDRESS_LOWERCASE=$(echo "$NEW_OWNER_ADDRESS" | tr '[:upper:]' '[:lower:]')
+NEW_OWNER_LOWERCASE=$(echo "$NEW_OWNER" | tr '[:upper:]' '[:lower:]')
+
+if [ "$NEW_OWNER_ADDRESS_LOWERCASE" != "$NEW_OWNER_LOWERCASE" ]; then
     echo "Failed to transfer ownership"
     echo "Expected new owner to be: ${NEW_OWNER}"
     echo "Got: ${NEW_OWNER_ADDRESS}"
     exit 1
 fi
+
 
 echo "✓ Ownership transferred successfully to ${NEW_OWNER}"
 echo
