@@ -24,7 +24,6 @@ jobs:
       - name: Install Dependencies
         run: |
           forge install
-          npm install
 
       - name: Run build
         run: |

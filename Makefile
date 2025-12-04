@@ -18,7 +18,6 @@ all: install build test
 .PHONY: install
 install:
 	forge install
-	npm install
 
 # Build target
 .PHONY: build
@@ -42,3 +41,18 @@ deploy-devnet:
 .PHONY: deploy-mainnet
 deploy-mainnet:
 	./tools/deploy-mainnet.sh
+
+# Extract just the ABI arrays into abi/ContractName.abi.json
+.PHONY: extract-abis
+extract-abis:
+	mkdir -p abi
+	@find out -type f -name '*.json' | while read file; do \
+	  name=$$(basename "$${file%.*}"); \
+	  jq '.abi' "$${file}" > "abi/$${name}.abi.json"; \
+	done
+
+# Contract size check
+.PHONY: contract-size-check
+contract-size-check:
+	@echo "Checking contract sizes..."
+	bash tools/check-contract-size.sh
