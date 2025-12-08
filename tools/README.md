@@ -4,6 +4,12 @@ A place for all tools related to running and developing the PDP contracts. When 
 
 ## Deployment Scripts
 
+| Network     | CHALLENGE_FINALITY |
+|-------------|-------------------|
+| Mainnet     | 150 epochs        |
+| Calibration | 10 epochs         |
+| Devnet      | 10 epochs         |
+
 ### deploy-devnet.sh
 Deploys PDPVerifier to a local filecoin devnet. Assumes lotus binary is in path and local devnet is running with eth API enabled. The keystore will be funded automatically from lotus default address.
 

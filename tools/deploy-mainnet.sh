@@ -17,8 +17,8 @@ if [ -z "$KEYSTORE" ]; then
   exit 1
 fi
 
-# CHALLENGE_FINALITY should always be 150 in production
-CHALLENGE_FINALITY=150 
+# Mainnet uses 150 epochs (vs 10 on Calibration testnet)
+CHALLENGE_FINALITY=150
 
 ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
 echo "Deploying PDP verifier from address $ADDR"
