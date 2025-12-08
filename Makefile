@@ -4,7 +4,6 @@
 RPC_URL ?=
 KEYSTORE ?=
 PASSWORD ?=
-CHALLENGE_FINALITY ?=
 
 # Default target
 .PHONY: default

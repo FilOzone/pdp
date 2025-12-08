@@ -17,10 +17,8 @@ if [ -z "$KEYSTORE" ]; then
   exit 1
 fi
 
-if [ -z "$CHALLENGE_FINALITY" ]; then
-  echo "Error: CHALLENGE_FINALITY is not set"
-  exit 1
-fi
+# Calibration testnet uses 10 epochs (vs 150 on mainnet)
+CHALLENGE_FINALITY=10
 
 ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
 echo "Deploying PDP verifier from address $ADDR"

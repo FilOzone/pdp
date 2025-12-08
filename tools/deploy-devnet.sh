@@ -37,8 +37,11 @@ echo "PDP verifier implementation deployed at: $VERIFIER_IMPLEMENTATION_ADDRESS"
 
 NONCE=$(expr $NONCE + "1")
 
+# Devnet uses 10 epochs (same as Calibration testnet)
+CHALLENGE_FINALITY=10
+
 echo "Deploying PDP verifier proxy"
-INIT_DATA=$(cast calldata "initialize(uint256)" 150)
+INIT_DATA=$(cast calldata "initialize(uint256)" $CHALLENGE_FINALITY)
 PDP_VERIFIER_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --nonce $NONCE --broadcast src/ERC1967Proxy.sol:MyERC1967Proxy --constructor-args $VERIFIER_IMPLEMENTATION_ADDRESS $INIT_DATA | grep "Deployed to" | awk '{print $3}')
 echo "PDP verifier deployed at: $PDP_VERIFIER_ADDRESS"
 
