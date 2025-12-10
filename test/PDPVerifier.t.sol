@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
-import {Test} from "forge-std/Test.sol";
+import {Test, console} from "forge-std/Test.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
@@ -1426,6 +1426,127 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getDataSetLeafCount(testSetId), 820, "Incorrect final data set leaf count");
     }
 
+    function assertSumTreeInvariant(uint256 setId) internal view {
+        uint256 nextPieceId = pdpVerifier.getNextPieceId(setId);
+        for (uint256 index = 0; index < nextPieceId; index++) {
+            uint256 height = pdpVerifier.getTestHeightFromIndex(index);
+            uint256 range = 1 << height;
+
+            if (index + 1 < range) {
+                continue; // skip to avoid underflow
+            }
+
+            uint256 expectedSum = 0;
+            for (uint256 j = index + 1 - range; j <= index; j++) {
+                expectedSum += pdpVerifier.getPieceLeafCount(setId, j);
+            }
+
+            uint256 actualSum = pdpVerifier.getSumTreeCounts(setId, index);
+            assertEq(
+                actualSum,
+                expectedSum,
+                string(abi.encodePacked("SumTree invariant failed at index ", vm.toString(index)))
+            );
+        }
+    }
+
+    function testSumTreeInvariantAfterAddsAndRemovals() public {
+        uint256[] memory counts = new uint256[](6);
+        counts[0] = 10;
+        counts[1] = 20;
+        counts[2] = 5;
+        counts[3] = 15;
+        counts[4] = 25;
+        counts[5] = 30;
+
+        Cids.Cid[] memory pieceDataArray = new Cids.Cid[](counts.length);
+        for (uint256 i = 0; i < counts.length; i++) {
+            pieceDataArray[i] = makeSamplePiece(counts[i]);
+        }
+        pdpVerifier.addPieces(testSetId, address(0), pieceDataArray, empty);
+
+        uint256[] memory toRemove = new uint256[](2);
+
+        toRemove[0] = 1;
+        toRemove[1] = 4;
+        pdpVerifier.schedulePieceDeletions(testSetId, toRemove, empty);
+
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+
+        assertSumTreeInvariant(testSetId);
+    }
+
+    function testAdvancedSumTreeInvariant() public {
+        uint256 numPieces = 16;
+        uint256[] memory counts = new uint256[](numPieces);
+        Cids.Cid[] memory pieceDataArray = new Cids.Cid[](numPieces);
+
+        // Round 1 Add pieces with dynamic sizes
+        for (uint256 i = 0; i < numPieces; i++) {
+            uint256 size = ((i + 1) * 10) + (i % 3); // mild randomness
+            counts[i] = size;
+            pieceDataArray[i] = makeSamplePiece(size);
+        }
+
+        pdpVerifier.addPieces(testSetId, address(0), pieceDataArray, empty);
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+
+        // Assert invariant after first round
+        assertSumTreeInvariant(testSetId);
+
+        // Round 2 Remove a few pieces and add new ones
+        uint256[] memory toRemove = new uint256[](4); // Initialize toRemove array
+        toRemove[0] = 2;
+        toRemove[1] = 5;
+        toRemove[2] = 7;
+        toRemove[3] = 12;
+        pdpVerifier.schedulePieceDeletions(testSetId, toRemove, empty);
+
+        // Add 4 more pieces to simulate continued updates
+        Cids.Cid[] memory round2Pieces = new Cids.Cid[](4); // Initialize round2Pieces array
+        for (uint256 i = 0; i < 4; i++) {
+            uint256 size = 50 + i * 11;
+            round2Pieces[i] = makeSamplePiece(size);
+        }
+        pdpVerifier.addPieces(testSetId, address(0), round2Pieces, empty);
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + 2 * CHALLENGE_FINALITY_DELAY, empty);
+
+        // Final invariant check after multiple rounds
+        assertSumTreeInvariant(testSetId);
+
+        // Additional sanity checks
+        bytes memory emptyBytes = new bytes(0); // Initialize emptyBytes
+        for (uint256 i = 0; i < toRemove.length; i++) {
+            assertEq(
+                pdpVerifier.getPieceLeafCount(testSetId, toRemove[i]), 0, "Leaf count should be zero for removed pieces"
+            );
+            assertEq(
+                pdpVerifier.getPieceCid(testSetId, toRemove[i]).data,
+                emptyBytes,
+                "CID should be cleared for removed piece"
+            );
+        }
+
+        uint256 nextPieceId = pdpVerifier.getNextPieceId(testSetId);
+        assertGt(nextPieceId, numPieces, "New pieces not added properly");
+        assertGt(pdpVerifier.getDataSetLeafCount(testSetId), 0, "Leaf count should be positive after add/remove");
+    }
+
+    function testFuzzedSumTreeInvariant(uint256 seed) public {
+        vm.assume(seed > 100);
+        uint256 numPieces = 16;
+        Cids.Cid[] memory pieceDataArray = new Cids.Cid[](numPieces);
+
+        for (uint256 i = 0; i < numPieces; i++) {
+            uint256 dynamicSize = uint256(keccak256(abi.encode(seed, i))) % 100 + 1;
+            pieceDataArray[i] = makeSamplePiece(dynamicSize);
+        }
+
+        pdpVerifier.addPieces(testSetId, address(0), pieceDataArray, empty);
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+        assertSumTreeInvariant(testSetId);
+    }
+
     function testFindPieceId() public {
         setUpTestingArray();
 
@@ -2022,6 +2143,207 @@ contract PDPVerifierMigrateTest is Test {
         // Second call should fail because reinitializer(2) can only be called once
         vm.expectRevert("InvalidInitialization()");
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
+    }
+}
+
+/// @title SumTreeEnhancedTest
+/// @notice Advanced tests for SumTree data structure focusing on stress testing, performance, and edge cases
+/// @dev Tagged with [ADVANCED] to distinguish from basic tests
+contract SumTreeEnhancedTest is MockFVMTest, PieceHelper {
+    SumTreeInternalTestPDPVerifier pdpVerifier;
+    TestingRecordKeeperService listener;
+    uint256 testSetId;
+    uint256 constant CHALLENGE_FINALITY_DELAY = 100;
+    bytes empty = new bytes(0);
+
+    function setUp() public override {
+        super.setUp();
+        PDPVerifier pdpVerifierImpl = new SumTreeInternalTestPDPVerifier();
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
+        pdpVerifier = SumTreeInternalTestPDPVerifier(address(proxy));
+        listener = new TestingRecordKeeperService();
+        testSetId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+    }
+
+    /// @notice [ADVANCED] Tests SumTree invariants under heavy load with multiple rounds of adds and removes
+    function testSumTreeStressTest() public {
+        uint256 numRounds = 5;
+        uint256 piecesPerRound = 8;
+
+        for (uint256 round = 0; round < numRounds; round++) {
+            // Add pieces
+            Cids.Cid[] memory pieces = new Cids.Cid[](piecesPerRound);
+            for (uint256 i = 0; i < piecesPerRound; i++) {
+                uint256 size = ((round + 1) * 100) + (i * 10) + (i % 3);
+                pieces[i] = makeSamplePiece(size);
+            }
+            pdpVerifier.addPieces(testSetId, address(0), pieces, empty);
+
+            // Remove some pieces
+            uint256[] memory toRemove = new uint256[](piecesPerRound / 2);
+            for (uint256 i = 0; i < toRemove.length; i++) {
+                toRemove[i] = round * piecesPerRound + (i * 2);
+            }
+            pdpVerifier.schedulePieceDeletions(testSetId, toRemove, empty);
+
+            // Process changes
+            pdpVerifier.nextProvingPeriod(testSetId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+
+            // Verify invariants
+            assertSumTreeInvariant(testSetId);
+        }
+    }
+
+    /// @notice [ADVANCED] Tests SumTree behavior with edge case sizes and patterns
+    function testSumTreeEdgeCases() public {
+        testSumTreeWithValues([uint256(1), 2, 1]);
+        testSumTreeWithValues([uint256(1000), 2000, 1000]);
+        assertSumTreeInvariant(testSetId);
+    }
+
+    /// @notice [ADVANCED] Tests SumTree with alternating add/remove pattern
+    function testSumTreeAlternatingPattern() public {
+        uint256 setId = createFreshDataSet();
+        uint256 numOperations = 10;
+
+        for (uint256 i = 0; i < numOperations; i++) {
+            Cids.Cid[] memory piece = new Cids.Cid[](1);
+            piece[0] = makeSamplePiece((i + 1) * 10);
+            pdpVerifier.addPieces(setId, address(0), piece, empty);
+
+            if (i > 0 && i % 2 == 1) {
+                uint256[] memory toRemove = new uint256[](1);
+                toRemove[0] = i - 1;
+                pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+            }
+
+            pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+            assertSumTreeInvariant(setId);
+        }
+    }
+
+    /// @notice [ADVANCED] Tests SumTree with sequential add-then-remove pattern
+    function testSumTreeSequentialPattern() public {
+        uint256 setId = createFreshDataSet();
+        uint256 numPieces = 8;
+
+        Cids.Cid[] memory pieces = new Cids.Cid[](numPieces);
+        for (uint256 i = 0; i < numPieces; i++) {
+            pieces[i] = makeSamplePiece((i + 1) * 15);
+        }
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+        assertSumTreeInvariant(setId);
+
+        for (uint256 i = 0; i < numPieces / 2; i++) {
+            uint256[] memory toRemove = new uint256[](1);
+            toRemove[0] = i;
+            pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+            pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+            assertSumTreeInvariant(setId);
+        }
+    }
+
+    /// @notice [ADVANCED] Tests SumTree performance with large numbers of operations
+    function testSumTreePerformance() public {
+        uint256 numOperations = 100;
+        uint256 startGas = gasleft();
+
+        for (uint256 i = 0; i < numOperations; i++) {
+            // Add piece
+            Cids.Cid[] memory piece = new Cids.Cid[](1);
+            piece[0] = makeSamplePiece((i + 1) * 10);
+            pdpVerifier.addPieces(testSetId, address(0), piece, empty);
+
+            // Remove every other piece
+            if (i % 2 == 1) {
+                uint256[] memory toRemove = new uint256[](1);
+                toRemove[0] = i - 1;
+                pdpVerifier.schedulePieceDeletions(testSetId, toRemove, empty);
+            }
+
+            pdpVerifier.nextProvingPeriod(testSetId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+        }
+
+        uint256 gasUsed = startGas - gasleft();
+        console.log("Gas used for %d operations: %d", numOperations, gasUsed);
+    }
+
+    /// @notice [ADVANCED] Tests SumTree with randomized operations
+    function testSumTreeRandomized(uint256 seed) public {
+        vm.assume(seed > 0);
+        uint256 setId = createFreshDataSet();
+        uint256 numOperations = 20;
+        uint256 nextPieceToAdd = 0;
+        uint256 nextPieceToRemove = 0;
+        uint256 livePieces = 0;
+
+        for (uint256 i = 0; i < numOperations; i++) {
+            uint256 operation = uint256(keccak256(abi.encode(seed, i))) % 3;
+
+            if (operation == 0 || livePieces == 0) {
+                Cids.Cid[] memory piece = new Cids.Cid[](1);
+                uint256 size = uint256(keccak256(abi.encode(seed, i, "size"))) % 100 + 1;
+                piece[0] = makeSamplePiece(size);
+                pdpVerifier.addPieces(setId, address(0), piece, empty);
+                nextPieceToAdd++;
+                livePieces++;
+            } else if (operation == 1 && nextPieceToRemove < nextPieceToAdd && livePieces > 1) {
+                uint256[] memory toRemove = new uint256[](1);
+                toRemove[0] = nextPieceToRemove;
+                pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+                nextPieceToRemove++;
+                livePieces--;
+            }
+
+            if (i % 3 == 2 && pdpVerifier.getDataSetLeafCount(setId) > 0) {
+                pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+                assertSumTreeInvariant(setId);
+            }
+        }
+    }
+
+    function createFreshDataSet() internal returns (uint256) {
+        return pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+    }
+
+    function assertSumTreeInvariant(uint256 setId) internal view {
+        uint256 nextPieceId = pdpVerifier.getNextPieceId(setId);
+        for (uint256 index = 0; index < nextPieceId; index++) {
+            uint256 height = pdpVerifier.getTestHeightFromIndex(index);
+            uint256 range = 1 << height;
+
+            if (index + 1 < range) {
+                continue; // skip to avoid underflow
+            }
+
+            uint256 expectedSum = 0;
+            for (uint256 j = index + 1 - range; j <= index; j++) {
+                expectedSum += pdpVerifier.getPieceLeafCount(setId, j);
+            }
+
+            uint256 actualSum = pdpVerifier.getSumTreeCounts(setId, index);
+            assertEq(
+                actualSum,
+                expectedSum,
+                string(abi.encodePacked("SumTree invariant failed at index ", vm.toString(index)))
+            );
+        }
+    }
+
+    function testSumTreeWithValues(uint256[3] memory values) internal {
+        Cids.Cid[] memory pieces = new Cids.Cid[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            pieces[i] = makeSamplePiece(values[i]);
+        }
+        pdpVerifier.addPieces(testSetId, address(0), pieces, empty);
+        pdpVerifier.nextProvingPeriod(testSetId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+        assertSumTreeInvariant(testSetId);
     }
 }
 
