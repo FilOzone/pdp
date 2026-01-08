@@ -153,6 +153,52 @@ Detailed description of key workflows.
 - Merkle proofs must be sound
 - Randomness cannot be biased through grinding or chain forking
 
+### Per-Piece Security Guarantees
+
+A common concern is: "My specific piece wasn't challenged in the last X days—how do I know it's still safe?"
+
+The key insight is that **successful data set proofs provide strong statistical guarantees for all pieces in the data set**, regardless of which specific pieces were challenged. Random challenge selection means any missing data will be detected with high probability over time.
+
+**How detection works:**
+
+The system issues K random challenges per proving period across the entire data set. If a storage provider has lost any portion of the data, each challenge has a chance of hitting the missing data and causing proof failure.
+
+Let:
+- α = fraction of data missing (e.g., 0.05 = 5%)
+- K = number of challenges per proving period
+
+The probability that a dishonest prover evades detection in a single proving period is:
+
+```
+p = (1-α)^K
+```
+
+**Detection probability over time:**
+
+With one proof per day containing K challenges, the evasion probability after T days is:
+
+```
+p_T = (1-α)^(K×T)
+```
+
+**Example detection rates (K=5 challenges per day):**
+
+| Data Lost (α) | Daily Detection | 30-Day Detection |
+|---------------|-----------------|------------------|
+| 1%            | 4.9%            | 77.9%            |
+| 5%            | 22.6%           | 99.95%           |
+| 20%           | 67.2%           | ~100%            |
+
+**What this means for individual pieces:**
+
+If a storage provider has lost any significant fraction of a data set, they will be caught with high probability regardless of which specific pieces are missing. The random challenge selection ensures that:
+
+1. A provider cannot selectively discard "unchallengeable" pieces—all pieces have equal probability of being challenged
+2. Even if your specific piece hasn't been challenged recently, the successful proofs on other parts of the data set provide statistical confidence that the entire data set (including your piece) remains intact
+3. The longer a data set is proven without faults, the higher the confidence that all pieces are present
+
+This is fundamentally different from per-piece proving (where each piece would need individual challenges) and is more efficient while providing equivalent security guarantees for detecting any meaningful data loss.
+
 ### Completeness
 - Proving always works if providing Merkle proofs to the randomly sampled leaves
 
