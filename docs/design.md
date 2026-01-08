@@ -157,7 +157,7 @@ Detailed description of key workflows.
 
 A common concern is: "My specific piece wasn't challenged in the last X days—how do I know it's still safe?"
 
-The key insight is that **successful data set proofs provide strong statistical guarantees for all pieces in the data set**, regardless of which specific pieces were challenged. Random challenge selection means any missing data will be detected with high probability over time.
+The key insight is that **successful data set proofs provide strong probabilistic guarantees for all pieces in the data set**, regardless of which specific pieces were challenged. Random challenge selection means that there is no way to know in advance which piece is going to be challenged, thus it is very likely that a data loss will be eventually found over time.
 
 **How detection works:**
 
@@ -194,10 +194,10 @@ p_T = (1-α)^(K×T)
 If a storage provider has lost any significant fraction of a data set, they will be caught with high probability regardless of which specific pieces are missing. The random challenge selection ensures that:
 
 1. A provider cannot selectively discard "unchallengeable" pieces—all pieces have equal probability of being challenged
-2. Even if your specific piece hasn't been challenged recently, the successful proofs on other parts of the data set provide statistical confidence that the entire data set (including your piece) remains intact
+2. Even if your specific piece hasn't been challenged recently, the successful proofs on other parts of the data set provide a probabilistic guarantee that the entire data set (including your piece) remains intact
 3. The longer a data set is proven without faults, the higher the confidence that all pieces are present
 
-This is fundamentally different from per-piece proving (where each piece would need individual challenges) and is more efficient while providing equivalent security guarantees for detecting any meaningful data loss.
+This is fundamentally different from per-piece proving (where each piece would need individual challenges) and is more efficient while providing strong security guarantees for detecting any meaningful data loss.
 
 ### Completeness
 - Proving always works if providing Merkle proofs to the randomly sampled leaves
