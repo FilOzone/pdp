@@ -191,7 +191,7 @@ p_T = (1-α)^(K×T)
 
 **What this means for individual pieces:**
 
-If a storage provider has lost any significant fraction of a data set, they will be caught with high probability regardless of which specific pieces are missing. The random challenge selection ensures that:
+As shown in the table above, detection confidence depends on the fraction of data lost and the proving period. For a 1% data loss, detection reaches 77.9% confidence within 30 days and exceeds 99% within 90 days. Larger losses are caught faster—5% loss reaches 99.95% detection in just 30 days. The random challenge selection ensures that:
 
 1. A provider cannot selectively discard "unchallengeable" pieces—all pieces have equal probability of being challenged
 2. Even if your specific piece hasn't been challenged recently, the successful proofs on other parts of the data set provide a probabilistic guarantee that the entire data set (including your piece) remains intact
