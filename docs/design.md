@@ -199,6 +199,16 @@ As shown in the table above, detection confidence depends on the fraction of dat
 
 This is fundamentally different from per-piece proving (where each piece would need individual challenges) and is more efficient while providing strong security guarantees for detecting any meaningful data loss.
 
+**Using detection history for trust decisions:**
+
+PDP provides detection confidence, not failure prevention. It answers "if data is lost, how likely are we to catch it?" rather than "will data be lost?" However, a provider's historical proof record serves as a practical indicator of operational reliability. A provider that has successfully proven a data set for 30+ days demonstrates:
+
+1. Functional storage infrastructure
+2. Operational consistency
+3. No detected data loss during that period
+
+A clean proof record is strong evidence of operational reliability, though not a guarantee of future performance.
+
 ### Completeness
 - Proving always works if providing Merkle proofs to the randomly sampled leaves
 
