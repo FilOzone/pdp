@@ -332,7 +332,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /**
      * @notice Returns active pieces (non-zero leaf count) for a data set with pagination
      * @dev WARNING: This function has O(offset) gas complexity because it always iterates from
-     * piece ID 0. for large data sets with high offsets, consider using getActivePiecesByCursor()
+     * piece ID 0. For large data sets with high offsets, consider using getActivePiecesByCursor()
      * @param setId The data set ID
      * @param offset Starting index for pagination (0-based)
      * @param limit Maximum number of pieces to return
@@ -379,12 +379,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             return (new Cids.Cid[](0), new uint256[](0), false);
         } else if (resultIndex < limit) {
             // Found fewer items than limit - need to resize arrays
-            pieces = new Cids.Cid[](resultIndex);
-            pieceIds = new uint256[](resultIndex);
-
-            for (uint256 i = 0; i < resultIndex; i++) {
-                pieces[i] = tempPieces[i];
-                pieceIds[i] = tempPieceIds[i];
+            pieces = tempPieces;
+            pieceIds = tempPieceIds;
+            assembly ("memory-safe") {
+                mstore(pieces, resultIndex)
+                mstore(pieceIds, resultIndex)
             }
         } else {
             // Found exactly limit items - use temp arrays directly
@@ -425,7 +424,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256[] memory tempPieceIds = new uint256[](limit);
         uint256 resultIndex = 0;
 
-        // Start fron startPieceId and collect up to limit
+        // Start from startPieceId and collect up to limit
         for (uint256 i = startPieceId; i < maxPieceId && resultIndex < limit; i++) {
             if (pieceLeafCounts[setId][i] > 0) {
                 tempPieces[resultIndex] = pieceCids[setId][i];
@@ -449,11 +448,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (resultIndex == 0) {
             return (new Cids.Cid[](0), new uint256[](0), false);
         } else if (resultIndex < limit) {
-            pieces = new Cids.Cid[](resultIndex);
-            pieceIds = new uint256[](resultIndex);
-            for (uint256 i = 0; i < resultIndex; i++) {
-                pieces[i] = tempPieces[i];
-                pieceIds[i] = tempPieceIds[i];
+            pieces = tempPieces;
+            pieceIds = tempPieceIds;
+            assembly ("memory-safe") {
+                mstore(pieces, resultIndex)
+                mstore(pieceIds, resultIndex)
             }
         } else {
             pieces = tempPieces;
