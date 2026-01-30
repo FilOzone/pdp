@@ -23,7 +23,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         uint256 challengeFinality = 2;
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinality);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
@@ -240,7 +240,7 @@ contract PDPVerifierStorageProviderTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -340,7 +340,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -898,7 +898,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         uint256 challengeFinality = 2;
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, challengeFinality);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
@@ -1182,7 +1182,7 @@ contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
 }
 
 contract SumTreeInternalTestPDPVerifier is PDPVerifier {
-    constructor() {}
+    constructor() PDPVerifier(1) {}
 
     function getTestHeightFromIndex(uint256 index) public pure returns (uint256) {
         return heightFromIndex(index);
@@ -1628,7 +1628,7 @@ contract PDPListenerIntegrationTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -1718,7 +1718,7 @@ contract PDPVerifierExtraDataTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -1774,7 +1774,7 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -1915,8 +1915,8 @@ contract PDPVerifierMigrateTest is Test {
 
     function setUp() public {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
-        implementation = new PDPVerifier();
-        newImplementation = new PDPVerifier();
+        implementation = new PDPVerifier(1);
+        newImplementation = new PDPVerifier(2);
         proxy = new MyERC1967Proxy(address(implementation), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
     }
@@ -1928,7 +1928,7 @@ contract PDPVerifierMigrateTest is Test {
         assertEq(afterEpoch, uint96(0));
 
         // Deploy new implementation
-        PDPVerifier newImpl = new PDPVerifier();
+        PDPVerifier newImpl = new PDPVerifier(2);
 
         // Announce upgrade
         PDPVerifier.PlannedUpgrade memory plan;
@@ -1967,7 +1967,7 @@ contract PDPVerifierMigrateTest is Test {
     }
 
     function testAnnouncePlannedUpgradeOnlyOwner() public {
-        PDPVerifier newImpl = new PDPVerifier();
+        PDPVerifier newImpl = new PDPVerifier(2);
         PDPVerifier.PlannedUpgrade memory plan;
         plan.nextImplementation = address(newImpl);
         plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
@@ -1988,7 +1988,7 @@ contract PDPVerifierMigrateTest is Test {
     }
 
     function testAnnouncePlannedUpgradeInvalidEpoch() public {
-        PDPVerifier newImpl = new PDPVerifier();
+        PDPVerifier newImpl = new PDPVerifier(2);
         PDPVerifier.PlannedUpgrade memory plan;
         plan.nextImplementation = address(newImpl);
         plan.afterEpoch = uint96(vm.getBlockNumber()); // Must be in the future
@@ -2033,7 +2033,7 @@ contract PDPVerifierFeeTest is MockFVMTest, PieceHelper, ProofBuilderHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -2173,7 +2173,7 @@ contract PDPVerifierStorageProviderListenerTest is MockFVMTest {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));

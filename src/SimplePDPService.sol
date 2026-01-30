@@ -84,8 +84,11 @@ contract SimplePDPService is PDPListener, IPDPProvingSchedule, Initializable, UU
     mapping(uint256 => uint256) public provingDeadlines;
     mapping(uint256 => bool) public provenThisPeriod;
 
+    uint64 private immutable REINITIALIZER_VERSION;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(uint64 _reinitalizerVersion) {
+        REINITIALIZER_VERSION = _reinitalizerVersion;
         _disableInitializers();
     }
 

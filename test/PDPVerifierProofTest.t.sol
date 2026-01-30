@@ -22,7 +22,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));

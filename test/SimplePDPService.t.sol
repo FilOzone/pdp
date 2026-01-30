@@ -16,7 +16,7 @@ contract SimplePDPServiceTest is Test {
 
     function setUp() public {
         pdpVerifierAddress = address(this);
-        SimplePDPService pdpServiceImpl = new SimplePDPService();
+        SimplePDPService pdpServiceImpl = new SimplePDPService(1);
         bytes memory initializeData =
             abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifierAddress));
         MyERC1967Proxy pdpServiceProxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);
@@ -113,7 +113,7 @@ contract SimplePDPServiceFaultsTest is Test {
 
     function setUp() public {
         pdpVerifierAddress = address(this);
-        SimplePDPService pdpServiceImpl = new SimplePDPService();
+        SimplePDPService pdpServiceImpl = new SimplePDPService(1);
         bytes memory initializeData =
             abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifierAddress));
         MyERC1967Proxy pdpServiceProxy = new MyERC1967Proxy(address(pdpServiceImpl), initializeData);

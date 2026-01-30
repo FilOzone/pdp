@@ -7,6 +7,7 @@
 #
 # Set DRY_RUN=false to actually deploy and broadcast transactions (default is dry-run for safety)
 DRY_RUN=${DRY_RUN:-true}
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 if [ "$DRY_RUN" = "true" ]; then
     echo "🧪 Running in DRY-RUN mode - simulation only, no actual deployment"
@@ -49,9 +50,11 @@ if [ -z "$IMPLEMENTATION_PATH" ]; then
   exit 1
 fi
 
+UPGRADE_INIT_COUNTER=$(expr "$("$SCRIPT_DIR/get-initialized-counter.sh" "$PROXY_ADDRESS")" + 1)
+
 if [ "$DRY_RUN" = "true" ]; then
     echo "🔍 Simulating deployment of new $IMPLEMENTATION_PATH implementation contract"
-    forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.23 --chain-id "$CHAIN_ID" "$IMPLEMENTATION_PATH"
+    forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --compiler-version 0.8.30 --chain-id "$CHAIN_ID"  "$IMPLEMENTATION_PATH" --constructor-args $UPGRADE_INIT_COUNTER
     
     if [ $? -eq 0 ]; then
         echo "✅ Contract compilation and simulation successful!"
@@ -67,8 +70,9 @@ if [ "$DRY_RUN" = "true" ]; then
     fi
 else
     echo "🚀 Deploying new $IMPLEMENTATION_PATH implementation contract"
+
     # Parse the output of forge create to extract the contract address
-    IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --compiler-version 0.8.23 --chain-id "$CHAIN_ID" "$IMPLEMENTATION_PATH" | grep "Deployed to" | awk '{print $3}')
+    IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --compiler-version 0.8.30 --chain-id "$CHAIN_ID"  "$IMPLEMENTATION_PATH" --constructor-args $UPGRADE_INIT_COUNTER | grep "Deployed to" | awk '{print $3}')
 
     if [ -z "$IMPLEMENTATION_ADDRESS" ]; then
         echo "❌ Error: Failed to extract PDP verifier contract address"

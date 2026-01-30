@@ -19,13 +19,14 @@ fi
 
 # Mainnet uses 150 epochs (vs 10 on Calibration testnet)
 CHALLENGE_FINALITY=150
+VERIFIER_INIT_COUNTER=1
 
 ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
 echo "Deploying PDP verifier from address $ADDR"
 # Parse the output of forge create to extract the contract address
  
 NONCE="$(cast nonce --rpc-url "$RPC_URL" "$ADDR")"
-VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314 src/PDPVerifier.sol:PDPVerifier | grep "Deployed to" | awk '{print $3}')
+VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314  src/PDPVerifier.sol:PDPVerifier --constructor-args $VERIFIER_INIT_COUNTER | grep "Deployed to" | awk '{print $3}')
 if [ -z "$VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP verifier contract address"
     exit 1

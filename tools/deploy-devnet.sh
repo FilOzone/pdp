@@ -25,10 +25,10 @@ lotus send $clientAddr 10000
 sleep 5 ## Sleep for 5 seconds so fund are available and actor is registered
 
 NONCE="$(cast nonce --rpc-url "$RPC_URL" "$clientAddr")"
-
+VERIFIER_INIT_COUNTER=1
 echo "Deploying PDP verifier"
 # Parse the output of forge create to extract the contract address
-VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --nonce $NONCE --broadcast  src/PDPVerifier.sol:PDPVerifier | grep "Deployed to" | awk '{print $3}')
+VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --nonce $NONCE --broadcast  src/PDPVerifier.sol:PDPVerifier --constructor-args $VERIFIER_INIT_COUNTER | grep "Deployed to" | awk '{print $3}')
 if [ -z "$VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP verifier contract address"
     exit 1

@@ -46,6 +46,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
 
+    // Upgrade sequence number, used by Initializable.reinitializer
+    uint64 private immutable REINITIALIZER_VERSION;
+
     // Events
     event DataSetCreated(uint256 indexed setId, address indexed storageProvider);
     event StorageProviderChanged(
@@ -160,8 +163,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(uint64 _initializerVersion) {
         _disableInitializers();
+        REINITIALIZER_VERSION = _initializerVersion;
     }
 
     function initialize(uint256 _challengeFinality) public initializer {
@@ -177,7 +181,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event ContractUpgraded(string version, address implementation);
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
 
-    function migrate() external onlyProxy onlyOwner reinitializer(2) {
+    function migrate() external onlyProxy onlyOwner reinitializer(REINITIALIZER_VERSION) {
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 

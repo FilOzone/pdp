@@ -15,7 +15,7 @@ contract ERC1967ProxyTest is Test {
         // Set owner for testing
         vm.startPrank(owner);
         // Deploy implementation contract
-        implementation = new PDPVerifier();
+        implementation = new PDPVerifier(1);
 
         // Deploy proxy pointing to implementation
         bytes memory initData = abi.encodeWithSelector(
@@ -43,7 +43,7 @@ contract ERC1967ProxyTest is Test {
         assertImplementationEquals(address(implementation));
 
         // Deploy new implementation
-        PDPVerifier newImplementation = new PDPVerifier();
+        PDPVerifier newImplementation = new PDPVerifier(2);
 
         // Announce upgrade first (required by new upgrade pattern)
         PDPVerifier.PlannedUpgrade memory plan;
@@ -64,7 +64,7 @@ contract ERC1967ProxyTest is Test {
     }
 
     function testUpgradeFromNonOwnerNoGood() public {
-        PDPVerifier newImplementation = new PDPVerifier();
+        PDPVerifier newImplementation = new PDPVerifier(2);
 
         // Announce upgrade first (as owner)
         PDPVerifier.PlannedUpgrade memory plan;

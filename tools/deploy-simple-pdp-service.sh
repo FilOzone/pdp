@@ -68,8 +68,10 @@ echo "Using PDPVerifier at: $PDP_VERIFIER_ADDRESS"
 
 NONCE="$(cast nonce --rpc-url "$RPC_URL" "$ADDR")"
 
+VERIFIER_INIT_COUNTER=1
+
 echo "Deploying SimplePDPService implementation..."
-SERVICE_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --nonce $NONCE --chain-id $CHAIN_ID src/SimplePDPService.sol:SimplePDPService | grep "Deployed to" | awk '{print $3}')
+SERVICE_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --nonce $NONCE --chain-id $CHAIN_ID  src/SimplePDPService.sol:SimplePDPService --constructor-args $VERIFIER_INIT_COUNTER | grep "Deployed to" | awk '{print $3}')
 
 if [ -z "$SERVICE_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract SimplePDPService contract address"

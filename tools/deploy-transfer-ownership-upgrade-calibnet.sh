@@ -4,7 +4,7 @@ set -euo pipefail
 #####################################
 # Environment variables & defaults  #
 #####################################
-
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 : "${FIL_CALIBNET_RPC_URL:?FIL_CALIBNET_RPC_URL not set. Please export it and rerun.}"
 : "${FIL_CALIBNET_PRIVATE_KEY:?FIL_CALIBNET_PRIVATE_KEY not set. Please export it and rerun.}"
 : "${NEW_OWNER:?NEW_OWNER not set. Please export it and rerun.}"
@@ -34,6 +34,8 @@ echo
 # 2. Deploy PDPVerifier contract    #
 #####################################
 echo "Deploying PDPVerifier contract ..."
+# initial verifier init counter (default 1)
+VERIFIER_INIT_COUNTER=1
 DEPLOY_OUTPUT_VERIFIER=$(
   forge create \
     --rpc-url "$FIL_CALIBNET_RPC_URL" \
@@ -41,7 +43,8 @@ DEPLOY_OUTPUT_VERIFIER=$(
     --chain-id "$CHAIN_ID" \
     --broadcast \
     --nonce $NONCE \
-    src/PDPVerifier.sol:PDPVerifier
+    src/PDPVerifier.sol:PDPVerifier \
+    --constructor-args $VERIFIER_INIT_COUNTER
 )
 NONCE=$(expr $NONCE + "1")
 
@@ -116,7 +119,9 @@ echo "========================================"
 #####################################
 
 echo "Deploying a new PDPVerifier contract ..."
-DEPLOY_OUTPUT_VERIFIER_2=$(forge create --nonce $NONCE --broadcast --rpc-url "$FIL_CALIBNET_RPC_URL" --private-key "$FIL_CALIBNET_PRIVATE_KEY" --chain-id "$CHAIN_ID" src/PDPVerifier.sol:PDPVerifier)
+# For the upgrade, compute next initializer counter from the proxy and pass it
+UPGRADE_INIT_COUNTER=$(expr "$("$SCRIPT_DIR/get-initialized-counter.sh" "$PROXY_ADDRESS")" + 1)
+DEPLOY_OUTPUT_VERIFIER_2=$(forge create --nonce $NONCE --broadcast --rpc-url "$FIL_CALIBNET_RPC_URL" --private-key "$FIL_CALIBNET_PRIVATE_KEY" --chain-id "$CHAIN_ID"  src/PDPVerifier.sol:PDPVerifier --constructor-args $UPGRADE_INIT_COUNTER)
 NONCE=$(expr $NONCE + "1")
 PDP_VERIFIER_ADDRESS_2=$(echo "$DEPLOY_OUTPUT_VERIFIER_2" | grep "Deployed to" | awk '{print $3}')
 echo "PDPVerifier deployed at: $PDP_VERIFIER_ADDRESS_2"
