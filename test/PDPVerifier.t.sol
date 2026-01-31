@@ -1491,7 +1491,6 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         }
     }
 
-
     function testFindPieceId() public {
         setUpTestingArray();
 
