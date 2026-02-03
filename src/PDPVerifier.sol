@@ -335,6 +335,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /**
      * @notice Returns active pieces (non-zero leaf count) for a data set with pagination
+     * @dev WARNING: This function has O(offset) gas complexity because it always iterates from
+     * piece ID 0. For large data sets with high offsets, consider using getActivePiecesByCursor()
      * @param setId The data set ID
      * @param offset Starting index for pagination (0-based)
      * @param limit Maximum number of pieces to return
@@ -381,15 +383,82 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             return (new Cids.Cid[](0), new uint256[](0), false);
         } else if (resultIndex < limit) {
             // Found fewer items than limit - need to resize arrays
-            pieces = new Cids.Cid[](resultIndex);
-            pieceIds = new uint256[](resultIndex);
-
-            for (uint256 i = 0; i < resultIndex; i++) {
-                pieces[i] = tempPieces[i];
-                pieceIds[i] = tempPieceIds[i];
+            pieces = tempPieces;
+            pieceIds = tempPieceIds;
+            assembly ("memory-safe") {
+                mstore(pieces, resultIndex)
+                mstore(pieceIds, resultIndex)
             }
         } else {
             // Found exactly limit items - use temp arrays directly
+            pieces = tempPieces;
+            pieceIds = tempPieceIds;
+        }
+    }
+
+    /**
+     * @notice Returns active pieces using cursor-based pagination for O(limit) gas complexity
+     * @dev This function is more gas-efficient than getActivePieces() for large data sets because
+     * it starts iteration from startPieceId instead of always from 0. Use this for paginating
+     * through large data sets.
+     * @param setId The data set ID
+     * @param startPieceId The piece ID to start from (use 0 for first page, then last returned pieceId + 1)
+     * @param limit Maximum number of pieces to return
+     * @return pieces Array of active piece CIDs
+     * @return pieceIds Array of corresponding piece IDs
+     * @return hasMore True if there are more pieces beyond this page
+     */
+    function getActivePiecesByCursor(uint256 setId, uint256 startPieceId, uint256 limit)
+        public
+        view
+        returns (Cids.Cid[] memory pieces, uint256[] memory pieceIds, bool hasMore)
+    {
+        require(dataSetLive(setId), "Data set not live");
+        require(limit > 0, "Limit must be greater than 0");
+
+        uint256 maxPieceId = nextPieceId[setId];
+
+        // if startPieceId is beyond all pieces, return empty
+        if (startPieceId >= maxPieceId) {
+            return (new Cids.Cid[](0), new uint256[](0), false);
+        }
+
+        // Over-allocate arrays to limit size
+        Cids.Cid[] memory tempPieces = new Cids.Cid[](limit);
+        uint256[] memory tempPieceIds = new uint256[](limit);
+        uint256 resultIndex = 0;
+
+        // Start from startPieceId and collect up to limit
+        for (uint256 i = startPieceId; i < maxPieceId && resultIndex < limit; i++) {
+            if (pieceLeafCounts[setId][i] > 0) {
+                tempPieces[resultIndex] = pieceCids[setId][i];
+                tempPieceIds[resultIndex] = i;
+                resultIndex++;
+            }
+        }
+
+        // Check if there are more active pieces after last one we found
+        if (resultIndex > 0) {
+            uint256 lastFound = tempPieceIds[resultIndex - 1];
+            for (uint256 i = lastFound + 1; i < maxPieceId; i++) {
+                if (pieceLeafCounts[setId][i] > 0) {
+                    hasMore = true;
+                    break;
+                }
+            }
+        }
+
+        // Handle case where we found fewer items than limit
+        if (resultIndex == 0) {
+            return (new Cids.Cid[](0), new uint256[](0), false);
+        } else if (resultIndex < limit) {
+            pieces = tempPieces;
+            pieceIds = tempPieceIds;
+            assembly ("memory-safe") {
+                mstore(pieces, resultIndex)
+                mstore(pieceIds, resultIndex)
+            }
+        } else {
             pieces = tempPieces;
             pieceIds = tempPieceIds;
         }

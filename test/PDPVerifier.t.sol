@@ -1132,6 +1132,116 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
 
         assertEq(totalRetrieved, 100, "Should have retrieved all 100 pieces");
     }
+
+    function testGetActivePiecesByCursorBasic() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+
+        // Add 10 pieces
+        Cids.Cid[] memory testPieces = new Cids.Cid[](10);
+        for (uint256 i = 0; i < 10; i++) {
+            testPieces[i] = makeSamplePiece(1024 / 32);
+        }
+        pdpVerifier.addPieces(setId, address(0), testPieces, empty);
+
+        // Test first page
+        (Cids.Cid[] memory pieces1, uint256[] memory ids1, bool hasMore1) =
+            pdpVerifier.getActivePiecesByCursor(setId, 0, 5);
+        assertEq(pieces1.length, 5, "Should return 5 pieces");
+        assertEq(ids1[0], 0, "First ID should be 0");
+        assertEq(ids1[4], 4, "Last ID should be 4");
+        assertEq(hasMore1, true, "Should have more");
+
+        // Test second page using cursor (last ID + 1)
+        (Cids.Cid[] memory pieces2, uint256[] memory ids2, bool hasMore2) =
+            pdpVerifier.getActivePiecesByCursor(setId, ids1[4] + 1, 5);
+        assertEq(pieces2.length, 5, "Should return 5 pieces");
+        assertEq(ids2[0], 5, "First ID should be 5");
+        assertEq(ids2[4], 9, "Last ID should be 9");
+        assertEq(hasMore2, false, "Should not have more");
+    }
+
+    function testGetActivePiecesByCursorWithDeleted() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+
+        // Add 10 pieces
+        Cids.Cid[] memory testPieces = new Cids.Cid[](10);
+        for (uint256 i = 0; i < 10; i++) {
+            testPieces[i] = makeSamplePiece(1024 / 32);
+        }
+        pdpVerifier.addPieces(setId, address(0), testPieces, empty);
+
+        // Delete pieces 2, 4, 6
+        uint256[] memory toRemove = new uint256[](3);
+        toRemove[0] = 2;
+        toRemove[1] = 4;
+        toRemove[2] = 6;
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+        uint256 challengeFinality = pdpVerifier.getChallengeFinality();
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + challengeFinality, empty);
+
+        // Cursor at piece 3 should skip deleted pieces and return 3, 5, 7, 8, 9
+        (Cids.Cid[] memory pieces, uint256[] memory ids, bool hasMore) =
+            pdpVerifier.getActivePiecesByCursor(setId, 3, 10);
+
+        assertEq(pieces.length, 5, "Should return 5 active pieces (3,5,7,8,9)");
+        assertEq(ids[0], 3, "First should be 3");
+        assertEq(ids[1], 5, "Second should be 5 (skipped 4)");
+        assertEq(ids[2], 7, "Third should be 7 (skipped 6)");
+        assertEq(ids[3], 8, "Fourth should be 8");
+        assertEq(ids[4], 9, "Fifth should be 9");
+        assertEq(hasMore, false, "No more pieces");
+    }
+
+    function testGetActivePiecesByCursorBeyondRange() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+
+        Cids.Cid[] memory testPieces = new Cids.Cid[](5);
+        for (uint256 i = 0; i < 5; i++) {
+            testPieces[i] = makeSamplePiece(1024 / 32);
+        }
+        pdpVerifier.addPieces(setId, address(0), testPieces, empty);
+
+        // Cursor beyond all pieces
+        (Cids.Cid[] memory pieces, uint256[] memory ids, bool hasMore) =
+            pdpVerifier.getActivePiecesByCursor(setId, 100, 10);
+
+        assertEq(pieces.length, 0, "Should return empty");
+        assertEq(ids.length, 0, "Should return empty IDs");
+        assertEq(hasMore, false, "No more pieces");
+    }
+
+    function testGetActivePiecesByCursorEmpty() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+
+        (Cids.Cid[] memory pieces, uint256[] memory ids, bool hasMore) =
+            pdpVerifier.getActivePiecesByCursor(setId, 0, 10);
+
+        assertEq(pieces.length, 0, "Should return empty for empty dataset");
+        assertEq(ids.length, 0, "Should return empty IDs");
+        assertEq(hasMore, false, "No more pieces");
+    }
+
+    function testGetActivePiecesByCursorNotLive() public {
+        vm.expectRevert("Data set not live");
+        pdpVerifier.getActivePiecesByCursor(999, 0, 10);
+    }
+
+    function testGetActivePiecesByCursorZeroLimit() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.sybilFee()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+
+        vm.expectRevert("Limit must be greater than 0");
+        pdpVerifier.getActivePiecesByCursor(setId, 0, 0);
+    }
 }
 
 // TestingRecordKeeperService is a PDPListener that allows any amount of proof challenges
