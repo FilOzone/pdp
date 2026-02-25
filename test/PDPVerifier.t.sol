@@ -1536,6 +1536,71 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getDataSetLeafCount(testSetId), 820, "Incorrect final data set leaf count");
     }
 
+    function assertSumTreeInvariant(uint256 setId) internal view {
+        uint256 nextPieceId = pdpVerifier.getNextPieceId(setId);
+        for (uint256 index = 0; index < nextPieceId; index++) {
+            uint256 height = pdpVerifier.getTestHeightFromIndex(index);
+            uint256 range = 1 << height;
+
+            require(index + 1 >= range, "SumTree range underflow");
+
+            uint256 expectedSum = 0;
+            for (uint256 j = index + 1 - range; j <= index; j++) {
+                expectedSum += pdpVerifier.getPieceLeafCount(setId, j);
+            }
+
+            uint256 actualSum = pdpVerifier.getSumTreeCounts(setId, index);
+            assertEq(
+                actualSum,
+                expectedSum,
+                string(abi.encodePacked("SumTree invariant failed at index ", vm.toString(index)))
+            );
+        }
+    }
+
+    function testSumTreeInvariantAddsAndRemovals() public {
+        uint256 numRounds = 5;
+        uint256 piecesPerRound = 8;
+
+        for (uint256 round = 0; round < numRounds; round++) {
+            Cids.Cid[] memory pieces = new Cids.Cid[](piecesPerRound);
+            for (uint256 i = 0; i < piecesPerRound; i++) {
+                uint256 size = ((round + 1) * 100) + (i * 10) + (i % 3);
+                pieces[i] = makeSamplePiece(size);
+            }
+            pdpVerifier.addPieces(testSetId, address(0), pieces, empty);
+
+            uint256[] memory toRemove = new uint256[](piecesPerRound / 2);
+            for (uint256 i = 0; i < toRemove.length; i++) {
+                toRemove[i] = round * piecesPerRound + (i * 2);
+            }
+            pdpVerifier.schedulePieceDeletions(testSetId, toRemove, empty);
+
+            pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
+
+            assertSumTreeInvariant(testSetId);
+        }
+    }
+
+    function testSumTreeAlternatingPattern() public {
+        uint256 numOperations = 10;
+
+        for (uint256 i = 0; i < numOperations; i++) {
+            Cids.Cid[] memory piece = new Cids.Cid[](1);
+            piece[0] = makeSamplePiece((i + 1) * 10);
+            pdpVerifier.addPieces(testSetId, address(0), piece, empty);
+
+            if (i > 0 && i % 2 == 1) {
+                uint256[] memory toRemove = new uint256[](1);
+                toRemove[0] = i - 1;
+                pdpVerifier.schedulePieceDeletions(testSetId, toRemove, empty);
+            }
+
+            pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
+            assertSumTreeInvariant(testSetId);
+        }
+    }
+
     function testFindPieceId() public {
         setUpTestingArray();
 
