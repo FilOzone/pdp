@@ -20,7 +20,10 @@ contract ERC1967ProxyTest is Test {
         // Deploy proxy pointing to implementation
         bytes memory initData = abi.encodeWithSelector(
             PDPVerifier.initialize.selector,
-            uint256(150) // challengeFinality
+            uint256(150), // challengeFinality
+            address(0),
+            0,
+            address(0)
         );
 
         ERC1967Proxy proxyContract = new MyERC1967Proxy(address(implementation), initData);

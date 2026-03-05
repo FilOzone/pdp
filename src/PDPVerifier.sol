@@ -150,6 +150,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     FeeStatus private feeStatus;
 
+    // USDFC sybil fee support
+    address public usdfcTokenAddress;
+    uint256 public usdfcSybilFee;
+    address public paymentsContractAddress;
+
     // Used for announcing upgrades, packed into one slot
     struct PlannedUpgrade {
         // Address of the new implementation contract
@@ -168,20 +173,36 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         REINITIALIZER_VERSION = _initializerVersion;
     }
 
-    function initialize(uint256 _challengeFinality) public initializer {
+    function initialize(
+        uint256 _challengeFinality,
+        address _usdfcTokenAddress,
+        uint256 _usdfcSybilFee,
+        address _paymentsContractAddress
+    ) public initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
         nextDataSetId = 1; // Data sets start at 1
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
+        usdfcTokenAddress = _usdfcTokenAddress;
+        usdfcSybilFee = _usdfcSybilFee;
+        paymentsContractAddress = _paymentsContractAddress;
     }
 
-    string public constant VERSION = "3.1.0";
+    string public constant VERSION = "3.2.0";
 
     event ContractUpgraded(string version, address implementation);
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
 
-    function migrate() external onlyProxy onlyOwner reinitializer(REINITIALIZER_VERSION) {
+    function migrate(address _usdfcTokenAddress, uint256 _usdfcSybilFee, address _paymentsContractAddress)
+        external
+        onlyProxy
+        onlyOwner
+        reinitializer(REINITIALIZER_VERSION)
+    {
+        usdfcTokenAddress = _usdfcTokenAddress;
+        usdfcSybilFee = _usdfcSybilFee;
+        paymentsContractAddress = _paymentsContractAddress;
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
@@ -220,6 +241,40 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             (bool success,) = msg.sender.call{value: msg.value - sybilFee}("");
             require(success, "Transfer failed.");
         }
+    }
+
+    function ensureBurned(bool usdfcBurned, bool defaultToFilBurn) internal {
+        if (!usdfcBurned) {
+            if (defaultToFilBurn) {
+                uint256 sybilFee = _validateAndBurnSybilFee();
+                _refundExcessSybilFee(sybilFee);
+            } else {
+                revert("USDFC sybil fee not met");
+            }
+        } else {
+            // USDFC burned, refund any FIL sent
+            if (msg.value > 0) {
+                (bool success,) = msg.sender.call{value: msg.value}("");
+                require(success, "FIL refund failed");
+            }
+        }
+    }
+
+    function setUsdfcSybilFee(uint256 _usdfcSybilFee) external onlyOwner {
+        usdfcSybilFee = _usdfcSybilFee;
+    }
+
+    function setPaymentsContractAddress(address _paymentsContractAddress) external onlyOwner {
+        paymentsContractAddress = _paymentsContractAddress;
+    }
+
+    function _getPaymentsUsdfcBalance() internal view returns (uint256) {
+        if (paymentsContractAddress == address(0) || usdfcTokenAddress == address(0)) return 0;
+        (bool success, bytes memory data) = paymentsContractAddress.staticcall(
+            abi.encodeWithSignature("accounts(address,address)", usdfcTokenAddress, paymentsContractAddress)
+        );
+        if (!success || data.length < 32) return 0;
+        return abi.decode(data, (uint256)); // first field is `funds`
     }
 
     // Returns the current challenge finality value
@@ -519,18 +574,27 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Parameters:
     //   - listenerAddr: Address of PDPListener contract to receive callbacks (can be address(0) for no listener)
     //   - extraData: Arbitrary bytes passed to listener's dataSetCreated callback
-    //   - msg.value: Must include sybil fee (PDPFees.sybilFee()), excess is refunded
+    //   - defaultToFilBurn: If true, falls back to FIL burn when USDFC not available. If false, reverts.
+    //   - msg.value: Must include sybil fee (PDPFees.sybilFee()) when using FIL fallback, excess is refunded
     //
     // Returns: The newly created data set ID
     //
     // Only the storage provider (msg.sender) can call this function.
-    function createDataSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
-        uint256 sybilFee = _validateAndBurnSybilFee();
-
+    function createDataSet(address listenerAddr, bytes calldata extraData, bool defaultToFilBurn)
+        public
+        payable
+        returns (uint256)
+    {
+        uint256 balanceBefore = _getPaymentsUsdfcBalance();
         uint256 setId = _createDataSet(listenerAddr, extraData);
-
-        _refundExcessSybilFee(sybilFee);
+        uint256 balanceAfter = _getPaymentsUsdfcBalance();
+        ensureBurned(usdfcSybilFee > 0 && balanceAfter >= balanceBefore + usdfcSybilFee, defaultToFilBurn);
         return setId;
+    }
+
+    // Backward-compatible overload: defaults to FIL burn fallback
+    function createDataSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
+        return createDataSet(listenerAddr, extraData, true);
     }
 
     // Removes a data set. Must be called by the storage provider.
@@ -575,25 +639,28 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     //    - Returns: the newly created data set ID
     //
     // Only the storage provider can call this function.
-    function addPieces(uint256 setId, address listenerAddr, Cids.Cid[] calldata pieceData, bytes calldata extraData)
-        public
-        payable
-        returns (uint256)
-    {
+    function addPieces(
+        uint256 setId,
+        address listenerAddr,
+        Cids.Cid[] calldata pieceData,
+        bytes calldata extraData,
+        bool defaultToFilBurn
+    ) public payable returns (uint256) {
         if (setId == NEW_DATA_SET_SENTINEL) {
             (bytes memory createPayload, bytes memory addPayload) = abi.decode(extraData, (bytes, bytes));
 
-            uint256 sybilFee = _validateAndBurnSybilFee();
-
             require(listenerAddr != address(0), "listener required for new dataset");
+
+            uint256 balanceBefore = _getPaymentsUsdfcBalance();
             uint256 newSetId = _createDataSet(listenerAddr, createPayload);
+            uint256 balanceAfter = _getPaymentsUsdfcBalance();
 
             // Add pieces to the newly created data set (if any)
             if (pieceData.length > 0) {
                 _addPiecesToDataSet(newSetId, pieceData, addPayload);
             }
 
-            _refundExcessSybilFee(sybilFee);
+            ensureBurned(usdfcSybilFee > 0 && balanceAfter >= balanceBefore + usdfcSybilFee, defaultToFilBurn);
             return newSetId;
         } else {
             // Adding to an existing set; no fee should be sent and listenerAddr must be zero
@@ -605,6 +672,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             return _addPiecesToDataSet(setId, pieceData, extraData);
         }
+    }
+
+    // Backward-compatible overload: defaults to FIL burn fallback
+    function addPieces(uint256 setId, address listenerAddr, Cids.Cid[] calldata pieceData, bytes calldata extraData)
+        public
+        payable
+        returns (uint256)
+    {
+        return addPieces(setId, listenerAddr, pieceData, extraData, true);
     }
 
     // Internal function to add pieces to a data set and handle events/listeners
@@ -871,9 +947,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).nextProvingPeriod(
-                setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData
-            );
+            PDPListener(listenerAddr)
+                .nextProvingPeriod(setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData);
         }
         emit NextProvingPeriod(setId, challengeEpoch, dataSetLeafCount[setId]);
     }
