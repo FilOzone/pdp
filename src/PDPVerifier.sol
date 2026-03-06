@@ -464,6 +464,40 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
+    /**
+     * @notice Finds piece IDs matching a given piece CID, with cursor-based pagination
+     * @param setId The data set ID
+     * @param pieceCid The piece CID to search for
+     * @param startPieceId Piece ID to start scanning from (0 for first call)
+     * @param limit Maximum number of matching piece IDs to return
+     * @return pieceIds Array of matching piece IDs (up to limit)
+     */
+    function findPieceIdsByCid(uint256 setId, Cids.Cid calldata pieceCid, uint256 startPieceId, uint256 limit)
+        public
+        view
+        returns (uint256[] memory pieceIds)
+    {
+        require(dataSetLive(setId), "Data set not live");
+        require(limit > 0, "Limit must be greater than 0");
+
+        bytes32 targetHash = keccak256(pieceCid.data);
+        uint256 maxPieceId = nextPieceId[setId];
+
+        pieceIds = new uint256[](limit);
+        uint256 count = 0;
+
+        for (uint256 i = startPieceId; i < maxPieceId && count < limit; i++) {
+            if (pieceLeafCounts[setId][i] == 0) continue;
+            if (keccak256(pieceCids[setId][i].data) == targetHash) {
+                pieceIds[count++] = i;
+            }
+        }
+
+        assembly ("memory-safe") {
+            mstore(pieceIds, count)
+        }
+    }
+
     // storage provider proposes new storage provider.  If the storage provider proposes themself delete any outstanding proposed storage provider
     function proposeDataSetStorageProvider(uint256 setId, address newStorageProvider) public {
         require(dataSetLive(setId), "Data set not live");
