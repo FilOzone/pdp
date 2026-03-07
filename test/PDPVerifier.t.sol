@@ -2381,3 +2381,158 @@ contract PDPVerifierStorageProviderListenerTest is MockFVMTest {
         pdpVerifier.claimDataSetStorageProvider(setId, empty);
     }
 }
+
+contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
+    PDPVerifier pdpVerifier;
+    TestingRecordKeeperService listener;
+    uint256 setId;
+    bytes empty = new bytes(0);
+
+    function setUp() public override {
+        super.setUp();
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
+        bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
+        MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
+        pdpVerifier = PDPVerifier(address(proxy));
+        listener = new TestingRecordKeeperService();
+
+        setId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+    }
+
+    function testFindPieceIdsByCid_Unique() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = makeSamplePiece(64);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        uint256[] memory results = pdpVerifier.findPieceIdsByCid(setId, pieces[0], 0, 10);
+        assertEq(results.length, 1);
+        assertEq(results[0], 0);
+    }
+
+    function testFindPieceIdsByCid_Multiple() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](3);
+        pieces[0] = makeSamplePiece(64);
+        pieces[1] = makeSamplePiece(128);
+        pieces[2] = pieces[0];
+
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        uint256[] memory results = pdpVerifier.findPieceIdsByCid(setId, pieces[0], 0, 10);
+        assertEq(results.length, 2);
+        assertEq(results[0], 0);
+        assertEq(results[1], 2);
+    }
+
+    function testFindPieceIdsByCid_Pagination() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](5);
+        Cids.Cid memory target = makeSamplePiece(64);
+        pieces[0] = target;
+        pieces[1] = makeSamplePiece(128);
+        pieces[2] = target;
+        pieces[3] = target;
+        pieces[4] = makeSamplePiece(256);
+
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        uint256[] memory results1 = pdpVerifier.findPieceIdsByCid(setId, target, 0, 2);
+        assertEq(results1.length, 2);
+        assertEq(results1[0], 0);
+        assertEq(results1[1], 2);
+
+        uint256[] memory results2 = pdpVerifier.findPieceIdsByCid(setId, target, 3, 2);
+        assertEq(results2.length, 1);
+        assertEq(results2[0], 3);
+    }
+
+    function testFindPieceIdsByCid_Deleted() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](2);
+        pieces[0] = makeSamplePiece(64);
+        pieces[1] = makeSamplePiece(128);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        uint256[] memory resultsBefore = pdpVerifier.findPieceIdsByCid(setId, pieces[0], 0, 10);
+        assertEq(resultsBefore.length, 1);
+        assertEq(resultsBefore[0], 0);
+
+        uint256[] memory toRemove = new uint256[](1);
+        toRemove[0] = 0;
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + 10, empty);
+
+        uint256[] memory resultsAfter = pdpVerifier.findPieceIdsByCid(setId, pieces[0], 0, 10);
+        assertEq(resultsAfter.length, 0);
+    }
+
+    function testFindPieceIdsByCid_NoMatch() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = makeSamplePiece(64);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        Cids.Cid memory nonExistent = makeSamplePiece(128);
+        uint256[] memory results = pdpVerifier.findPieceIdsByCid(setId, nonExistent, 0, 10);
+        assertEq(results.length, 0);
+    }
+
+    function testFindPieceIdsByCid_InvalidDataSet() public {
+        Cids.Cid memory target = makeSamplePiece(64);
+        vm.expectRevert("Data set not live");
+        pdpVerifier.findPieceIdsByCid(999, target, 0, 10);
+    }
+
+    function testFindPieceIdsByCid_ZeroLimit() public {
+        Cids.Cid memory target = makeSamplePiece(64);
+        vm.expectRevert("Limit must be greater than 0");
+        pdpVerifier.findPieceIdsByCid(setId, target, 0, 0);
+    }
+
+    function testFindPieceIdsByCid_StartBeyondMax() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = makeSamplePiece(64);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        uint256[] memory results = pdpVerifier.findPieceIdsByCid(setId, pieces[0], 100, 10);
+        assertEq(results.length, 0);
+    }
+
+    function testFindPieceIdsByCid_EmptyDataSet() public {
+        uint256 emptySetId = pdpVerifier.createDataSet{value: PDPFees.sybilFee()}(address(listener), empty);
+        Cids.Cid memory target = makeSamplePiece(64);
+        uint256[] memory results = pdpVerifier.findPieceIdsByCid(emptySetId, target, 0, 10);
+        assertEq(results.length, 0);
+    }
+
+    function testFindPieceIdsByCid_FullLimitReached() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](5);
+        Cids.Cid memory target = makeSamplePiece(64);
+        for (uint256 i = 0; i < 5; i++) {
+            pieces[i] = target;
+        }
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        uint256[] memory results = pdpVerifier.findPieceIdsByCid(setId, target, 0, 3);
+        assertEq(results.length, 3);
+        assertEq(results[0], 0);
+        assertEq(results[1], 1);
+        assertEq(results[2], 2);
+    }
+
+    function testFindPieceIdsByCid_ManyDeleted() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](10);
+        Cids.Cid memory target = makeSamplePiece(64);
+        for (uint256 i = 0; i < 10; i++) {
+            pieces[i] = target;
+        }
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        uint256[] memory toRemove = new uint256[](9);
+        for (uint256 i = 0; i < 9; i++) {
+            toRemove[i] = i;
+        }
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + 10, empty);
+
+        uint256[] memory results = pdpVerifier.findPieceIdsByCid(setId, target, 0, 10);
+        assertEq(results.length, 1);
+        assertEq(results[0], 9);
+    }
+}
