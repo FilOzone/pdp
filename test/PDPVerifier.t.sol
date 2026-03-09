@@ -1027,7 +1027,8 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getActivePieceCount(setId), 5, "Should have 5 active pieces");
 
         // Test offset beyond range
-        (Cids.Cid[] memory pieces1,/*uint256[] memory ids1*/, bool hasMore1) = pdpVerifier.getActivePieces(setId, 10, 5);
+        (Cids.Cid[] memory pieces1, /*uint256[] memory ids1*/, bool hasMore1) =
+            pdpVerifier.getActivePieces(setId, 10, 5);
         assertEq(pieces1.length, 0, "Should return empty when offset beyond range");
         assertEq(hasMore1, false, "Should not have more items");
 

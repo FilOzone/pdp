@@ -221,10 +221,7 @@ contract SimplePDPService is PDPListener, IPDPProvingSchedule, Initializable, UU
         uint256, /*challengedLeafCount*/
         uint256, /*seed*/
         uint256 challengeCount
-    )
-        external
-        onlyPDPVerifier
-    {
+    ) external onlyPDPVerifier {
         if (provenThisPeriod[dataSetId]) {
             revert("Only one proof of possession allowed per proving period. Open a new proving period.");
         }
@@ -250,13 +247,7 @@ contract SimplePDPService is PDPListener, IPDPProvingSchedule, Initializable, UU
     // 1. One update per proving period.
     // 2. Next challenge epoch must fall within the challenge window in the last challengeWindow()
     //    epochs of the proving period.
-    function nextProvingPeriod(
-        uint256 dataSetId,
-        uint256 challengeEpoch,
-        uint256,
-        /*leafCount*/
-        bytes calldata
-    )
+    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256, /*leafCount*/ bytes calldata)
         external
         onlyPDPVerifier
     {
