@@ -22,4 +22,5 @@ via_ir = true
 exclude_lints = [
     "incorrect-shift",
     "mixed-case-function",
+    "asm-keccak256" # flagging on a view function; revisit when forge supports inline suppression
 ]
