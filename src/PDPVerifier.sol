@@ -14,7 +14,10 @@ import {FVMRandom} from "fvm-solidity/FVMRandom.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
 
 interface IFilecoinPay {
-    function accounts(address token, address owner) external view returns (uint256 funds, uint256 lockupCurrent, uint256 lockupRate, uint256 lockupLastSettledAt);
+    function accounts(address token, address owner)
+        external
+        view
+        returns (uint256 funds, uint256 lockupCurrent, uint256 lockupRate, uint256 lockupLastSettledAt);
 }
 
 /// @title PDPListener
@@ -174,7 +177,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(uint64 _initializerVersion, address _usdfcTokenAddress, uint256 _usdfcSybilFee, address _paymentsContractAddress) {
+    constructor(
+        uint64 _initializerVersion,
+        address _usdfcTokenAddress,
+        uint256 _usdfcSybilFee,
+        address _paymentsContractAddress
+    ) {
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
         usdfcTokenAddress = _usdfcTokenAddress;
@@ -253,10 +261,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-
     function _getPaymentsUsdfcBalance() internal view returns (uint256) {
         if (paymentsContractAddress == address(0) || usdfcTokenAddress == address(0)) return 0;
-        try IFilecoinPay(paymentsContractAddress).accounts(usdfcTokenAddress, paymentsContractAddress) returns (uint256 funds, uint256, uint256, uint256) {
+        try IFilecoinPay(paymentsContractAddress).accounts(usdfcTokenAddress, paymentsContractAddress) returns (
+            uint256 funds, uint256, uint256, uint256
+        ) {
             return funds;
         } catch {
             return 0;
@@ -935,9 +944,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).nextProvingPeriod(
-                setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData
-            );
+            PDPListener(listenerAddr)
+                .nextProvingPeriod(setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData);
         }
         emit NextProvingPeriod(setId, challengeEpoch, dataSetLeafCount[setId]);
     }
