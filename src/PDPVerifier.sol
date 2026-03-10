@@ -158,11 +158,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // USDFC sybil fee support
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    address public immutable usdfcTokenAddress;
+    address public immutable USDFC_TOKEN_ADDRESS;
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    uint256 public immutable usdfcSybilFee;
+    uint256 public immutable USDFC_SYBIL_FEE;
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    address public immutable paymentsContractAddress;
+    address public immutable PAYMENTS_CONTRACT_ADDRESS;
 
     // Used for announcing upgrades, packed into one slot
     struct PlannedUpgrade {
@@ -179,15 +179,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
         uint64 _initializerVersion,
-        address _usdfcTokenAddress,
-        uint256 _usdfcSybilFee,
-        address _paymentsContractAddress
+        address _USDFC_TOKEN_ADDRESS,
+        uint256 _USDFC_SYBIL_FEE,
+        address _PAYMENTS_CONTRACT_ADDRESS
     ) {
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
-        usdfcTokenAddress = _usdfcTokenAddress;
-        usdfcSybilFee = _usdfcSybilFee;
-        paymentsContractAddress = _paymentsContractAddress;
+        USDFC_TOKEN_ADDRESS = _USDFC_TOKEN_ADDRESS;
+        USDFC_SYBIL_FEE = _USDFC_SYBIL_FEE;
+        PAYMENTS_CONTRACT_ADDRESS = _PAYMENTS_CONTRACT_ADDRESS;
     }
 
     function initialize(uint256 _challengeFinality) public initializer {
@@ -262,8 +262,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function _getPaymentsUsdfcBalance() internal view returns (uint256) {
-        if (paymentsContractAddress == address(0) || usdfcTokenAddress == address(0)) return 0;
-        try IFilecoinPay(paymentsContractAddress).accounts(usdfcTokenAddress, paymentsContractAddress) returns (
+        if (PAYMENTS_CONTRACT_ADDRESS == address(0) || USDFC_TOKEN_ADDRESS == address(0)) return 0;
+        try IFilecoinPay(PAYMENTS_CONTRACT_ADDRESS).accounts(USDFC_TOKEN_ADDRESS, PAYMENTS_CONTRACT_ADDRESS) returns (
             uint256 funds, uint256, uint256, uint256
         ) {
             return funds;
@@ -583,7 +583,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 balanceBefore = _getPaymentsUsdfcBalance();
         uint256 setId = _createDataSet(listenerAddr, extraData);
         uint256 balanceAfter = _getPaymentsUsdfcBalance();
-        ensureBurned(usdfcSybilFee > 0 && balanceAfter >= balanceBefore + usdfcSybilFee, defaultToFilBurn);
+        ensureBurned(USDFC_SYBIL_FEE > 0 && balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
         return setId;
     }
 
@@ -655,7 +655,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 _addPiecesToDataSet(newSetId, pieceData, addPayload);
             }
 
-            ensureBurned(usdfcSybilFee > 0 && balanceAfter >= balanceBefore + usdfcSybilFee, defaultToFilBurn);
+            ensureBurned(USDFC_SYBIL_FEE > 0 && balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
             return newSetId;
         } else {
             // Adding to an existing set; no fee should be sent and listenerAddr must be zero
