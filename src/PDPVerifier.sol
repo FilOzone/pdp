@@ -179,15 +179,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
         uint64 _initializerVersion,
-        address _USDFC_TOKEN_ADDRESS,
-        uint256 _USDFC_SYBIL_FEE,
-        address _PAYMENTS_CONTRACT_ADDRESS
+        address _usdfcTokenAddress,
+        uint256 _usdfcSybilFee,
+        address _paymentsContractAddress
     ) {
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
-        USDFC_TOKEN_ADDRESS = _USDFC_TOKEN_ADDRESS;
-        USDFC_SYBIL_FEE = _USDFC_SYBIL_FEE;
-        PAYMENTS_CONTRACT_ADDRESS = _PAYMENTS_CONTRACT_ADDRESS;
+        USDFC_TOKEN_ADDRESS = _usdfcTokenAddress;
+        USDFC_SYBIL_FEE = _usdfcSybilFee;
+        PAYMENTS_CONTRACT_ADDRESS = _paymentsContractAddress;
     }
 
     function initialize(uint256 _challengeFinality) public initializer {
