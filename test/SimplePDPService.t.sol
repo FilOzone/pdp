@@ -384,12 +384,8 @@ contract SimplePDPServiceFaultsTest is Test {
     }
 
     function testGetPDPConfig() public view {
-        (
-            uint64 maxProvingPeriod,
-            uint256 challengeWindow,
-            uint256 challengesPerProof,
-            uint256 initChallengeWindowStart
-        ) = pdpService.getPDPConfig();
+        (uint64 maxProvingPeriod, uint256 challengeWindow, uint256 challengesPerProof, uint256 initChallengeWindowStart)
+        = pdpService.getPDPConfig();
 
         assertEq(maxProvingPeriod, 2880, "Max proving period should be 2880");
         assertEq(challengeWindow, 60, "Challenge window should be 60");
