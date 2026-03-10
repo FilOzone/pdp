@@ -13,6 +13,10 @@ import {FVMPay} from "fvm-solidity/FVMPay.sol";
 import {FVMRandom} from "fvm-solidity/FVMRandom.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
 
+interface IFilecoinPay {
+    function accounts(address token, address owner) external view returns (uint256 funds, uint256 lockupCurrent, uint256 lockupRate, uint256 lockupLastSettledAt);
+}
+
 /// @title PDPListener
 /// @notice Interface for PDP Service applications managing data storage.
 /// @dev This interface exists to provide an extensible hook for applications to use the PDP verification contract
@@ -65,7 +69,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
-
     // Types
     // State fields
     /*
@@ -151,9 +154,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     FeeStatus private feeStatus;
 
     // USDFC sybil fee support
-    address public usdfcTokenAddress;
-    uint256 public usdfcSybilFee;
-    address public paymentsContractAddress;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    address public immutable usdfcTokenAddress;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    uint256 public immutable usdfcSybilFee;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    address public immutable paymentsContractAddress;
 
     // Used for announcing upgrades, packed into one slot
     struct PlannedUpgrade {
@@ -168,25 +174,20 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(uint64 _initializerVersion) {
+    constructor(uint64 _initializerVersion, address _usdfcTokenAddress, uint256 _usdfcSybilFee, address _paymentsContractAddress) {
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
+        usdfcTokenAddress = _usdfcTokenAddress;
+        usdfcSybilFee = _usdfcSybilFee;
+        paymentsContractAddress = _paymentsContractAddress;
     }
 
-    function initialize(
-        uint256 _challengeFinality,
-        address _usdfcTokenAddress,
-        uint256 _usdfcSybilFee,
-        address _paymentsContractAddress
-    ) public initializer {
+    function initialize(uint256 _challengeFinality) public initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         challengeFinality = _challengeFinality;
         nextDataSetId = 1; // Data sets start at 1
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
-        usdfcTokenAddress = _usdfcTokenAddress;
-        usdfcSybilFee = _usdfcSybilFee;
-        paymentsContractAddress = _paymentsContractAddress;
     }
 
     string public constant VERSION = "3.2.0";
@@ -194,15 +195,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event ContractUpgraded(string version, address implementation);
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
 
-    function migrate(address _usdfcTokenAddress, uint256 _usdfcSybilFee, address _paymentsContractAddress)
-        external
-        onlyProxy
-        onlyOwner
-        reinitializer(REINITIALIZER_VERSION)
-    {
-        usdfcTokenAddress = _usdfcTokenAddress;
-        usdfcSybilFee = _usdfcSybilFee;
-        paymentsContractAddress = _paymentsContractAddress;
+    function migrate() external onlyProxy onlyOwner reinitializer(REINITIALIZER_VERSION) {
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
@@ -249,32 +242,25 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 uint256 sybilFee = _validateAndBurnSybilFee();
                 _refundExcessSybilFee(sybilFee);
             } else {
-                revert("USDFC sybil fee not met");
+                revert UsdfcSybilFeeNotMet();
             }
         } else {
             // USDFC burned, refund any FIL sent
             if (msg.value > 0) {
                 (bool success,) = msg.sender.call{value: msg.value}("");
-                require(success, "FIL refund failed");
+                if (!success) revert FilRefundFailed();
             }
         }
     }
 
-    function setUsdfcSybilFee(uint256 _usdfcSybilFee) external onlyOwner {
-        usdfcSybilFee = _usdfcSybilFee;
-    }
-
-    function setPaymentsContractAddress(address _paymentsContractAddress) external onlyOwner {
-        paymentsContractAddress = _paymentsContractAddress;
-    }
 
     function _getPaymentsUsdfcBalance() internal view returns (uint256) {
         if (paymentsContractAddress == address(0) || usdfcTokenAddress == address(0)) return 0;
-        (bool success, bytes memory data) = paymentsContractAddress.staticcall(
-            abi.encodeWithSignature("accounts(address,address)", usdfcTokenAddress, paymentsContractAddress)
-        );
-        if (!success || data.length < 32) return 0;
-        return abi.decode(data, (uint256)); // first field is `funds`
+        try IFilecoinPay(paymentsContractAddress).accounts(usdfcTokenAddress, paymentsContractAddress) returns (uint256 funds, uint256, uint256, uint256) {
+            return funds;
+        } catch {
+            return 0;
+        }
     }
 
     // Returns the current challenge finality value
@@ -710,6 +696,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     error IndexedError(uint256 idx, string msg);
+    error UsdfcSybilFeeNotMet();
+    error FilRefundFailed();
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
         (uint256 padding, uint8 height,) = Cids.validateCommPv2(piece);

@@ -55,4 +55,7 @@ interface IPDPVerifier is IPDPEvents {
 
     // Fee view: returns the current effective fee per TiB
     function feePerTiB() external view returns (uint96);
+
+    // USDFC sybil fee amount
+    function usdfcSybilFee() external view returns (uint256);
 }
