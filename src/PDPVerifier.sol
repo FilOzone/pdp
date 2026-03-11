@@ -572,11 +572,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns: The newly created data set ID
     //
     // Only the storage provider (msg.sender) can call this function.
-    function createDataSet(address listenerAddr, bytes calldata extraData)
-        public
-        payable
-        returns (uint256)
-    {
+    function createDataSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
         uint256 balanceBefore = _getPaymentsUsdfcBalance();
         uint256 setId = _createDataSet(listenerAddr, extraData);
         uint256 balanceAfter = _getPaymentsUsdfcBalance();
@@ -627,12 +623,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     //    - Returns: the newly created data set ID
     //
     // Only the storage provider can call this function.
-    function addPieces(
-        uint256 setId,
-        address listenerAddr,
-        Cids.Cid[] calldata pieceData,
-        bytes calldata extraData
-    ) public payable returns (uint256) {
+    function addPieces(uint256 setId, address listenerAddr, Cids.Cid[] calldata pieceData, bytes calldata extraData)
+        public
+        payable
+        returns (uint256)
+    {
         if (setId == NEW_DATA_SET_SENTINEL) {
             (bytes memory createPayload, bytes memory addPayload) = abi.decode(extraData, (bytes, bytes));
 
