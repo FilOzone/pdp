@@ -184,6 +184,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address _paymentsContractAddress
     ) {
         _disableInitializers();
+        require(_usdfcSybilFee > 0, "USDFC sybil fee must be greater than 0");
         REINITIALIZER_VERSION = _initializerVersion;
         USDFC_TOKEN_ADDRESS = _usdfcTokenAddress;
         USDFC_SYBIL_FEE = _usdfcSybilFee;
@@ -263,13 +264,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function _getPaymentsUsdfcBalance() internal view returns (uint256) {
         if (PAYMENTS_CONTRACT_ADDRESS == address(0) || USDFC_TOKEN_ADDRESS == address(0)) return 0;
-        try IFilecoinPay(PAYMENTS_CONTRACT_ADDRESS).accounts(USDFC_TOKEN_ADDRESS, PAYMENTS_CONTRACT_ADDRESS) returns (
-            uint256 funds, uint256, uint256, uint256
-        ) {
-            return funds;
-        } catch {
-            return 0;
-        }
+        (uint256 funds,,,) =
+            IFilecoinPay(PAYMENTS_CONTRACT_ADDRESS).accounts(USDFC_TOKEN_ADDRESS, PAYMENTS_CONTRACT_ADDRESS);
+        return funds;
     }
 
     // Returns the current challenge finality value
@@ -575,7 +572,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns: The newly created data set ID
     //
     // Only the storage provider (msg.sender) can call this function.
-    function createDataSet(address listenerAddr, bytes calldata extraData, bool defaultToFilBurn)
+    function createDataSet(address listenerAddr, bytes calldata extraData)
         public
         payable
         returns (uint256)
@@ -583,13 +580,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 balanceBefore = _getPaymentsUsdfcBalance();
         uint256 setId = _createDataSet(listenerAddr, extraData);
         uint256 balanceAfter = _getPaymentsUsdfcBalance();
-        ensureBurned(USDFC_SYBIL_FEE > 0 && balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
+        bool defaultToFilBurn = msg.value > 0;
+        ensureBurned(balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
         return setId;
-    }
-
-    // Backward-compatible overload: defaults to FIL burn fallback
-    function createDataSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
-        return createDataSet(listenerAddr, extraData, true);
     }
 
     // Removes a data set. Must be called by the storage provider.
@@ -638,8 +631,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 setId,
         address listenerAddr,
         Cids.Cid[] calldata pieceData,
-        bytes calldata extraData,
-        bool defaultToFilBurn
+        bytes calldata extraData
     ) public payable returns (uint256) {
         if (setId == NEW_DATA_SET_SENTINEL) {
             (bytes memory createPayload, bytes memory addPayload) = abi.decode(extraData, (bytes, bytes));
@@ -655,7 +647,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 _addPiecesToDataSet(newSetId, pieceData, addPayload);
             }
 
-            ensureBurned(USDFC_SYBIL_FEE > 0 && balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
+            bool defaultToFilBurn = msg.value > 0;
+            ensureBurned(balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
             return newSetId;
         } else {
             // Adding to an existing set; no fee should be sent and listenerAddr must be zero
@@ -667,15 +660,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             return _addPiecesToDataSet(setId, pieceData, extraData);
         }
-    }
-
-    // Backward-compatible overload: defaults to FIL burn fallback
-    function addPieces(uint256 setId, address listenerAddr, Cids.Cid[] calldata pieceData, bytes calldata extraData)
-        public
-        payable
-        returns (uint256)
-    {
-        return addPieces(setId, listenerAddr, pieceData, extraData, true);
     }
 
     // Internal function to add pieces to a data set and handle events/listeners
