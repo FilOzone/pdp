@@ -13,6 +13,13 @@ import {FVMPay} from "fvm-solidity/FVMPay.sol";
 import {FVMRandom} from "fvm-solidity/FVMRandom.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
 
+interface IFilecoinPay {
+    function accounts(address token, address owner)
+        external
+        view
+        returns (uint256 funds, uint256 lockupCurrent, uint256 lockupRate, uint256 lockupLastSettledAt);
+}
+
 /// @title PDPListener
 /// @notice Interface for PDP Service applications managing data storage.
 /// @dev This interface exists to provide an extensible hook for applications to use the PDP verification contract
@@ -65,7 +72,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     event PossessionProven(uint256 indexed setId, IPDPTypes.PieceIdAndOffset[] challenges);
     event NextProvingPeriod(uint256 indexed setId, uint256 challengeEpoch, uint256 leafCount);
-
     // Types
     // State fields
     /*
@@ -150,6 +156,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     FeeStatus private feeStatus;
 
+    // USDFC sybil fee support
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    address public immutable USDFC_TOKEN_ADDRESS;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    uint256 public immutable USDFC_SYBIL_FEE;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    address public immutable PAYMENTS_CONTRACT_ADDRESS;
+
     // Used for announcing upgrades, packed into one slot
     struct PlannedUpgrade {
         // Address of the new implementation contract
@@ -163,9 +177,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(uint64 _initializerVersion) {
+    constructor(
+        uint64 _initializerVersion,
+        address _usdfcTokenAddress,
+        uint256 _usdfcSybilFee,
+        address _paymentsContractAddress
+    ) {
         _disableInitializers();
+        require(_usdfcSybilFee > 0, "USDFC sybil fee must be greater than 0");
         REINITIALIZER_VERSION = _initializerVersion;
+        USDFC_TOKEN_ADDRESS = _usdfcTokenAddress;
+        USDFC_SYBIL_FEE = _usdfcSybilFee;
+        PAYMENTS_CONTRACT_ADDRESS = _paymentsContractAddress;
     }
 
     function initialize(uint256 _challengeFinality) public initializer {
@@ -176,7 +199,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
-    string public constant VERSION = "3.1.0";
+    string public constant VERSION = "3.2.0";
 
     event ContractUpgraded(string version, address implementation);
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
@@ -220,6 +243,30 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             (bool success,) = msg.sender.call{value: msg.value - sybilFee}("");
             require(success, "Transfer failed.");
         }
+    }
+
+    function ensureBurned(bool usdfcBurned, bool defaultToFilBurn) internal {
+        if (!usdfcBurned) {
+            if (defaultToFilBurn) {
+                uint256 sybilFee = _validateAndBurnSybilFee();
+                _refundExcessSybilFee(sybilFee);
+            } else {
+                revert UsdfcSybilFeeNotMet();
+            }
+        } else {
+            // USDFC burned, refund any FIL sent
+            if (msg.value > 0) {
+                (bool success,) = msg.sender.call{value: msg.value}("");
+                if (!success) revert FilRefundFailed();
+            }
+        }
+    }
+
+    function _getPaymentsUsdfcBalance() internal view returns (uint256) {
+        if (PAYMENTS_CONTRACT_ADDRESS == address(0) || USDFC_TOKEN_ADDRESS == address(0)) return 0;
+        (uint256 funds,,,) =
+            IFilecoinPay(PAYMENTS_CONTRACT_ADDRESS).accounts(USDFC_TOKEN_ADDRESS, PAYMENTS_CONTRACT_ADDRESS);
+        return funds;
     }
 
     // Returns the current challenge finality value
@@ -519,17 +566,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Parameters:
     //   - listenerAddr: Address of PDPListener contract to receive callbacks (can be address(0) for no listener)
     //   - extraData: Arbitrary bytes passed to listener's dataSetCreated callback
-    //   - msg.value: Must include sybil fee (PDPFees.sybilFee()), excess is refunded
+    //   - defaultToFilBurn: If true, falls back to FIL burn when USDFC not available. If false, reverts.
+    //   - msg.value: Must include sybil fee (PDPFees.sybilFee()) when using FIL fallback, excess is refunded
     //
     // Returns: The newly created data set ID
     //
     // Only the storage provider (msg.sender) can call this function.
     function createDataSet(address listenerAddr, bytes calldata extraData) public payable returns (uint256) {
-        uint256 sybilFee = _validateAndBurnSybilFee();
-
+        uint256 balanceBefore = _getPaymentsUsdfcBalance();
         uint256 setId = _createDataSet(listenerAddr, extraData);
-
-        _refundExcessSybilFee(sybilFee);
+        uint256 balanceAfter = _getPaymentsUsdfcBalance();
+        bool defaultToFilBurn = msg.value > 0;
+        ensureBurned(balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
         return setId;
     }
 
@@ -583,17 +631,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (setId == NEW_DATA_SET_SENTINEL) {
             (bytes memory createPayload, bytes memory addPayload) = abi.decode(extraData, (bytes, bytes));
 
-            uint256 sybilFee = _validateAndBurnSybilFee();
-
             require(listenerAddr != address(0), "listener required for new dataset");
+
+            uint256 balanceBefore = _getPaymentsUsdfcBalance();
             uint256 newSetId = _createDataSet(listenerAddr, createPayload);
+            uint256 balanceAfter = _getPaymentsUsdfcBalance();
 
             // Add pieces to the newly created data set (if any)
             if (pieceData.length > 0) {
                 _addPiecesToDataSet(newSetId, pieceData, addPayload);
             }
 
-            _refundExcessSybilFee(sybilFee);
+            bool defaultToFilBurn = msg.value > 0;
+            ensureBurned(balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
             return newSetId;
         } else {
             // Adding to an existing set; no fee should be sent and listenerAddr must be zero
@@ -634,6 +684,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     error IndexedError(uint256 idx, string msg);
+    error UsdfcSybilFeeNotMet();
+    error FilRefundFailed();
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
         (uint256 padding, uint8 height,) = Cids.validateCommPv2(piece);
