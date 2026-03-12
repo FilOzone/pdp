@@ -2390,7 +2390,7 @@ contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, address(0), 1, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, 2);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
