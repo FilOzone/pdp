@@ -5,6 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-03-XX
+
+This release upgrades PDPVerifier from `v3.1.0` to `v3.2.0` and adds better piece discovery APIs plus support for satisfying sybil-fee requirements via USDFC-backed payments. The existing FIL-based fee path remains supported.
+
+### Breaking Changes
+- No breaking changes for existing PDP user flows such as dataset creation, piece management, proof submission, or the existing read/query methods used against `v3.1.0`.
+
+### Added
+- Added `getActivePiecesByCursor()` for cursor-based pagination, allowing clients to page through large data sets in `O(limit)` gas instead of paying the `O(offset)` scan cost of `getActivePieces()` ([#246](https://github.com/FilOzone/pdp/pull/246))
+- Added `findPieceIdsByCid()` to look up active piece IDs by piece CID with cursor-style scanning and bounded result size ([#250](https://github.com/FilOzone/pdp/pull/250))
+- Added support for satisfying sybil-fee requirements for `createDataSet()` and the new-data-set path of `addPieces()` via USDFC-backed payments, with FIL burn fallback when `msg.value` is provided
+- Added the `USDFC_SYBIL_FEE()` getter to `IPDPVerifier`
+
+### Documentation
+- Added a per-piece security guarantees section to the design documentation to clarify the probabilistic protection model for data-set proving ([#241](https://github.com/FilOzone/pdp/pull/241))
+
 ## [3.1.0] - 2025-10-27
 
 This release addresses an issue discovered during end-to-end testing of PDP v3.0.0. The `schedulePieceDeletions()` function lacked duplicate piece ID validation, which could lead to unexpected behavior when the same piece ID was scheduled for removal multiple times.
