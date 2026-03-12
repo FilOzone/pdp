@@ -247,10 +247,13 @@ contract SimplePDPService is PDPListener, IPDPProvingSchedule, Initializable, UU
     // 1. One update per proving period.
     // 2. Next challenge epoch must fall within the challenge window in the last challengeWindow()
     //    epochs of the proving period.
-    function nextProvingPeriod(uint256 dataSetId, uint256 challengeEpoch, uint256, /*leafCount*/ bytes calldata)
-        external
-        onlyPDPVerifier
-    {
+    function nextProvingPeriod(
+        uint256 dataSetId,
+        uint256 challengeEpoch,
+        uint256,
+        /*leafCount*/
+        bytes calldata
+    ) external onlyPDPVerifier {
         // initialize state for new data set
         if (provingDeadlines[dataSetId] == NO_PROVING_DEADLINE) {
             uint256 firstDeadline = block.number + getMaxProvingPeriod();
