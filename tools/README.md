@@ -30,6 +30,12 @@ Generic script for upgrading proxy contracts on Calibration testnet.
 ### deploy-transfer-ownership-upgrade-calibnet.sh
 Deploys, upgrades, and transfers ownership of PDPVerifier on Calibration testnet.
 
+### upgrade.sh
+Upgrades a PDPVerifier proxy to a new implementation. For legacy deployments such as `v3.1.0`, this uses the one-step upgrade flow. For newer deployments, it validates the announced upgrade first. The script accepts either `RPC_URL` or `ETH_RPC_URL`. If the proxy owner is a contract such as a SAFE multisig, the script prints the transaction target and calldata instead of broadcasting directly.
+
+### announce-planned-upgrade.sh
+Announces a planned PDPVerifier upgrade on deployments that support the two-step flow. The script accepts either `RPC_URL` or `ETH_RPC_URL`. If the proxy owner is a contract such as a SAFE multisig, the script prints the transaction target and calldata instead of broadcasting directly.
+
 ## PDP Interaction Scripts
 We have some scripts for interacting with the PDP service contract through ETH RPC API: 
 - add.sh

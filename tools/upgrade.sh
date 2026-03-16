@@ -1,101 +1,138 @@
 #!/bin/bash
+set -euo pipefail
 
-# upgrade.sh: Completes a pending upgrade for PDPVerifier
-# Required args: RPC_URL, PDP_VERIFIER_PROXY_ADDRESS, KEYSTORE, PASSWORD, NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS
+# upgrade.sh: Completes an upgrade for PDPVerifier.
+# Required args: RPC_URL or ETH_RPC_URL, PDP_VERIFIER_PROXY_ADDRESS, NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS
+# Direct-broadcast mode also requires: KEYSTORE, PASSWORD
+# SAFE/contract-owner mode is auto-detected and prints calldata instead of broadcasting.
 
-if [ -z "$RPC_URL" ]; then
-  echo "Error: RPC_URL is not set"
+RPC_URL="${RPC_URL:-${ETH_RPC_URL:-}}"
+if [ -z "${RPC_URL:-}" ]; then
+  echo "Error: RPC_URL or ETH_RPC_URL is not set"
   exit 1
 fi
+export ETH_RPC_URL="${ETH_RPC_URL:-$RPC_URL}"
 
-if [ -z "$KEYSTORE" ]; then
-  echo "Error: KEYSTORE is not set"
-  exit 1
-fi
+ZERO_ADDRESS="0x0000000000000000000000000000000000000000"
 
-if [ -z "$PASSWORD" ]; then
-  echo "Error: PASSWORD is not set"
-  exit 1
-fi
+require_env() {
+  local var_name=$1
+  if [ -z "${!var_name:-}" ]; then
+    echo "Error: ${var_name} is not set"
+    exit 1
+  fi
+}
 
-if [ -z "$CHAIN" ]; then
-  CHAIN=$(cast chain-id --rpc-url "$RPC_URL")
+normalize_address() {
+  echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+same_address() {
+  [ "$(normalize_address "$1")" = "$(normalize_address "$2")" ]
+}
+
+address_has_code() {
+  local address=$1
+  local code
+  code=$(cast code "$address" 2>/dev/null || true)
+  [ -n "$code" ] && [ "$code" != "0x" ]
+}
+
+print_contract_owner_tx() {
+  local calldata=$1
+  local owner_nonce=""
+
+  owner_nonce=$(cast call "$PROXY_OWNER" "nonce()(uint256)" 2>/dev/null || true)
+
+  echo "Detected contract owner: $PROXY_OWNER"
+  echo "This upgrade must be executed by the owner contract (for example a SAFE multisig)."
+  echo
+  echo "Submit this transaction via the owner contract workflow:"
+  echo "  target: $PDP_VERIFIER_PROXY_ADDRESS"
+  echo "  value: 0"
+  echo "  data: $calldata"
+  if [ -n "$owner_nonce" ]; then
+    echo "  owner nonce: $owner_nonce"
+  fi
+}
+
+require_env "PDP_VERIFIER_PROXY_ADDRESS"
+require_env "NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS"
+
+if [ -z "${CHAIN:-}" ]; then
+  CHAIN=$(cast chain-id)
   if [ -z "$CHAIN" ]; then
     echo "Error: Failed to detect chain ID from RPC"
     exit 1
   fi
 fi
 
-ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
-echo "Using owner address: $ADDR"
-
-# Get current nonce
-NONCE=$(cast nonce --rpc-url "$RPC_URL" "$ADDR")
-
-if [ -z "$PDP_VERIFIER_PROXY_ADDRESS" ]; then
-  echo "Error: PDP_VERIFIER_PROXY_ADDRESS is not set"
+PROXY_OWNER=$(cast call -f "$ZERO_ADDRESS" "$PDP_VERIFIER_PROXY_ADDRESS" "owner()(address)" 2>/dev/null)
+if [ -z "$PROXY_OWNER" ]; then
+  echo "Error: Failed to read proxy owner"
   exit 1
 fi
 
-PROXY_OWNER=$(cast call --rpc-url "$RPC_URL" -f 0x0000000000000000000000000000000000000000 "$PDP_VERIFIER_PROXY_ADDRESS" "owner()(address)" 2>/dev/null)
-if [ "$PROXY_OWNER" != "$ADDR" ]; then
-  echo "Supplied KEYSTORE ($ADDR) is not the proxy owner ($PROXY_OWNER)."
+if [ -n "${SAFE_ADDRESS:-}" ] && ! same_address "$SAFE_ADDRESS" "$PROXY_OWNER"; then
+  echo "SAFE_ADDRESS ($SAFE_ADDRESS) does not match proxy owner ($PROXY_OWNER)."
   exit 1
 fi
 
-# Get the upgrade plan (if any)
-# Try to call nextUpgrade() - this will fail if the method doesn't exist (old contracts)
-UPGRADE_PLAN_OUTPUT=$(cast call --rpc-url "$RPC_URL" -f 0x0000000000000000000000000000000000000000 "$PDP_VERIFIER_PROXY_ADDRESS" "nextUpgrade()(address,uint96)" 2>&1)
-CAST_CALL_EXIT_CODE=$?
-
-ZERO_ADDRESS="0x0000000000000000000000000000000000000000"
-
-# Check if cast call succeeded (method exists)
-if [ $CAST_CALL_EXIT_CODE -eq 0 ] && [ -n "$UPGRADE_PLAN_OUTPUT" ]; then
-  # Method exists - parse the result
+# Get the upgrade plan (if any). Old deployments such as v3.1.0 do not expose nextUpgrade().
+UPGRADE_PLAN_OUTPUT=""
+if UPGRADE_PLAN_OUTPUT=$(cast call -f "$ZERO_ADDRESS" "$PDP_VERIFIER_PROXY_ADDRESS" "nextUpgrade()(address,uint96)" 2>/dev/null); then
   UPGRADE_PLAN=($UPGRADE_PLAN_OUTPUT)
   PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS=${UPGRADE_PLAN[0]}
   AFTER_EPOCH=${UPGRADE_PLAN[1]}
 
-  # Check if there's a planned upgrade (non-zero address)
-  # Zero address means either no upgrade was announced or the upgrade was already completed
   if [ -n "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" ] && [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$ZERO_ADDRESS" ]; then
-    # New two-step mechanism: validate planned upgrade
     echo "Detected planned upgrade (two-step mechanism)"
-    
-    if [ "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" != "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
+
+    if ! same_address "$PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS"; then
       echo "NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS) != planned ($PLANNED_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
       exit 1
-    else
-      echo "Upgrade plan matches ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
     fi
+    echo "Upgrade plan matches ($NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS)"
 
-    CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL" 2>/dev/null)
+    CURRENT_EPOCH=$(cast block-number 2>/dev/null)
 
     if [ "$CURRENT_EPOCH" -lt "$AFTER_EPOCH" ]; then
       echo "Not time yet ($CURRENT_EPOCH < $AFTER_EPOCH)"
       exit 1
-    else
-      echo "Upgrade ready ($CURRENT_EPOCH >= $AFTER_EPOCH)"
     fi
+    echo "Upgrade ready ($CURRENT_EPOCH >= $AFTER_EPOCH)"
   else
-    # Method exists but returns zero - no planned upgrade or already completed
-    # On new contracts, _authorizeUpgrade requires a planned upgrade, so one-step will fail
     echo "No planned upgrade detected (nextUpgrade returns zero)"
     echo "Error: This contract requires a planned upgrade. Please call announce-planned-upgrade.sh first."
     exit 1
   fi
 else
-  # Method doesn't exist (old contract without nextUpgrade) or call failed
-  echo "nextUpgrade() method not found or call failed, using one-step mechanism (direct upgrade)"
-  echo "WARNING: This is the legacy upgrade path. For new deployments, use announce-planned-upgrade.sh first."
+  echo "nextUpgrade() method not found, using one-step mechanism (legacy direct upgrade)"
 fi
 
 MIGRATE_DATA=$(cast calldata "migrate()")
+UPGRADE_DATA=$(cast calldata "upgradeToAndCall(address,bytes)" "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" "$MIGRATE_DATA")
 
-# Call upgradeToAndCall on the proxy with migrate function
+if address_has_code "$PROXY_OWNER"; then
+  print_contract_owner_tx "$UPGRADE_DATA"
+  exit 0
+fi
+
+require_env "KEYSTORE"
+require_env "PASSWORD"
+
+ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
+echo "Using owner address: $ADDR"
+
+if ! same_address "$PROXY_OWNER" "$ADDR"; then
+  echo "Supplied KEYSTORE ($ADDR) is not the proxy owner ($PROXY_OWNER)."
+  exit 1
+fi
+
+NONCE=$(cast nonce "$ADDR")
+
 echo "Upgrading proxy and calling migrate..."
-TX_HASH=$(cast send --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" "$PDP_VERIFIER_PROXY_ADDRESS" "upgradeToAndCall(address,bytes)" "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" "$MIGRATE_DATA" \
+TX_HASH=$(cast send --keystore "$KEYSTORE" --password "$PASSWORD" "$PDP_VERIFIER_PROXY_ADDRESS" "upgradeToAndCall(address,bytes)" "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS" "$MIGRATE_DATA" \
   --nonce "$NONCE" \
   --json | jq -r '.transactionHash')
 
@@ -111,21 +148,17 @@ fi
 echo "Upgrade transaction sent: $TX_HASH"
 echo "Waiting for confirmation..."
 
-# Wait for transaction receipt
-cast receipt --rpc-url "$RPC_URL" "$TX_HASH" --confirmations 1 > /dev/null
+cast receipt "$TX_HASH" --confirmations 1 > /dev/null
 
-# Verify the upgrade by checking the implementation address
 echo "Verifying upgrade..."
-NEW_IMPL=$(cast rpc --rpc-url "$RPC_URL" eth_getStorageAt "$PDP_VERIFIER_PROXY_ADDRESS" 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc latest | sed 's/"//g' | sed 's/0x000000000000000000000000/0x/')
-
-# Compare to lowercase
-export EXPECTED_IMPL=$(echo $NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS | tr '[:upper:]' '[:lower:]')
+IMPLEMENTATION_SLOT="0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+NEW_IMPL=$(cast rpc eth_getStorageAt "$PDP_VERIFIER_PROXY_ADDRESS" "$IMPLEMENTATION_SLOT" latest | sed 's/"//g' | sed 's/0x000000000000000000000000/0x/')
+EXPECTED_IMPL=$(normalize_address "$NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS")
 
 if [ "$NEW_IMPL" = "$EXPECTED_IMPL" ]; then
-    echo "✅ Upgrade successful! Proxy now points to: $NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS"
+    echo "Upgrade successful! Proxy now points to: $NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS"
 else
-    echo "⚠️  Warning: Could not verify upgrade. Please check manually."
+    echo "Warning: Could not verify upgrade. Please check manually."
     echo "Expected: $NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS"
     echo "Got: $NEW_IMPL"
 fi
-
