@@ -11,13 +11,13 @@ A place for all tools related to running and developing the PDP contracts. When 
 | Devnet      | 10 epochs         |
 
 ### deploy-devnet.sh
-Deploys PDPVerifier to a local filecoin devnet. Assumes lotus binary is in path and local devnet is running with eth API enabled. The keystore will be funded automatically from lotus default address.
+Deploys PDPVerifier to a local filecoin devnet. Assumes lotus binary is in path and local devnet is running with eth API enabled. The keystore will be funded automatically from lotus default address. Accepts optional constructor env overrides: `USDFC_TOKEN_ADDRESS`, `USDFC_SYBIL_FEE`, and `PAYMENTS_CONTRACT_ADDRESS`. By default, devnet uses zero addresses for the USDFC/payment dependencies and keeps FIL fallback enabled.
 
 ### deploy-calibnet.sh
-Deploys PDPVerifier to Filecoin Calibration testnet.
+Deploys PDPVerifier to Filecoin Calibration testnet. Accepts optional constructor env overrides: `USDFC_TOKEN_ADDRESS`, `USDFC_SYBIL_FEE`, and `PAYMENTS_CONTRACT_ADDRESS`. Defaults match the current Calibration warm-storage deployment.
 
 ### deploy-mainnet.sh  
-Deploys PDPVerifier to Filecoin mainnet.
+Deploys PDPVerifier to Filecoin mainnet. Accepts optional constructor env overrides: `USDFC_TOKEN_ADDRESS`, `USDFC_SYBIL_FEE`, and `PAYMENTS_CONTRACT_ADDRESS`. Defaults match the current Mainnet warm-storage deployment.
 
 ### deploy-simple-pdp-service.sh ⚠️ DEPRECATED
 **As of v2.0.0, SimplePDPService is deprecated.** This optional script allows deployment of SimplePDPService for reference/community use only. Requires an existing PDPVerifier deployment. See `DEPRECATION.md` for details.
