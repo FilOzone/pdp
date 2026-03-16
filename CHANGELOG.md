@@ -15,8 +15,9 @@ This release upgrades PDPVerifier from `v3.1.0` to `v3.2.0` and adds better piec
 ### Added
 - Added `getActivePiecesByCursor()` for cursor-based pagination, allowing clients to page through large data sets in `O(limit)` gas instead of paying the `O(offset)` scan cost of `getActivePieces()` ([#246](https://github.com/FilOzone/pdp/pull/246))
 - Added `findPieceIdsByCid()` to look up active piece IDs by piece CID with cursor-style scanning and bounded result size ([#250](https://github.com/FilOzone/pdp/pull/250))
-- Added support for satisfying sybil-fee requirements for `createDataSet()` and the new-data-set path of `addPieces()` via USDFC-backed payments, with FIL burn fallback when `msg.value` is provided
-- Added the `USDFC_SYBIL_FEE()` getter to `IPDPVerifier`
+- Added support for satisfying sybil-fee requirements for `createDataSet()` and the new-data-set path of `addPieces()` via USDFC-backed payments, with FIL burn fallback when `msg.value` is provided ([#249](https://github.com/FilOzone/pdp/pull/249))
+- Added the `USDFC_SYBIL_FEE()` getter to `IPDPVerifier` so typed integrations can read the configured USDFC sybil-fee amount ([#249](https://github.com/FilOzone/pdp/pull/249))
+  - Impact on existing `PDPListener` integrations: none. Listener callbacks and emitted events are unchanged, so existing listeners continue to work without modification unless they want to query the new getter.
 
 ### Documentation
 - Added a per-piece security guarantees section to the design documentation to clarify the probabilistic protection model for data-set proving ([#241](https://github.com/FilOzone/pdp/pull/241))
