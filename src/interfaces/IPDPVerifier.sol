@@ -47,4 +47,7 @@ interface IPDPVerifier is IPDPEvents {
 
     // USDFC sybil fee amount
     function USDFC_SYBIL_FEE() external view returns (uint256);
+
+    // FIL sybil fee amount
+    function FIL_SYBIL_FEE() external pure returns (uint256);
 }

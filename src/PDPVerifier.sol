@@ -874,6 +874,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return block.timestamp >= feeStatus.transitionTime ? feeStatus.nextFeePerTiB : feeStatus.currentFeePerTiB;
     }
 
+    function FIL_SYBIL_FEE() external pure returns (uint256) {
+        return PDPFees.sybilFee();
+    }
+
     // Public getters for packed fee status
     function feePerTiB() public view returns (uint96) {
         return _currentFeePerTiB();
