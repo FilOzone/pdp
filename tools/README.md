@@ -25,7 +25,7 @@ Deploys PDPVerifier to Filecoin mainnet. Accepts optional constructor env overri
 ## Upgrade Scripts
 
 ### upgrade-contract-calibnet.sh
-Generic script for upgrading proxy contracts on Calibration testnet.
+Script for upgrading PDPVerifier proxy contracts.
 
 ### deploy-transfer-ownership-upgrade-calibnet.sh
 Deploys, upgrades, and transfers ownership of PDPVerifier on Calibration testnet.
