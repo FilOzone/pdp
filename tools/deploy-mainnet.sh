@@ -20,13 +20,26 @@ fi
 # Mainnet uses 150 epochs (vs 10 on Calibration testnet)
 CHALLENGE_FINALITY=150
 VERIFIER_INIT_COUNTER=1
+ZERO_ADDRESS="0x0000000000000000000000000000000000000000"
+USDFC_TOKEN_ADDRESS="${USDFC_TOKEN_ADDRESS:-0x80B98d3aa09ffff255c3ba4A241111Ff1262F045}"
+USDFC_SYBIL_FEE="${USDFC_SYBIL_FEE:-100000000000000000}"
+PAYMENTS_CONTRACT_ADDRESS="${PAYMENTS_CONTRACT_ADDRESS:-0x23b1e018F08BB982348b15a86ee926eEBf7F4DAa}"
 
 ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
 echo "Deploying PDP verifier from address $ADDR"
 # Parse the output of forge create to extract the contract address
- 
+
+echo "PDPVerifier constructor args:"
+echo "  initializerVersion: $VERIFIER_INIT_COUNTER"
+echo "  USDFC_TOKEN_ADDRESS: $USDFC_TOKEN_ADDRESS"
+echo "  USDFC_SYBIL_FEE: $USDFC_SYBIL_FEE"
+echo "  PAYMENTS_CONTRACT_ADDRESS: $PAYMENTS_CONTRACT_ADDRESS"
+if [ "$USDFC_TOKEN_ADDRESS" = "$ZERO_ADDRESS" ] || [ "$PAYMENTS_CONTRACT_ADDRESS" = "$ZERO_ADDRESS" ]; then
+  echo "  note: USDFC-backed fee path disabled; deployment will use FIL fallback only"
+fi
+
 NONCE="$(cast nonce --rpc-url "$RPC_URL" "$ADDR")"
-VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314  src/PDPVerifier.sol:PDPVerifier --constructor-args $VERIFIER_INIT_COUNTER | grep "Deployed to" | awk '{print $3}')
+VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314  src/PDPVerifier.sol:PDPVerifier --constructor-args "$VERIFIER_INIT_COUNTER" "$USDFC_TOKEN_ADDRESS" "$USDFC_SYBIL_FEE" "$PAYMENTS_CONTRACT_ADDRESS" | grep "Deployed to" | awk '{print $3}')
 if [ -z "$VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP verifier contract address"
     exit 1

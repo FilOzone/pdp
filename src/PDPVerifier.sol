@@ -199,7 +199,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
-    string public constant VERSION = "3.2.0";
+    string public constant VERSION = "3.3.0";
 
     event ContractUpgraded(string version, address implementation);
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
@@ -872,6 +872,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function _currentFeePerTiB() internal view returns (uint96) {
         return block.timestamp >= feeStatus.transitionTime ? feeStatus.nextFeePerTiB : feeStatus.currentFeePerTiB;
+    }
+
+    function FIL_SYBIL_FEE() external pure returns (uint256) {
+        return PDPFees.sybilFee();
     }
 
     // Public getters for packed fee status
