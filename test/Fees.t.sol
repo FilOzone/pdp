@@ -4,6 +4,10 @@ pragma solidity ^0.8.13;
 import {Test} from "forge-std/Test.sol";
 import {PDPFees} from "../src/Fees.sol";
 
+interface IPDPFeesExternal {
+    function sybilFee() external pure returns (uint256);
+}
+
 contract PDPFeesTest is Test {
     function testCalculateProofFee() public pure {
         uint256 rawSize = PDPFees.TIB_IN_BYTES; // 1 TiB
@@ -44,5 +48,12 @@ contract PDPFeesTest is Test {
     function testSybilFee() public pure {
         uint256 fee = PDPFees.sybilFee();
         assertEq(fee, PDPFees.SYBIL_FEE, "Sybil fee should match the constant");
+    }
+
+    function testSybilFeeIsExternallyReadable() public {
+        address fees = deployCode("Fees.sol:PDPFees");
+        uint256 fee = IPDPFeesExternal(fees).sybilFee();
+
+        assertEq(fee, PDPFees.SYBIL_FEE, "External callers should be able to read the sybil fee");
     }
 }

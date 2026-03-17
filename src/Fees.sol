@@ -30,8 +30,8 @@ library PDPFees {
     }
 
     // sybil fee adds cost to adding state to the pdp verifier contract to prevent
-    // wasteful state growth. 0.1 FIL
-    function sybilFee() internal pure returns (uint256) {
+    // wasteful state growth. Exposed so callers can discover the required payment. 0.1 FIL
+    function sybilFee() public pure returns (uint256) {
         return SYBIL_FEE;
     }
 }
