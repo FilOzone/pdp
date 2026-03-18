@@ -829,6 +829,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         //
         // (add 32 bytes to the `callDataSize` to also account for the `setId` calldata param)
         uint256 refund = calculateAndBurnProofFee(setId);
+        dataSetLastProvenEpoch[setId] = block.number;
 
         {
             address listenerAddr = dataSetListener[setId];
@@ -837,7 +838,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
         }
 
-        dataSetLastProvenEpoch[setId] = block.number;
         emit PossessionProven(setId, challenges);
 
         // Return the overpayment after doing everything else to avoid re-entrancy issues (all state has been updated by this point). If this
