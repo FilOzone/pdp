@@ -34,3 +34,8 @@ jobs:
         run: |
           export PATH="/home/runner/.config/.foundry/bin:$PATH";
           make test;
+
+      - name: Check storage layout
+        run: |
+          export PATH="/home/runner/.config/.foundry/bin:$PATH";
+          make check-layout;

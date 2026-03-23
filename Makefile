@@ -5,6 +5,9 @@ RPC_URL ?=
 KEYSTORE ?=
 PASSWORD ?=
 
+# Generated files
+LAYOUT=src/PDPVerifierLayout.sol
+
 # Default target
 .PHONY: default
 default: build test
