@@ -5,6 +5,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-03-19
+
+This release upgrades PDPVerifier from `v3.1.0` to `v3.2.0` and adds better piece discovery APIs plus support for satisfying sybil-fee requirements via USDFC-backed payments. The existing FIL-based fee path remains supported.
+
+### Deployed
+
+**Mainnet:**
+- PDPVerifier Implementation: [0xC57535dfaF5da0537cBf886313965Cf76b82C24E](https://filecoin.blockscout.com/address/0xC57535dfaF5da0537cBf886313965Cf76b82C24E?tab=contract)
+- PDPVerifier Proxy: [0xBADd0B92C1c71d02E7d520f64c0876538fa2557F](https://filecoin.blockscout.com/address/0xBADd0B92C1c71d02E7d520f64c0876538fa2557F?tab=contract)
+
+**Calibnet:**
+- PDPVerifier Implementation: [0x4c8eDFD417D5dAb87F24905321fC5C5e6d38A6E9](https://filecoin-testnet.blockscout.com/address/0x4c8eDFD417D5dAb87F24905321fC5C5e6d38A6E9?tab=contract)
+- PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://filecoin-testnet.blockscout.com/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C?tab=contract)
+
+### Breaking Changes
+- No breaking changes for existing PDP user flows such as dataset creation, piece management, proof submission, or the existing read/query methods used against `v3.1.0`.
+
+### Added
+- Added `getActivePiecesByCursor()` for cursor-based pagination, allowing clients to page through large data sets in `O(limit)` gas instead of paying the `O(offset)` scan cost of `getActivePieces()` ([#246](https://github.com/FilOzone/pdp/pull/246))
+- Added `findPieceIdsByCid()` to look up active piece IDs by piece CID with cursor-style scanning and bounded result size ([#250](https://github.com/FilOzone/pdp/pull/250))
+- Added support for satisfying sybil-fee requirements for `createDataSet()` and the new-data-set path of `addPieces()` via USDFC-backed payments, with FIL burn fallback when `msg.value` is provided ([#249](https://github.com/FilOzone/pdp/pull/249))
+- Added the `USDFC_SYBIL_FEE()` getter to `IPDPVerifier` so typed integrations can read the configured USDFC sybil-fee amount ([#249](https://github.com/FilOzone/pdp/pull/249))
+- Added the `FIL_SYBIL_FEE()` getter to `IPDPVerifier` so integrations can read the FIL fallback sybil-fee amount directly from the contract ([#256](https://github.com/FilOzone/pdp/pull/256))
+  - Impact on existing `PDPListener` integrations: none. Listener callbacks and emitted events are unchanged, so existing listeners continue to work without modification unless they want to query the new getter.
+
+### Changed
+- Updated `provePossession()` to follow check-effects-interactions ordering by recording the proven epoch before external listener callbacks and refunds ([#242](https://github.com/FilOzone/pdp/pull/242))
+
+### Documentation
+- Added a per-piece security guarantees section to the design documentation to clarify the probabilistic protection model for data-set proving ([#241](https://github.com/FilOzone/pdp/pull/241))
+
 ## [3.1.0] - 2025-10-27
 
 This release addresses an issue discovered during end-to-end testing of PDP v3.0.0. The `schedulePieceDeletions()` function lacked duplicate piece ID validation, which could lead to unexpected behavior when the same piece ID was scheduled for removal multiple times.
