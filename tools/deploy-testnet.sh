@@ -1,5 +1,5 @@
 #! /bin/bash
-# deploy-devnet deploys the PDP verifier and PDP service contracts to calibration net
+# deploy-testnet deploys the PDP verifier and PDP service contracts to base sepolia testnet
 # Assumption: KEYSTORE, PASSWORD, RPC_URL env vars are set to an appropriate eth keystore path and password
 # and to a valid RPC_URL for the devnet.
 # Assumption: forge, cast, jq are in the PATH
@@ -39,7 +39,7 @@ if [ "$USDFC_TOKEN_ADDRESS" = "$ZERO_ADDRESS" ] || [ "$PAYMENTS_CONTRACT_ADDRESS
 fi
 
 NONCE="$(cast nonce --rpc-url "$RPC_URL" "$ADDR")"
-VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314159  src/PDPVerifier.sol:PDPVerifier --constructor-args "$VERIFIER_INIT_COUNTER" "$USDFC_TOKEN_ADDRESS" "$USDFC_SYBIL_FEE" "$PAYMENTS_CONTRACT_ADDRESS" | grep "Deployed to" | awk '{print $3}')
+VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 84532  src/PDPVerifier.sol:PDPVerifier --constructor-args "$VERIFIER_INIT_COUNTER" "$USDFC_TOKEN_ADDRESS" "$USDFC_SYBIL_FEE" "$PAYMENTS_CONTRACT_ADDRESS" | grep "Deployed to" | awk '{print $3}')
 if [ -z "$VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP verifier contract address"
     exit 1
@@ -49,7 +49,7 @@ echo "Deploying PDP verifier proxy"
 NONCE=$(expr $NONCE + "1")
 
 INIT_DATA=$(cast calldata "initialize(uint256)" $CHALLENGE_FINALITY)
-PDP_VERIFIER_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --nonce $NONCE --chain-id 314159 src/ERC1967Proxy.sol:MyERC1967Proxy --constructor-args $VERIFIER_IMPLEMENTATION_ADDRESS $INIT_DATA | grep "Deployed to" | awk '{print $3}')
+PDP_VERIFIER_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast --nonce $NONCE --chain-id 84532 src/ERC1967Proxy.sol:MyERC1967Proxy --constructor-args $VERIFIER_IMPLEMENTATION_ADDRESS $INIT_DATA | grep "Deployed to" | awk '{print $3}')
 echo "PDP verifier deployed at: $PDP_VERIFIER_ADDRESS"
 
 echo ""
