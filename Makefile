@@ -55,3 +55,15 @@ extract-abis:
 contract-size-check:
 	@echo "Checking contract sizes..."
 	bash tools/check-contract-size.sh
+
+# Generate storage layout
+.PHONY: gen
+gen:
+	@echo "Generating storage layout..."
+	bash tools/gen-storage-layout.sh
+
+# Verify storage layout (for CI)
+.PHONY: verify-storage-layout
+verify-storage-layout:
+	@echo "Verifying storage layout..."
+	bash tools/verify-storage-layout.sh

@@ -30,6 +30,12 @@ jobs:
           export PATH="/home/runner/.config/.foundry/bin:$PATH";
           make build;
 
+      - name: Verify storage layout
+        run: |
+          git fetch origin main || true
+          export PATH="/home/runner/.config/.foundry/bin:$PATH";
+          make verify-storage-layout;
+
       - name: Run tests
         run: |
           export PATH="/home/runner/.config/.foundry/bin:$PATH";
