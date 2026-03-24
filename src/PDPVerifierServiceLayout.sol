@@ -28,5 +28,4 @@ abstract contract PDPVerifierServiceLayout {
      * [slot: 15] struct PDPVerifier.FeeStatus feeStatus
      * [slot: 16] struct PDPVerifier.PlannedUpgrade nextUpgrade
      */
-
-    }
+}
