@@ -871,9 +871,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).nextProvingPeriod(
-                setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData
-            );
+            PDPListener(listenerAddr)
+                .nextProvingPeriod(setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData);
         }
         emit NextProvingPeriod(setId, challengeEpoch, dataSetLeafCount[setId]);
     }
