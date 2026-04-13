@@ -66,7 +66,7 @@ $(LAYOUT): tools/generate_storage_layout.sh src/PDPVerifier.sol
 
 # Storage layout JSON (full metadata for upgrade safety checks)
 $(LAYOUT_JSON): src/PDPVerifier.sol
-	forge inspect --json src/PDPVerifier.sol:PDPVerifier storageLayout | jq '[.storage[] | {label, slot, offset, type}]' > $@
+	forge inspect --json src/PDPVerifier.sol:PDPVerifier storageLayout | jq '[.types as $$types | .storage[] | {label, slot, offset, type: ($$types[.type].label // .type)}]' > $@
 
 # Main code generation target
 .PHONY: gen
