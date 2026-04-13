@@ -7,6 +7,7 @@ PASSWORD ?=
 
 # Generated files
 LAYOUT=src/PDPVerifierLayout.sol
+LAYOUT_JSON=src/PDPVerifierLayout.json
 
 # Default target
 .PHONY: default
@@ -63,9 +64,13 @@ contract-size-check:
 $(LAYOUT): tools/generate_storage_layout.sh src/PDPVerifier.sol
 	bash tools/generate_storage_layout.sh src/PDPVerifier.sol:PDPVerifier | forge fmt -r - > $@
 
+# Storage layout JSON (full metadata for upgrade safety checks)
+$(LAYOUT_JSON): src/PDPVerifier.sol
+	forge inspect --json src/PDPVerifier.sol:PDPVerifier storageLayout | jq '[.storage[] | {label, slot, offset, type}]' > $@
+
 # Main code generation target
 .PHONY: gen
-gen: check-tools $(LAYOUT)
+gen: check-tools $(LAYOUT) $(LAYOUT_JSON)
 	@echo "Code generation complete"
 
 # Force regeneration - useful when things are broken
@@ -77,7 +82,7 @@ force-gen: clean-gen gen
 .PHONY: clean-gen
 clean-gen:
 	@echo "Removing generated files..."
-	@rm -f $(LAYOUT)
+	@rm -f $(LAYOUT) $(LAYOUT_JSON)
 	@echo "Generated files removed"
 
 # Check required tools
@@ -88,6 +93,8 @@ check-tools:
 
 # Storage layout validation
 .PHONY: check-layout
-check-layout:
+check-layout: force-gen
+	@echo "Checking if layout files are up to date..."
+	@git diff --exit-code $(LAYOUT) $(LAYOUT_JSON) || (echo "Error: Layout files are stale. Please commit the generated changes." && exit 1)
 	@echo "Checking storage layout for destructive changes..."
 	@bash tools/check_storage_layout.sh

@@ -1,0 +1,104 @@
+[
+  {
+    "label": "challengeFinality",
+    "slot": "0",
+    "offset": 0,
+    "type": "uint256"
+  },
+  {
+    "label": "nextDataSetId",
+    "slot": "1",
+    "offset": 0,
+    "type": "uint64"
+  },
+  {
+    "label": "pieceCids",
+    "slot": "2",
+    "offset": 0,
+    "type": "mapping(uint256 => mapping(uint256 => struct Cids.Cid))"
+  },
+  {
+    "label": "pieceLeafCounts",
+    "slot": "3",
+    "offset": 0,
+    "type": "mapping(uint256 => mapping(uint256 => uint256))"
+  },
+  {
+    "label": "sumTreeCounts",
+    "slot": "4",
+    "offset": 0,
+    "type": "mapping(uint256 => mapping(uint256 => uint256))"
+  },
+  {
+    "label": "nextPieceId",
+    "slot": "5",
+    "offset": 0,
+    "type": "mapping(uint256 => uint256)"
+  },
+  {
+    "label": "dataSetLeafCount",
+    "slot": "6",
+    "offset": 0,
+    "type": "mapping(uint256 => uint256)"
+  },
+  {
+    "label": "nextChallengeEpoch",
+    "slot": "7",
+    "offset": 0,
+    "type": "mapping(uint256 => uint256)"
+  },
+  {
+    "label": "dataSetListener",
+    "slot": "8",
+    "offset": 0,
+    "type": "mapping(uint256 => address)"
+  },
+  {
+    "label": "challengeRange",
+    "slot": "9",
+    "offset": 0,
+    "type": "mapping(uint256 => uint256)"
+  },
+  {
+    "label": "scheduledRemovals",
+    "slot": "10",
+    "offset": 0,
+    "type": "mapping(uint256 => uint256[])"
+  },
+  {
+    "label": "scheduledRemovalsBitmap",
+    "slot": "11",
+    "offset": 0,
+    "type": "mapping(uint256 => mapping(uint256 => uint256))"
+  },
+  {
+    "label": "storageProvider",
+    "slot": "12",
+    "offset": 0,
+    "type": "mapping(uint256 => address)"
+  },
+  {
+    "label": "dataSetProposedStorageProvider",
+    "slot": "13",
+    "offset": 0,
+    "type": "mapping(uint256 => address)"
+  },
+  {
+    "label": "dataSetLastProvenEpoch",
+    "slot": "14",
+    "offset": 0,
+    "type": "mapping(uint256 => uint256)"
+  },
+  {
+    "label": "feeStatus",
+    "slot": "15",
+    "offset": 0,
+    "type": "struct PDPVerifier.FeeStatus"
+  },
+  {
+    "label": "nextUpgrade",
+    "slot": "16",
+    "offset": 0,
+    "type": "struct PDPVerifier.PlannedUpgrade"
+  }
+]
