@@ -66,7 +66,7 @@ $(LAYOUT): tools/generate_storage_layout.sh src/PDPVerifier.sol
 
 # Storage layout JSON (full metadata for upgrade safety checks)
 $(LAYOUT_JSON): src/PDPVerifier.sol
-	forge inspect --json src/PDPVerifier.sol:PDPVerifier storageLayout | jq '[.types as $$types | .storage[] | {label, slot, offset, type: ($$types[.type].label // .type)}]' > $@
+	forge inspect --json src/PDPVerifier.sol:PDPVerifier storageLayout | jq -S '. as $$root | def normalize_type($$id): ($$root.types[$$id]) as $$type | {label: $$type.label, encoding: $$type.encoding, numberOfBytes: $$type.numberOfBytes} + (if $$type.key then {key: normalize_type($$type.key)} else {} end) + (if $$type.value then {value: normalize_type($$type.value)} else {} end) + (if $$type.base then {base: normalize_type($$type.base)} else {} end) + (if $$type.members then {members: [$$type.members[] | {label, slot, offset, type: normalize_type(.type)}]} else {} end); [.storage[] | {label, slot, offset, type: normalize_type(.type)}]' > $@
 
 # Main code generation target
 .PHONY: gen

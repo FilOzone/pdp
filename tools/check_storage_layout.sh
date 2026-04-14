@@ -79,7 +79,7 @@ compare_layouts() {
         local label=$(echo "$entry" | jq -r '.label')
         local slot=$(echo "$entry" | jq -r '.slot')
         local offset=$(echo "$entry" | jq -r '.offset')
-        local type=$(echo "$entry" | jq -r '.type')
+        local type=$(echo "$entry" | jq -cS '.type')
 
         # Try to find an entry with the exact same name (label) in the new file
         local new_entry=$(jq -c --arg l "$label" '.[] | select(.label == $l)' "$new_file")
@@ -93,7 +93,7 @@ compare_layouts() {
         # Extract fields from the new entry
         local new_slot=$(echo "$new_entry" | jq -r '.slot')
         local new_offset=$(echo "$new_entry" | jq -r '.offset')
-        local new_type=$(echo "$new_entry" | jq -r '.type')
+        local new_type=$(echo "$new_entry" | jq -cS '.type')
 
         # Compare fields
         if [ "$slot" != "$new_slot" ]; then
@@ -117,7 +117,7 @@ compare_layouts() {
         local label=$(echo "$entry" | jq -r '.label')
         local slot=$(echo "$entry" | jq -r '.slot')
         local offset=$(echo "$entry" | jq -r '.offset')
-        local type=$(echo "$entry" | jq -r '.type')
+        local type_label=$(echo "$entry" | jq -r '.type.label // .type')
 
         # Check if this is a newly added variable
         local base_match=$(jq -c --arg l "$label" '.[] | select(.label == $l)' "$base_file")
@@ -127,7 +127,7 @@ compare_layouts() {
                 echo "  DESTRUCTIVE: New variable '$label' inserted at slot $slot (must be > $max_base_slot)" >&2
                 errors=$((errors + 1))
             else
-                echo "  Added: '$label' at slot $slot (offset $offset, type $type)"
+                echo "  Added: '$label' at slot $slot (offset $offset, type $type_label)"
             fi
         fi
     done < <(jq -c '.[]' "$new_file")
