@@ -5,6 +5,10 @@ RPC_URL ?=
 KEYSTORE ?=
 PASSWORD ?=
 
+# Generated files
+LAYOUT=src/PDPVerifierLayout.sol
+LAYOUT_JSON=src/PDPVerifierLayout.json
+
 # Default target
 .PHONY: default
 default: build test
@@ -55,3 +59,42 @@ extract-abis:
 contract-size-check:
 	@echo "Checking contract sizes..."
 	bash tools/check-contract-size.sh
+
+# Storage layout generation
+$(LAYOUT): tools/generate_storage_layout.sh src/PDPVerifier.sol
+	bash tools/generate_storage_layout.sh src/PDPVerifier.sol:PDPVerifier | forge fmt -r - > $@
+
+# Storage layout JSON (full metadata for upgrade safety checks)
+$(LAYOUT_JSON): src/PDPVerifier.sol
+	forge inspect --json src/PDPVerifier.sol:PDPVerifier storageLayout | jq -S '. as $$root | def normalize_type($$id): ($$root.types[$$id]) as $$type | {label: $$type.label, encoding: $$type.encoding, numberOfBytes: $$type.numberOfBytes} + (if $$type.key then {key: normalize_type($$type.key)} else {} end) + (if $$type.value then {value: normalize_type($$type.value)} else {} end) + (if $$type.base then {base: normalize_type($$type.base)} else {} end) + (if $$type.members then {members: [$$type.members[] | {label, slot, offset, type: normalize_type(.type)}]} else {} end); [.storage[] | {label, slot, offset, type: normalize_type(.type)}]' > $@
+
+# Main code generation target
+.PHONY: gen
+gen: check-tools $(LAYOUT) $(LAYOUT_JSON)
+	@echo "Code generation complete"
+
+# Force regeneration - useful when things are broken
+.PHONY: force-gen
+force-gen: clean-gen gen
+	@echo "Force regeneration complete"
+
+# Clean generated files only
+.PHONY: clean-gen
+clean-gen:
+	@echo "Removing generated files..."
+	@rm -f $(LAYOUT) $(LAYOUT_JSON)
+	@echo "Generated files removed"
+
+# Check required tools
+.PHONY: check-tools
+check-tools:
+	@which jq >/dev/null 2>&1 || (echo "Error: jq is required but not installed" && exit 1)
+	@which forge >/dev/null 2>&1 || (echo "Error: forge is required but not installed" && exit 1)
+
+# Storage layout validation
+.PHONY: check-layout
+check-layout: force-gen
+	@echo "Checking if layout files are up to date..."
+	@git diff --exit-code $(LAYOUT) $(LAYOUT_JSON) || (echo "Error: Layout files are stale. Please commit the generated changes." && exit 1)
+	@echo "Checking storage layout for destructive changes..."
+	@bash tools/check_storage_layout.sh
