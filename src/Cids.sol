@@ -6,7 +6,7 @@ library Cids {
     // (cidv1)  (raw)  (fr32-sha2-256-trunc254-padded-binary-tree)
     bytes4 public constant COMMP_V2_PREFIX = hex"01559120";
 
-    // A helper struct for events + getter functions to display digests as CommpV2 CIDs
+    // A helper struct for events + getter functions to display digests as PieceCIDv2 CIDs
     struct Cid {
         bytes data;
     }
@@ -27,7 +27,7 @@ library Cids {
         return uint8(cid.data[cid.data.length - 32 - 1]);
     }
 
-    // Checks that CID is CommPv2 and decomposes it into its components.
+    // Checks that CID is PieceCIDv2 and decomposes it into its components.
     // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
     function validateCommPv2(Cid memory cid)
         internal
@@ -69,6 +69,16 @@ library Cids {
         return (1 << (uint256(height) + 5)) - (128 * padding) / 127;
     }
 
+    // rawPieceSize returns the exact raw (pre-Fr32-expansion) byte size of the data behind a
+    // PieceCIDv2. Per FRC-0069, the CID describes a binary tree of 2^height 32-byte leaves
+    // holding Fr32-expanded data (128 Fr32 bytes per 127 raw), and `padding` is the trailing
+    // zero bytes appended to the raw data before that expansion.
+    //   raw size = 2^height * 32 * 127/128 - padding = 2^(height-2) * 127 - padding
+    // Reverts on height < 2 or padding too large for the tree.
+    function rawPieceSize(uint256 padding, uint8 height) internal pure returns (uint256) {
+        return (1 << (uint256(height) - 2)) * 127 - padding;
+    }
+
     // leafCount returns the number of 32b leaves that contain any amount of data
     // Utilize isPaddingExcessive to check if the padding size exceeds the size of the tree
     // If isPaddingExcessive is false, leafCount will never return a zero.
@@ -82,7 +92,14 @@ library Cids {
         return (1 << uint256(height)) - paddingLeafs;
     }
 
-    // Creates a CommPv2 CID from a raw size and hash digest according to FRC-0069.
+    // leafCountToRawSize approximates raw bytes from a data-bearing leaf count (sum of
+    // Cids.leafCount across pieces, fully padded leaves excluded). Use rawPieceSize per piece
+    // for an exact result. Overestimates by up to 31 bytes per piece.
+    function leafCountToRawSize(uint256 leaves) internal pure returns (uint256) {
+        return (leaves * 32 * 127) / 128;
+    }
+
+    // Creates a PieceCIDv2 CID from a raw size and hash digest according to FRC-0069.
     // The CID uses the Raw codec and fr32-sha2-256-trunc254-padded-binary-tree multihash.
     // The digest format is: uvarint padding | uint8 height | 32 byte root data
     function CommPv2FromDigest(uint256 padding, uint8 height, bytes32 digest) internal pure returns (Cids.Cid memory) {

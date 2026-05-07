@@ -34,6 +34,53 @@ contract CidsTest is Test {
         assertEq(Cids.leafCount(128, 30), (1 << 30) - 4);
     }
 
+    function testRawPieceSize() public pure {
+        // Smallest representable piece: height=2, 4 leaves = 128 Fr32 bytes = 127 raw bytes.
+        assertEq(Cids.rawPieceSize(0, 2), 127);
+        // Padding subtracts directly from raw capacity.
+        assertEq(Cids.rawPieceSize(1, 2), 126);
+        assertEq(Cids.rawPieceSize(127, 2), 0);
+
+        // Larger heights: capacity = 2^(height-2) * 127.
+        assertEq(Cids.rawPieceSize(0, 3), 254); // 2 * 127
+        assertEq(Cids.rawPieceSize(0, 5), 8 * 127);
+        assertEq(Cids.rawPieceSize(0, 30), uint256(1 << 28) * 127);
+        assertEq(Cids.rawPieceSize(0, 35), uint256(1 << 33) * 127); // 32 GiB raw
+
+        // FRC-0069 fixtures: padding=504, height=5 -> capacity 8*127=1016, raw=512.
+        assertEq(Cids.rawPieceSize(504, 5), 512);
+    }
+
+    function testLeafCountToRawSize() public pure {
+        // A single leaf is 32 Fr32 bytes; the raw bound rounds down to 31.
+        assertEq(Cids.leafCountToRawSize(0), 0);
+        assertEq(Cids.leafCountToRawSize(1), 31);
+        assertEq(Cids.leafCountToRawSize(4), 127); // matches rawPieceSize(0, 2)
+        assertEq(Cids.leafCountToRawSize(8), 254); // matches rawPieceSize(0, 3)
+
+        // 1 GiB of leaves (2^25 leaves).
+        uint256 leaves1GiB = 1 << 25;
+        assertEq(Cids.leafCountToRawSize(leaves1GiB), (leaves1GiB * 32 * 127) / 128);
+
+        // The bound: leafCountToRawSize(leafCount(p, h)) >= rawPieceSize(p, h) for valid (p, h),
+        // and the gap is at most 31 bytes per piece.
+        uint256 raw = Cids.rawPieceSize(0, 2);
+        uint256 estimate = Cids.leafCountToRawSize(Cids.leafCount(0, 2));
+        assertGe(estimate, raw);
+        assertLe(estimate - raw, 31);
+
+        raw = Cids.rawPieceSize(504, 5);
+        estimate = Cids.leafCountToRawSize(Cids.leafCount(504, 5));
+        assertGe(estimate, raw);
+        assertLe(estimate - raw, 31);
+
+        // Aggregate-data-set scenario: a data set built from N pieces of height 30 (no padding)
+        // has N * 2^30 leaves and N * 2^28 * 127 raw bytes. The estimate is exact when each piece
+        // is fully populated.
+        uint256 leaves = uint256(1 << 30) * 16; // 16 * 32 GiB Fr32 of leaves
+        assertEq(Cids.leafCountToRawSize(leaves), uint256(1 << 28) * 127 * 16);
+    }
+
     function testIsPaddingExcessive() public pure {
         assertEq(Cids.isPaddingExcessive(127, 2), true);
         assertEq(Cids.leafCount(127, 2), 0);
