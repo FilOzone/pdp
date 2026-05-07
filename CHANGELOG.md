@@ -5,6 +5,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-05-07
+
+This release updates the PDP Solidity library with raw-size helper functions for PieceCIDv2 values. `Cids.rawPieceSize(padding, height)` derives the exact original raw byte size from FRC-0069 padding and tree height, while `Cids.leafCountToRawSize(leaves)` converts aggregate data-bearing leaf counts into raw byte estimates for callers that already work with PDP leaf totals. These helpers are useful for indexers, services, and integrations that need to recover or report user-data sizes from piece metadata without reimplementing the PieceCID sizing math.
+
+No PDPVerifier contract upgrade is included in `v3.3.0`; the [deployed Mainnet and Calibnet PDPVerifier contracts remain the `v3.2.0` deployments](https://github.com/FilOzone/pdp/releases/tag/v3.2.0). Integrations that only call the deployed contracts do not need to take action.
+
+### Deployed
+
+No new deployments in this release. The active PDPVerifier addresses remain:
+
+**Mainnet:**
+- PDPVerifier Implementation: [0xC57535dfaF5da0537cBf886313965Cf76b82C24E](https://filecoin.blockscout.com/address/0xC57535dfaF5da0537cBf886313965Cf76b82C24E?tab=contract)
+- PDPVerifier Proxy: [0xBADd0B92C1c71d02E7d520f64c0876538fa2557F](https://filecoin.blockscout.com/address/0xBADd0B92C1c71d02E7d520f64c0876538fa2557F?tab=contract)
+
+**Calibnet:**
+- PDPVerifier Implementation: [0x4c8eDFD417D5dAb87F24905321fC5C5e6d38A6E9](https://filecoin-testnet.blockscout.com/address/0x4c8eDFD417D5dAb87F24905321fC5C5e6d38A6E9?tab=contract)
+- PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://filecoin-testnet.blockscout.com/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C?tab=contract)
+
+### Breaking Changes
+- None. There are no changes to the deployed PDPVerifier contract API or behavior.
+
+### Added
+- Added raw-size helpers to the `Cids` library: `rawPieceSize(padding, height)` for exact per-piece raw sizes and `leafCountToRawSize(leaves)` for aggregate leaf-count estimates, with unit coverage for both behaviors ([#266](https://github.com/FilOzone/pdp/pull/266))
+
+### Maintenance
+- Added additive-only PDPVerifier storage layout generation and CI checks to reduce risk in future contract upgrades ([#263](https://github.com/FilOzone/pdp/pull/263))
+- Added a PDPVerifier upgrade checklist issue template for future rollouts ([#260](https://github.com/FilOzone/pdp/pull/260))
+
 ## [3.2.0] - 2026-03-19
 
 This release upgrades PDPVerifier from `v3.1.0` to `v3.2.0` and adds better piece discovery APIs plus support for satisfying sybil-fee requirements via USDFC-backed payments. The existing FIL-based fee path remains supported.
@@ -290,7 +318,9 @@ For the set of changes since the last tag:
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v3.3.0...HEAD
+[3.3.0]: https://github.com/filozone/pdp/compare/v3.2.0...v3.3.0
+[3.2.0]: https://github.com/filozone/pdp/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/filozone/pdp/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/filozone/pdp/compare/v2.2.1...v3.0.0
 [2.2.1]: https://github.com/filozone/pdp/compare/v2.2.0...v2.2.1
