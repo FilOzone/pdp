@@ -69,10 +69,12 @@ library Cids {
         return (1 << (uint256(height) + 5)) - (128 * padding) / 127;
     }
 
-    // rawPieceSize returns the raw (pre-Fr32-expansion) byte size from a PieceCIDv2's padding
-    // and height. Exact. Tree capacity is 2^(height+5) Fr32 bytes = 2^(height-2) * 127 raw bytes;
-    // padding is expressed in raw bytes. Smallest representable piece is height=2 (127 raw bytes).
-    // Reverts on height < 2 or padding exceeding capacity (Solidity 0.8 underflow check).
+    // rawPieceSize returns the exact raw (pre-Fr32-expansion) byte size of the data behind a
+    // PieceCIDv2. Per FRC-0069, the CID describes a binary tree of 2^height 32-byte leaves
+    // holding Fr32-expanded data (128 Fr32 bytes per 127 raw), and `padding` is the trailing
+    // zero bytes appended to the raw data before that expansion.
+    //   raw size = 2^height * 32 * 127/128 - padding = 2^(height-2) * 127 - padding
+    // Reverts on height < 2 or padding too large for the tree.
     function rawPieceSize(uint256 padding, uint8 height) internal pure returns (uint256) {
         return (1 << (uint256(height) - 2)) * 127 - padding;
     }
@@ -90,9 +92,9 @@ library Cids {
         return (1 << uint256(height)) - paddingLeafs;
     }
 
-    // leafCountToRawSize gives an upper bound on raw bytes from a leaf count. Use rawPieceSize
-    // when padding and height are available; this is for aggregate counts (e.g. data set total).
-    // Overestimates by up to ~31 bytes per piece because per-piece leaf counts round up to 32.
+    // leafCountToRawSize approximates raw bytes from a data-bearing leaf count (sum of
+    // Cids.leafCount across pieces, fully padded leaves excluded). Use rawPieceSize per piece
+    // for an exact result. Overestimates by up to 31 bytes per piece.
     function leafCountToRawSize(uint256 leaves) internal pure returns (uint256) {
         return (leaves * 32 * 127) / 128;
     }
