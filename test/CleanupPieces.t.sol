@@ -64,7 +64,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, address(0), 1, address(0));
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1);
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector, CHALLENGE_FINALITY_DELAY);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -72,7 +72,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
     }
 
     function _createAndPopulate(uint256 numPieces) internal returns (uint256 setId) {
-        setId = pdpVerifier.addPieces{value: PDPFees.sybilFee() + PDPFees.cleanupDeposit()}(
+        setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
         );
         if (numPieces > 0) {
@@ -125,12 +125,12 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
 
     function testZeroPieceDataSetFinalizesAtDelete() public {
         uint256 balanceBefore = address(this).balance;
-        uint256 setId = _createAndPopulate(0); // burns sybilFee, holds cleanupDeposit
+        uint256 setId = _createAndPopulate(0); // holds cleanupDeposit
 
         pdpVerifier.deleteDataSet(setId, empty); // returns cleanupDeposit immediately
 
-        // Net cost is only the sybil fee; the cleanup deposit was returned at delete time
-        assertEq(balanceBefore - address(this).balance, PDPFees.sybilFee(), "net cost is only sybil fee");
+        // Net cost is zero; the cleanup deposit was returned at delete time
+        assertEq(balanceBefore, address(this).balance, "net cost is zero");
         assertFalse(pdpVerifier.dataSetLive(setId));
     }
 
