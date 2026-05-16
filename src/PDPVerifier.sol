@@ -52,6 +52,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
     uint256 public constant NO_PROVEN_EPOCH = 0;
+    // Sentinel written to nextChallengeEpoch[setId] when a data set enters cleanup mode after deleteDataSet.
+    // Real challenge epochs are block numbers bounded well below type(uint256).max.
+    uint256 public constant CLEANUP_MODE_SENTINEL = type(uint256).max;
+    // Number of blocks of SP inactivity after which permissionless deletion/cleanup is allowed (~30 days on mainnet).
+    uint256 public constant INACTIVITY_WINDOW = 86400;
 
     // Upgrade sequence number, used by Initializable.reinitializer
     uint64 private immutable REINITIALIZER_VERSION;
@@ -174,6 +179,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     PlannedUpgrade public nextUpgrade;
 
+    // FIL deposit collected at createDataSet and returned to whoever finalizes cleanup for that data set.
+    mapping(uint256 => uint256) cleanupDeposit;
+    // Block number when deleteDataSet was called, used to gate permissionless cleanupPieces calls.
+    mapping(uint256 => uint256) cleanupModeEpoch;
+
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -199,7 +209,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
-    string public constant VERSION = "3.2.0";
+    string public constant VERSION = "3.3.0";
 
     event ContractUpgraded(string version, address implementation);
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
@@ -228,36 +238,30 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(success, "Burn failed");
     }
 
-    // Validates msg.value meets sybil fee requirement and burns the fee.
-    // Returns the sybil fee amount for later refund calculation.
-    function _validateAndBurnSybilFee() internal returns (uint256 sybilFee) {
-        sybilFee = PDPFees.sybilFee();
-        require(msg.value >= sybilFee, "sybil fee not met");
-        burnFee(sybilFee);
-    }
-
-    // Refunds any amount sent over the sybil fee back to msg.sender.
+    // Handles fee payment for dataset creation: requires cleanup deposit in FIL always,
+    // plus sybil fee either via USDFC (usdfcBurned=true) or FIL. Stores the deposit for setId.
     // Must be called after all state changes to avoid re-entrancy issues.
-    function _refundExcessSybilFee(uint256 sybilFee) internal {
-        if (msg.value > sybilFee) {
-            (bool success,) = msg.sender.call{value: msg.value - sybilFee}("");
-            require(success, "Transfer failed.");
-        }
-    }
+    function _handleFeesWithDeposit(uint256 setId, bool usdfcBurned) internal {
+        uint256 deposit = PDPFees.cleanupDeposit();
+        cleanupDeposit[setId] = deposit;
 
-    function ensureBurned(bool usdfcBurned, bool defaultToFilBurn) internal {
-        if (!usdfcBurned) {
-            if (defaultToFilBurn) {
-                uint256 sybilFee = _validateAndBurnSybilFee();
-                _refundExcessSybilFee(sybilFee);
-            } else {
-                revert UsdfcSybilFeeNotMet();
+        if (usdfcBurned) {
+            // USDFC covers sybil fee; FIL msg.value must cover just the cleanup deposit
+            require(msg.value >= deposit, "cleanup deposit required");
+            uint256 excess = msg.value - deposit;
+            if (excess > 0) {
+                (bool success,) = msg.sender.call{value: excess}("");
+                if (!success) revert FilRefundFailed();
             }
         } else {
-            // USDFC burned, refund any FIL sent
-            if (msg.value > 0) {
-                (bool success,) = msg.sender.call{value: msg.value}("");
-                if (!success) revert FilRefundFailed();
+            // FIL covers both sybil fee and cleanup deposit
+            uint256 required = PDPFees.sybilFee() + deposit;
+            require(msg.value >= required, "insufficient payment");
+            burnFee(PDPFees.sybilFee());
+            uint256 excess = msg.value - required;
+            if (excess > 0) {
+                (bool success,) = msg.sender.call{value: excess}("");
+                require(success, "Transfer failed.");
             }
         }
     }
@@ -279,9 +283,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return nextDataSetId;
     }
 
-    // Returns false if the data set is 1) not yet created 2) deleted
+    // Returns false if the data set is 1) not yet created 2) deleted or in cleanup mode
     function dataSetLive(uint256 setId) public view returns (bool) {
-        return setId < nextDataSetId && storageProvider[setId] != address(0);
+        return setId < nextDataSetId && storageProvider[setId] != address(0)
+            && nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL;
     }
 
     // Returns false if the data set is not live or if the piece id is 1) not yet created 2) deleted
@@ -600,8 +605,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Parameters:
     //   - listenerAddr: Address of PDPListener contract to receive callbacks (can be address(0) for no listener)
     //   - extraData: Arbitrary bytes passed to listener's dataSetCreated callback
-    //   - defaultToFilBurn: If true, falls back to FIL burn when USDFC not available. If false, reverts.
-    //   - msg.value: Must include sybil fee (PDPFees.sybilFee()) when using FIL fallback, excess is refunded
+    //   - msg.value: Must always include cleanup deposit (PDPFees.cleanupDeposit()). When not using USDFC,
+    //     must also include sybil fee (PDPFees.sybilFee()). Excess is refunded.
     //
     // Returns: The newly created data set ID
     //
@@ -610,29 +615,118 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 balanceBefore = _getPaymentsUsdfcBalance();
         uint256 setId = _createDataSet(listenerAddr, extraData);
         uint256 balanceAfter = _getPaymentsUsdfcBalance();
-        bool defaultToFilBurn = msg.value > 0;
-        ensureBurned(balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
+        _handleFeesWithDeposit(setId, balanceAfter >= balanceBefore + USDFC_SYBIL_FEE);
         return setId;
     }
 
-    // Removes a data set. Must be called by the storage provider.
+    // Removes a data set. Normally called by the storage provider; permissionless after INACTIVITY_WINDOW
+    // blocks of SP inactivity (measured from dataSetLastProvenEpoch).
+    //
+    // After this call the data set is no longer live. If pieces remain, cleanup mode is entered and
+    // cleanupPieces must be called to finish storage teardown and collect the cleanup deposit.
+    // For zero-piece data sets, cleanup is finalized immediately and the deposit is paid to msg.sender.
     function deleteDataSet(uint256 setId, bytes calldata extraData) public {
         if (setId >= nextDataSetId) {
             revert("data set id out of bounds");
         }
 
-        require(storageProvider[setId] == msg.sender, "Only the storage provider can delete data sets");
+        address sp = storageProvider[setId];
+        require(sp != address(0), "data set not live");
+        require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, "data set already in cleanup");
+
+        // Permissionless if the SP has been inactive for more than INACTIVITY_WINDOW blocks.
+        if (block.number <= dataSetLastProvenEpoch[setId] + INACTIVITY_WINDOW) {
+            require(msg.sender == sp, "Only the storage provider can delete data sets");
+        }
+
         uint256 deletedLeafCount = dataSetLeafCount[setId];
         dataSetLeafCount[setId] = 0;
-        storageProvider[setId] = address(0);
-        nextChallengeEpoch[setId] = 0;
-        dataSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).dataSetDeleted(setId, deletedLeafCount, extraData);
         }
         emit DataSetDeleted(setId, deletedLeafCount);
+
+        if (nextPieceId[setId] == 0) {
+            // Zero-piece data set: finalize cleanup immediately and pay deposit to caller.
+            _finalizeCleanup(setId);
+        } else {
+            // Pieces remain: enter cleanup mode. storageProvider and dataSetLastProvenEpoch are kept
+            // so cleanupPieces can apply the same permission gate.
+            nextChallengeEpoch[setId] = CLEANUP_MODE_SENTINEL;
+            cleanupModeEpoch[setId] = block.number;
+        }
+    }
+
+    // Releases storage for a deleted data set piece-by-piece. Can only be called after deleteDataSet
+    // has placed the data set in cleanup mode (nextChallengeEpoch == CLEANUP_MODE_SENTINEL), or for
+    // legacy data sets deleted before this feature was added (storageProvider == 0 && nextPieceId > 0).
+    //
+    // The caller gate mirrors deleteDataSet: SP-exclusive within INACTIVITY_WINDOW blocks of deleteDataSet,
+    // permissionless after. Legacy data sets are always permissionless.
+    //
+    // On the final call that clears all pieces, all remaining data set state is also cleared and
+    // the cleanup deposit is transferred to msg.sender. Returns true when cleanup is complete.
+    function cleanupPieces(uint256 setId, uint256 maxPieces) external returns (bool done) {
+        require(maxPieces > 0, "maxPieces must be greater than 0");
+
+        bool isCleanupMode = nextChallengeEpoch[setId] == CLEANUP_MODE_SENTINEL;
+        // Legacy data sets deleted before this feature: storageProvider already zeroed, pieces remain.
+        bool isLegacyDataset = storageProvider[setId] == address(0) && nextPieceId[setId] > 0;
+
+        require(isCleanupMode || isLegacyDataset, "data set not in cleanup mode");
+
+        if (isCleanupMode) {
+            // Same inactivity gate as deleteDataSet, anchored to when cleanup mode was entered.
+            if (block.number <= cleanupModeEpoch[setId] + INACTIVITY_WINDOW) {
+                require(msg.sender == storageProvider[setId], "Only the storage provider can clean up pieces");
+            }
+        }
+
+        uint256 pieceCount = nextPieceId[setId];
+        uint256 toClean = pieceCount < maxPieces ? pieceCount : maxPieces;
+
+        for (uint256 i = 0; i < toClean; i++) {
+            uint256 pieceId = pieceCount - 1 - i;
+            delete pieceCids[setId][pieceId];
+            delete pieceLeafCounts[setId][pieceId];
+            delete sumTreeCounts[setId][pieceId];
+        }
+
+        nextPieceId[setId] = pieceCount - toClean;
+
+        if (nextPieceId[setId] == 0) {
+            _finalizeCleanup(setId);
+            done = true;
+        }
+    }
+
+    // Clears all remaining singleton state for a data set and transfers the cleanup deposit to msg.sender.
+    // Must only be called when nextPieceId[setId] == 0.
+    function _finalizeCleanup(uint256 setId) internal {
+        // Clear scheduled removal bitmap entries before deleting the array.
+        uint256[] storage removals = scheduledRemovals[setId];
+        for (uint256 i = 0; i < removals.length; i++) {
+            delete scheduledRemovalsBitmap[setId][removals[i] >> 8];
+        }
+        delete scheduledRemovals[setId];
+
+        delete dataSetListener[setId];
+        delete dataSetProposedStorageProvider[setId];
+        delete challengeRange[setId];
+        delete storageProvider[setId];
+        delete dataSetLastProvenEpoch[setId];
+        delete nextChallengeEpoch[setId];
+        delete cleanupModeEpoch[setId];
+
+        uint256 deposit = cleanupDeposit[setId];
+        delete cleanupDeposit[setId];
+
+        if (deposit > 0) {
+            (bool success,) = msg.sender.call{value: deposit}("");
+            require(success, "Deposit transfer failed");
+        }
     }
 
     // Appends pieces to a data set. Optionally creates a new data set if setId == 0.
@@ -676,8 +770,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 _addPiecesToDataSet(newSetId, pieceData, addPayload);
             }
 
-            bool defaultToFilBurn = msg.value > 0;
-            ensureBurned(balanceAfter >= balanceBefore + USDFC_SYBIL_FEE, defaultToFilBurn);
+            _handleFeesWithDeposit(newSetId, balanceAfter >= balanceBefore + USDFC_SYBIL_FEE);
             return newSetId;
         } else {
             // Adding to an existing set; no fee should be sent and listenerAddr must be zero
@@ -876,6 +969,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function FIL_SYBIL_FEE() external pure returns (uint256) {
         return PDPFees.sybilFee();
+    }
+
+    function FIL_CLEANUP_DEPOSIT() external pure returns (uint256) {
+        return PDPFees.cleanupDeposit();
     }
 
     // Public getters for packed fee status

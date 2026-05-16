@@ -10,6 +10,9 @@ library PDPFees {
     // 0.1 FIL
     uint256 constant SYBIL_FEE = FIL_TO_ATTO_FIL / 10;
 
+    // 0.1 FIL cleanup bond held per data set, returned to whoever finalizes cleanup
+    uint256 constant CLEANUP_DEPOSIT = FIL_TO_ATTO_FIL / 10;
+
     // Default FIL-based proof fee: 0.00023 FIL per TiB (used for initialization)
     // Based on: 0.00067 USD per TiB / 2.88 USD per FIL = 0.00023 FIL per TiB
     uint96 constant DEFAULT_FEE_PER_TIB = 230000 gwei; // 0.00023 FIL in attoFIL
@@ -33,5 +36,10 @@ library PDPFees {
     // wasteful state growth. 0.1 FIL
     function sybilFee() internal pure returns (uint256) {
         return SYBIL_FEE;
+    }
+
+    // cleanup deposit is held per data set and paid out to whoever completes cleanup. 0.1 FIL
+    function cleanupDeposit() internal pure returns (uint256) {
+        return CLEANUP_DEPOSIT;
     }
 }

@@ -22,3 +22,5 @@ bytes32 constant DATA_SET_PROPOSED_STORAGE_PROVIDER_SLOT = bytes32(uint256(13));
 bytes32 constant DATA_SET_LAST_PROVEN_EPOCH_SLOT = bytes32(uint256(14));
 bytes32 constant FEE_STATUS_SLOT = bytes32(uint256(15));
 bytes32 constant NEXT_UPGRADE_SLOT = bytes32(uint256(16));
+bytes32 constant CLEANUP_DEPOSIT_SLOT = bytes32(uint256(17));
+bytes32 constant CLEANUP_MODE_EPOCH_SLOT = bytes32(uint256(18));
