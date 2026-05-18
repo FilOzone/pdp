@@ -38,17 +38,17 @@ interface PDPListener {
 }
 
 uint256 constant NEW_DATA_SET_SENTINEL = 0;
+// Defaults
+uint256 constant NO_CHALLENGE_SCHEDULED = 0;
+uint256 constant NO_PROVEN_EPOCH = 0;
 
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
-    uint256 public constant NO_CHALLENGE_SCHEDULED = 0;
-    uint256 public constant NO_PROVEN_EPOCH = 0;
-    // Sentinel written to nextChallengeEpoch[setId] when a data set enters cleanup mode after deleteDataSet.
-    // Real challenge epochs are block numbers bounded well below type(uint256).max.
-    uint256 public constant CLEANUP_MODE_SENTINEL = type(uint256).max;
-    // Number of blocks of SP inactivity after which permissionless deletion/cleanup is allowed (~30 days on mainnet).
+
+    // Cleanup
+    uint256 private constant CLEANUP_MODE_SENTINEL = type(uint256).max;
     uint256 public constant INACTIVITY_WINDOW = 86400;
 
     // Upgrade sequence number, used by Initializable.reinitializer
@@ -540,10 +540,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function _createDataSet(address listenerAddr, bytes memory extraData) internal returns (uint256) {
         uint256 setId = nextDataSetId++;
         dataSetLeafCount[setId] = 0;
-        nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED; // initialized on first call to NextProvingPeriod
         storageProvider[setId] = msg.sender;
         dataSetListener[setId] = listenerAddr;
-        dataSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
 
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).dataSetCreated(setId, msg.sender, extraData);

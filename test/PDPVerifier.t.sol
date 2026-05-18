@@ -14,7 +14,7 @@ import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
-import {NEW_DATA_SET_SENTINEL} from "../src/PDPVerifier.sol";
+import {NEW_DATA_SET_SENTINEL, NO_CHALLENGE_SCHEDULED} from "../src/PDPVerifier.sol";
 
 contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     TestingRecordKeeperService listener;
@@ -522,7 +522,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED()); // Not updated on first add anymore
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED); // Not updated on first add anymore
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY);
 
@@ -535,7 +535,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         emit IPDPEvents.PiecesRemoved(setId, toRemove);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); // flush
 
-        assertEq(pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.NO_CHALLENGE_SCHEDULED());
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
         assertEq(pdpVerifier.pieceLive(setId, 0), false);
         assertEq(pdpVerifier.getNextPieceId(setId), 1);
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0);
@@ -830,7 +830,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
     function testNextProvingPeriodWithNoData() public {
         // Get the NO_CHALLENGE_SCHEDULED constant value for clarity
-        uint256 noChallenge = pdpVerifier.NO_CHALLENGE_SCHEDULED();
+        uint256 noChallenge = NO_CHALLENGE_SCHEDULED;
 
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
