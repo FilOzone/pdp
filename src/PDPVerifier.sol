@@ -218,8 +218,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Must be called after all state changes to avoid re-entrancy issues.
     function _handleFeesWithDeposit(uint256 setId) internal {
         uint256 deposit = PDPFees.cleanupDeposit();
-        cleanupDeposit[setId] = deposit;
         require(msg.value >= deposit, "cleanup deposit required");
+        cleanupDeposit[setId] = deposit;
         uint256 excess = msg.value - deposit;
         if (excess > 0) {
             (bool success,) = msg.sender.call{value: excess}("");
