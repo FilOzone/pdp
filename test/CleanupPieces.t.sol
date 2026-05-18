@@ -9,6 +9,7 @@ import {PDPFees} from "../src/Fees.sol";
 import {PDPRecordKeeper} from "../src/SimplePDPService.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {NEW_DATA_SET_SENTINEL} from "../src/PDPVerifier.sol";
+import {PIECE_CIDS_SLOT, PIECE_LEAF_COUNTS_SLOT, SUM_TREE_COUNTS_SLOT} from "../src/PDPVerifierLayout.sol";
 
 contract TestListener is PDPListener, PDPRecordKeeper {
     function storageProviderChanged(uint256, address, address, bytes calldata) external override {}
@@ -84,6 +85,36 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         }
     }
 
+    // Asserts that pieceCids, pieceLeafCounts, and sumTreeCounts are all zero for
+    // every piece slot [0, numPieces) on the given data set.  Reads raw storage via
+    // vm.load so that the check works even after the data set is no longer live.
+    function assertPieceSlotsCleared(uint256 setId, uint256 numPieces) internal view {
+        // Inner mapping root keyed by setId — shared across all pieces.
+        bytes32 cidRoot = keccak256(abi.encode(setId, PIECE_CIDS_SLOT));
+        bytes32 leafRoot = keccak256(abi.encode(setId, PIECE_LEAF_COUNTS_SLOT));
+        bytes32 sumRoot = keccak256(abi.encode(setId, SUM_TREE_COUNTS_SLOT));
+
+        for (uint256 pieceId = 0; pieceId < numPieces; pieceId++) {
+            // pieceCids stores a `bytes` value; for a 36-byte CID the header holds length*2+1=73.
+            // After delete, the header must be zero.
+            assertEq(
+                vm.load(address(pdpVerifier), keccak256(abi.encode(pieceId, cidRoot))),
+                bytes32(0),
+                "pieceCids header not cleared"
+            );
+            assertEq(
+                vm.load(address(pdpVerifier), keccak256(abi.encode(pieceId, leafRoot))),
+                bytes32(0),
+                "pieceLeafCounts not cleared"
+            );
+            assertEq(
+                vm.load(address(pdpVerifier), keccak256(abi.encode(pieceId, sumRoot))),
+                bytes32(0),
+                "sumTreeCounts not cleared"
+            );
+        }
+    }
+
     // --- cleanupPieces basics ---
 
     function testCleanupPiecesIncrementalBatches() public {
@@ -100,6 +131,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         done = pdpVerifier.cleanupPieces(setId, 1);
         assertTrue(done, "should be done after last piece");
         assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "deposit returned on completion");
+        assertPieceSlotsCleared(setId, 3);
     }
 
     function testCleanupPiecesInOneCall() public {
@@ -110,6 +142,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         bool done = pdpVerifier.cleanupPieces(setId, 100);
         assertTrue(done);
         assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit());
+        assertPieceSlotsCleared(setId, 2);
     }
 
     function testCleanupPiecesDepositNotPaidUntilComplete() public {
@@ -158,6 +191,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         // SP succeeds
         bool done = pdpVerifier.cleanupPieces(setId, 10);
         assertTrue(done);
+        assertPieceSlotsCleared(setId, 1);
     }
 
     function testCleanupPermissionlessAfterInactivityWindow() public {
@@ -174,6 +208,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         bool done = pdpVerifier.cleanupPieces(setId, 10);
         assertTrue(done);
         assertEq(anyone.balance - balanceBefore, PDPFees.cleanupDeposit(), "third party receives deposit");
+        assertPieceSlotsCleared(setId, 1);
     }
 
     function testPermissionlessDeleteAfterInactivity() public {
