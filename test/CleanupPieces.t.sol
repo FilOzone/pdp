@@ -242,6 +242,19 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         pdpVerifier.cleanupPieces(setId, 10);
     }
 
+    function testCleanupPiecesFailsOnLiveZeroPieceDataSet() public {
+        uint256 setId = _createAndPopulate(0);
+        // live with no pieces — still not in cleanup mode
+        vm.expectRevert("data set not in cleanup mode");
+        pdpVerifier.cleanupPieces(setId, 10);
+    }
+
+    function testCleanupPiecesFailsOnNonExistentDataSet() public {
+        uint256 nonExistent = pdpVerifier.getNextDataSetId();
+        vm.expectRevert("data set not in cleanup mode");
+        pdpVerifier.cleanupPieces(nonExistent, 10);
+    }
+
     function testCleanupPiecesMaxPiecesZeroReverts() public {
         uint256 setId = _createAndPopulate(1);
         pdpVerifier.deleteDataSet(setId, empty);
