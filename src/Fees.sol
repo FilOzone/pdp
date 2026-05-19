@@ -4,11 +4,8 @@ pragma solidity ^0.8.20;
 /// @title PDPFees
 /// @notice A library for calculating fees for the PDP.
 library PDPFees {
-    uint256 constant ATTO_FIL = 1;
-    uint256 constant FIL_TO_ATTO_FIL = 1e18 * ATTO_FIL;
-
     // 0.1 FIL cleanup bond held per data set, returned to whoever finalizes cleanup
-    uint256 constant CLEANUP_DEPOSIT = FIL_TO_ATTO_FIL / 10;
+    uint256 constant CLEANUP_DEPOSIT = 0.1 ether;
 
     // Default FIL-based proof fee: 0.00023 FIL per TiB (used for initialization)
     // Based on: 0.00067 USD per TiB / 2.88 USD per FIL = 0.00023 FIL per TiB
