@@ -40,4 +40,8 @@ contract PDPFeesTest is Test {
         uint256 expectedFee = 0.00023 ether; // 0.00023 FIL in attoFIL
         assertEq(PDPFees.DEFAULT_FEE_PER_TIB, expectedFee, "DEFAULT_FEE_PER_TIB should be 0.00023 FIL");
     }
+
+    function testCleanupDepositConstant() public pure {
+        assertEq(PDPFees.cleanupDeposit(), 0.1 ether, "FIL_CLEANUP_DEPOSIT should be 0.1 FIL");
+    }
 }
