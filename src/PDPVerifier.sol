@@ -215,7 +215,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Handles fee payment for dataset creation: requires cleanup deposit in FIL. Stores the deposit for setId.
-    // Must be called after all state changes to avoid re-entrancy issues.
+    // FVMPay.pay uses the SEND method (0) which transfers value without executing recipient code, so it cannot re-enter.
     function _handleFeesWithDeposit(uint256 setId) internal {
         uint256 deposit = PDPFees.cleanupDeposit();
         require(msg.value >= deposit, CleanupDepositRequired());
@@ -885,8 +885,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         emit PossessionProven(setId, challenges);
 
-        // Return the overpayment after doing everything else to avoid re-entrancy issues (all state has been updated by this point). If this
-        // call fails, the entire operation reverts.
+        // Return the overpayment. FVMPay.pay uses SEND (method 0) which transfers value without executing recipient code and cannot re-enter.
+        // If the transfer fails, the entire operation reverts.
         if (refund > 0) {
             bool success = FVMPay.pay(msg.sender, refund);
             require(success, "Transfer failed.");
