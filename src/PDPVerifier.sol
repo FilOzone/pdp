@@ -222,8 +222,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         cleanupDeposit[setId] = deposit;
         uint256 excess = msg.value - deposit;
         if (excess > 0) {
-            (bool success,) = msg.sender.call{value: excess}("");
-            require(success, TransferFailed());
+            require(FVMPay.pay(msg.sender, excess), TransferFailed());
         }
     }
 
@@ -673,8 +672,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         delete cleanupDeposit[setId];
 
         if (deposit > 0) {
-            (bool success,) = msg.sender.call{value: deposit}("");
-            require(success, DepositTransferFailed());
+            require(FVMPay.pay(msg.sender, deposit), DepositTransferFailed());
         }
     }
 
