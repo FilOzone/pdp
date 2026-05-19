@@ -172,7 +172,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         pdpVerifier.deleteDataSet(setId, empty);
 
         // After full finalization, cleanupPieces should revert
-        vm.expectRevert("data set not in cleanup mode");
+        vm.expectRevert(PDPVerifier.DataSetNotInCleanupMode.selector);
         pdpVerifier.cleanupPieces(setId, 10);
     }
 
@@ -185,7 +185,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         // block.number (1) <= cleanupModeEpoch + INACTIVITY_WINDOW, so only SP can call
         address notSp = address(0xBEEF);
         vm.prank(notSp);
-        vm.expectRevert("Only the storage provider can clean up pieces");
+        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanCleanupPieces.selector);
         pdpVerifier.cleanupPieces(setId, 10);
 
         // SP succeeds
@@ -229,7 +229,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         // block.number (1) <= lastProvenEpoch(0) + INACTIVITY_WINDOW, so only SP can delete
         address notSp = address(0xBEEF);
         vm.prank(notSp);
-        vm.expectRevert("Only the storage provider can delete data sets");
+        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanDelete.selector);
         pdpVerifier.deleteDataSet(setId, empty);
     }
 
@@ -238,20 +238,20 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
     function testCleanupPiecesRequiresCleanupMode() public {
         uint256 setId = _createAndPopulate(1);
         // data set is still live — cleanupPieces must revert
-        vm.expectRevert("data set not in cleanup mode");
+        vm.expectRevert(PDPVerifier.DataSetNotInCleanupMode.selector);
         pdpVerifier.cleanupPieces(setId, 10);
     }
 
     function testCleanupPiecesFailsOnLiveZeroPieceDataSet() public {
         uint256 setId = _createAndPopulate(0);
         // live with no pieces — still not in cleanup mode
-        vm.expectRevert("data set not in cleanup mode");
+        vm.expectRevert(PDPVerifier.DataSetNotInCleanupMode.selector);
         pdpVerifier.cleanupPieces(setId, 10);
     }
 
     function testCleanupPiecesFailsOnNonExistentDataSet() public {
         uint256 nonExistent = pdpVerifier.getNextDataSetId();
-        vm.expectRevert("data set not in cleanup mode");
+        vm.expectRevert(PDPVerifier.DataSetNotInCleanupMode.selector);
         pdpVerifier.cleanupPieces(nonExistent, 10);
     }
 
@@ -259,7 +259,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         uint256 setId = _createAndPopulate(1);
         pdpVerifier.deleteDataSet(setId, empty);
 
-        vm.expectRevert("maxPieces must be greater than 0");
+        vm.expectRevert(PDPVerifier.MaxPiecesMustBePositive.selector);
         pdpVerifier.cleanupPieces(setId, 0);
     }
 
@@ -267,7 +267,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         uint256 setId = _createAndPopulate(1);
         pdpVerifier.deleteDataSet(setId, empty);
 
-        vm.expectRevert("data set already in cleanup");
+        vm.expectRevert(PDPVerifier.DataSetAlreadyInCleanup.selector);
         pdpVerifier.deleteDataSet(setId, empty);
     }
 

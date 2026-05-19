@@ -218,12 +218,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Must be called after all state changes to avoid re-entrancy issues.
     function _handleFeesWithDeposit(uint256 setId) internal {
         uint256 deposit = PDPFees.cleanupDeposit();
-        require(msg.value >= deposit, "cleanup deposit required");
+        require(msg.value >= deposit, CleanupDepositRequired());
         cleanupDeposit[setId] = deposit;
         uint256 excess = msg.value - deposit;
         if (excess > 0) {
             (bool success,) = msg.sender.call{value: excess}("");
-            require(success, "Transfer failed.");
+            require(success, TransferFailed());
         }
     }
 
@@ -580,12 +580,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         address sp = storageProvider[setId];
-        require(sp != address(0), "data set not live");
-        require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, "data set already in cleanup");
+        require(sp != address(0), DataSetNotLive());
+        require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, DataSetAlreadyInCleanup());
 
         // Permissionless if the SP has been inactive for more than INACTIVITY_WINDOW blocks.
         if (block.number <= dataSetLastProvenEpoch[setId] + INACTIVITY_WINDOW) {
-            require(msg.sender == sp, "Only the storage provider can delete data sets");
+            require(msg.sender == sp, OnlyStorageProviderCanDelete());
         }
 
         uint256 deletedLeafCount = dataSetLeafCount[setId];
@@ -618,18 +618,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // On the final call that clears all pieces, all remaining data set state is also cleared and
     // the cleanup deposit is transferred to msg.sender. Returns true when cleanup is complete.
     function cleanupPieces(uint256 setId, uint256 maxPieces) external returns (bool done) {
-        require(maxPieces > 0, "maxPieces must be greater than 0");
+        require(maxPieces > 0, MaxPiecesMustBePositive());
 
         bool isCleanupMode = nextChallengeEpoch[setId] == CLEANUP_MODE_SENTINEL;
         // Legacy data sets deleted before this feature: storageProvider already zeroed, pieces remain.
         bool isLegacyDataset = storageProvider[setId] == address(0) && nextPieceId[setId] > 0;
 
-        require(isCleanupMode || isLegacyDataset, "data set not in cleanup mode");
+        require(isCleanupMode || isLegacyDataset, DataSetNotInCleanupMode());
 
         if (isCleanupMode) {
             // Same inactivity gate as deleteDataSet, anchored to when cleanup mode was entered.
             if (block.number <= cleanupModeEpoch[setId] + INACTIVITY_WINDOW) {
-                require(msg.sender == storageProvider[setId], "Only the storage provider can clean up pieces");
+                require(msg.sender == storageProvider[setId], OnlyStorageProviderCanCleanupPieces());
             }
         }
 
@@ -674,7 +674,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         if (deposit > 0) {
             (bool success,) = msg.sender.call{value: deposit}("");
-            require(success, "Deposit transfer failed");
+            require(success, DepositTransferFailed());
         }
     }
 
@@ -758,6 +758,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     error IndexedError(uint256 idx, string msg);
+    error CleanupDepositRequired();
+    error DataSetNotLive();
+    error DataSetAlreadyInCleanup();
+    error OnlyStorageProviderCanDelete();
+    error MaxPiecesMustBePositive();
+    error DataSetNotInCleanupMode();
+    error OnlyStorageProviderCanCleanupPieces();
+    error DepositTransferFailed();
+    error TransferFailed();
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
         (uint256 padding, uint8 height,) = Cids.validateCommPv2(piece);

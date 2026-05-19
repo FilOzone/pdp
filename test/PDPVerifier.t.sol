@@ -80,7 +80,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         address nonStorageProvider = address(0x1234);
         // Expect revert when non-storage-provider tries to delete the data set
         vm.prank(nonStorageProvider);
-        vm.expectRevert("Only the storage provider can delete data sets");
+        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanDelete.selector);
         pdpVerifier.deleteDataSet(setId, empty);
 
         // Now verify the storage provider can delete the data set
@@ -94,7 +94,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     // TODO: once we have addPieces we should test deletion of a non empty data set
     function testCannotDeleteNonExistentDataSet() public {
         // Test with data set ID 0 (which is never valid since IDs start from 1)
-        vm.expectRevert("data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.deleteDataSet(0, empty);
 
         // Test with a data set ID that hasn't been created yet
@@ -110,7 +110,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetDeleted(setId, 0);
         pdpVerifier.deleteDataSet(setId, empty);
-        vm.expectRevert("data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.deleteDataSet(setId, empty);
         vm.expectRevert("Data set not live");
         pdpVerifier.getDataSetStorageProvider(setId);
@@ -158,7 +158,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         uint256 required = PDPFees.cleanupDeposit();
 
         // Test 1: Fails when sending not enough for cleanup deposit
-        vm.expectRevert("cleanup deposit required");
+        vm.expectRevert(PDPVerifier.CleanupDepositRequired.selector);
         pdpVerifier.createDataSet{value: required - 1}(address(listener), empty);
 
         // Test 2: Returns funds over the required amount back to the sender
@@ -774,7 +774,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         // Try to delete data set as non-storage-provider
         vm.prank(nonStorageProvider);
-        vm.expectRevert("Only the storage provider can delete data sets");
+        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanDelete.selector);
         pdpVerifier.deleteDataSet(setId, empty);
 
         // Try to schedule removals as non-storage-provider
