@@ -95,12 +95,18 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         bytes32 sumRoot = keccak256(abi.encode(setId, SUM_TREE_COUNTS_SLOT));
 
         for (uint256 pieceId = 0; pieceId < numPieces; pieceId++) {
-            // pieceCids stores a `bytes` value; for a 36-byte CID the header holds length*2+1=73.
+            // pieceCids stores a `bytes` value; for a 39-byte CID the header holds length*2+1=79.
             // After delete, the header must be zero.
+            bytes32 cidHeaderSlot = keccak256(abi.encode(pieceId, cidRoot));
+            assertEq(vm.load(address(pdpVerifier), cidHeaderSlot), bytes32(0), "pieceCids header not cleared");
+            // For a 39-byte CID (long encoding), the payload occupies 2 slots at keccak256(headerSlot).
+            // ceil(39/32) = 2, so both data slots must be zero for storage to be fully reclaimed.
+            bytes32 cidDataSlot = keccak256(abi.encodePacked(cidHeaderSlot));
+            assertEq(vm.load(address(pdpVerifier), cidDataSlot), bytes32(0), "pieceCids data slot 0 not cleared");
             assertEq(
-                vm.load(address(pdpVerifier), keccak256(abi.encode(pieceId, cidRoot))),
+                vm.load(address(pdpVerifier), bytes32(uint256(cidDataSlot) + 1)),
                 bytes32(0),
-                "pieceCids header not cleared"
+                "pieceCids data slot 1 not cleared"
             );
             assertEq(
                 vm.load(address(pdpVerifier), keccak256(abi.encode(pieceId, leafRoot))),
