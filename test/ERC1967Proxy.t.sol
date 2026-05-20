@@ -16,14 +16,11 @@ contract ERC1967ProxyTest is Test {
         // Set owner for testing
         vm.startPrank(owner);
         // Deploy implementation contract
-        implementation = new PDPVerifier(1);
-        newImplementation = new PDPVerifier(2);
+        implementation = new PDPVerifier(1, 150);
+        newImplementation = new PDPVerifier(2, 150);
 
         // Deploy proxy pointing to implementation
-        bytes memory initData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            uint256(150) // challengeFinality
-        );
+        bytes memory initData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
 
         ERC1967Proxy proxyContract = new MyERC1967Proxy(address(implementation), initData);
 

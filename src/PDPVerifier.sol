@@ -107,14 +107,20 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // randomness sampling for challenge generation.
     //
     // The purpose of this delay is to prevent SPs from biasing randomness by running forking attacks.
-    // Given a small enough challengeFinality an SP can run several trials of challenge sampling and
+    // Given a small enough CHALLENGE_FINALITY an SP can run several trials of challenge sampling and
     // fork around samples that don't suit them, grinding the challenge randomness.
     // For the filecoin L1, a safe value is 150 using the same analysis setting 150 epochs between
     // PoRep precommit and PoRep provecommit phases.
     //
     // We keep this around for future portability to a variety of environments with different assumptions
     // behind their challenge randomness sampling methods.
-    uint256 challengeFinality;
+
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    uint256 private immutable CHALLENGE_FINALITY;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    uint256 private constant MAX_FINALITY = 259200; // 90 days of 30-second epochs
+
+    uint256 deprecatedChallengeFinality;
 
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329838769
     uint64 nextDataSetId;
@@ -172,15 +178,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(uint64 _initializerVersion) {
+    constructor(uint64 _initializerVersion, uint256 _challengeFinality) {
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
+        CHALLENGE_FINALITY = _challengeFinality;
     }
 
-    function initialize(uint256 _challengeFinality) public initializer {
+    function initialize() public initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
-        challengeFinality = _challengeFinality;
         nextDataSetId = 1; // Data sets start at 1
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
@@ -228,7 +234,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Returns the current challenge finality value
     function getChallengeFinality() public view returns (uint256) {
-        return challengeFinality;
+        return CHALLENGE_FINALITY;
     }
 
     // Returns the next data set ID
@@ -765,6 +771,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error OnlyStorageProviderCanCleanupPieces();
     error DepositTransferFailed();
     error TransferFailed();
+    error InsufficientChallengeDelay(uint256 epochs, uint256 minDelay);
+    error ExcessiveChallengeDelay(uint256 epochs, uint256 maxDelay);
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
         (uint256 padding, uint8 height,) = Cids.validateCommPv2(piece);
@@ -954,7 +962,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // and can be deleted.  And pieces added in the last proving period must be available for challenging.
     //
     // Additionally this method forces sampling of a new challenge.  It enforces that the new
-    // challenge epoch is at least `challengeFinality` epochs in the future.
+    // challenge epoch is at least `CHALLENGE_FINALITY` epochs in the future.
     //
     // Note that this method can be called at any time but the pdpListener will likely consider it
     // a "fault" or other penalizeable behavior to call this method before calling provePossesion.
@@ -991,8 +999,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // Bring added pieces into proving set
         challengeRange[setId] = dataSetLeafCount[setId];
-        if (challengeEpoch < block.number + challengeFinality) {
-            revert("challenge epoch must be at least challengeFinality epochs in the future");
+        {
+            uint256 delayEpochs = challengeEpoch - block.number;
+            require(delayEpochs >= CHALLENGE_FINALITY, InsufficientChallengeDelay(delayEpochs, CHALLENGE_FINALITY));
+            require(delayEpochs <= MAX_FINALITY, ExcessiveChallengeDelay(delayEpochs, MAX_FINALITY));
         }
         nextChallengeEpoch[setId] = challengeEpoch;
 
