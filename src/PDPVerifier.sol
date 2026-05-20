@@ -117,8 +117,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     uint256 private immutable CHALLENGE_FINALITY;
-    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    uint256 private constant MAX_FINALITY = 259200; // 90 days of 30-second epochs
+    uint256 private constant MAX_FINALITY = INACTIVITY_WINDOW / 2;
 
     uint256 deprecatedChallengeFinality;
 
@@ -179,6 +178,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(uint64 _initializerVersion, uint256 _challengeFinality) {
+        require(_challengeFinality < MAX_FINALITY / 10);
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
         CHALLENGE_FINALITY = _challengeFinality;
