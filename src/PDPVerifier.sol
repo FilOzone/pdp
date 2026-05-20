@@ -118,6 +118,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     uint256 private immutable CHALLENGE_FINALITY;
     uint256 private constant MAX_FINALITY = INACTIVITY_WINDOW / 2;
+    // Block number when this implementation was deployed. Used as the activity baseline for legacy
+    // datasets (dataSetLastProvenEpoch == 0) so they cannot be permissionlessly deleted immediately
+    // after upgrade.
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    uint256 public immutable LEGACY_ACTIVITY_EPOCH;
 
     uint256 deprecatedChallengeFinality;
 
@@ -182,6 +187,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
         CHALLENGE_FINALITY = _challengeFinality;
+        LEGACY_ACTIVITY_EPOCH = block.number;
     }
 
     function initialize() public initializer {
@@ -547,6 +553,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         dataSetLeafCount[setId] = 0;
         storageProvider[setId] = msg.sender;
         dataSetListener[setId] = listenerAddr;
+        dataSetLastProvenEpoch[setId] = block.number;
 
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).dataSetCreated(setId, msg.sender, extraData);
@@ -589,7 +596,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, DataSetAlreadyInCleanup());
 
         // Permissionless if the SP has been inactive for more than INACTIVITY_WINDOW blocks.
-        if (block.number <= dataSetLastProvenEpoch[setId] + INACTIVITY_WINDOW) {
+        // Legacy datasets (lastProvenEpoch == 0) use the implementation deployment block as baseline.
+        uint256 lastActivity = dataSetLastProvenEpoch[setId];
+        if (lastActivity == NO_PROVEN_EPOCH) {
+            lastActivity = LEGACY_ACTIVITY_EPOCH;
+        }
+        if (block.number <= lastActivity + INACTIVITY_WINDOW) {
             require(msg.sender == sp, OnlyStorageProviderCanDelete());
         }
 
@@ -1010,7 +1022,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // It will be re-set after new data is added and nextProvingPeriod is called.
         if (dataSetLeafCount[setId] == 0) {
             emit DataSetEmpty(setId);
-            dataSetLastProvenEpoch[setId] = NO_PROVEN_EPOCH;
+            dataSetLastProvenEpoch[setId] = block.number;
             nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED;
         }
 

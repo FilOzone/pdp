@@ -118,16 +118,21 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
     }
 
     function testDataSetLastProvenEpochOnPieceRemoval() public {
-        // Create a data set and verify initial lastProvenEpoch is 0
+        // Create a data set and verify initial lastProvenEpoch is set to the creation block
+        uint256 creationBlock = vm.getBlockNumber();
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
         );
-        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), 0, "Initial lastProvenEpoch should be 0");
+        assertEq(
+            pdpVerifier.getDataSetLastProvenEpoch(setId),
+            creationBlock,
+            "Initial lastProvenEpoch should be block.number at creation"
+        );
 
         // Mock block.number to 2881
         uint256 blockNumber = 2881;
         vm.roll(blockNumber);
-        // Add a piece and verify lastProvenEpoch is set to current block number
+        // Add a piece and call nextProvingPeriod; lastProvenEpoch is unchanged until provePossession
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
 
@@ -135,8 +140,8 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         pdpVerifier.nextProvingPeriod(setId, blockNumber + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(
             pdpVerifier.getDataSetLastProvenEpoch(setId),
-            blockNumber,
-            "lastProvenEpoch should be set to block.number after first proving period piece"
+            creationBlock,
+            "lastProvenEpoch should remain at creation block until provePossession is called"
         );
 
         // Schedule piece removal
@@ -144,12 +149,12 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         piecesToRemove[0] = 0;
         pdpVerifier.schedulePieceDeletions(setId, piecesToRemove, empty);
 
-        // Call nextProvingPeriod and verify lastProvenEpoch is reset to 0
+        // Call nextProvingPeriod and verify lastProvenEpoch is set to current block after removing last piece
         pdpVerifier.nextProvingPeriod(setId, blockNumber + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(
             pdpVerifier.getDataSetLastProvenEpoch(setId),
-            0,
-            "lastProvenEpoch should be reset to 0 after removing last piece"
+            blockNumber,
+            "lastProvenEpoch should be set to block.number after removing last piece"
         );
     }
 

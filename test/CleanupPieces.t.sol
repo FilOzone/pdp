@@ -220,8 +220,8 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
     function testPermissionlessDeleteAfterInactivity() public {
         uint256 setId = _createAndPopulate(1);
 
-        // Roll past the inactivity window from last proven epoch (NO_PROVEN_EPOCH = 0)
-        vm.roll(pdpVerifier.INACTIVITY_WINDOW() + 1);
+        // Roll past the inactivity window from the dataset creation block
+        vm.roll(block.number + pdpVerifier.INACTIVITY_WINDOW() + 1);
 
         address anyone = address(0xDEAD);
         vm.prank(anyone);

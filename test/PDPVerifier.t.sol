@@ -893,7 +893,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         // Verify the data set is indeed empty
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), 0);
-        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), 0);
+        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), block.number);
     }
 }
 
