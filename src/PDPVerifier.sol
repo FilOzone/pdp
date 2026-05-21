@@ -183,7 +183,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(uint64 _initializerVersion, uint256 _challengeFinality) {
-        require(_challengeFinality < MAX_FINALITY / 10);
+        require(
+            _challengeFinality < MAX_FINALITY / 10, InsufficientChallengeDelay(_challengeFinality, MAX_FINALITY / 10)
+        );
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
         CHALLENGE_FINALITY = _challengeFinality;
