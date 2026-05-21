@@ -832,6 +832,26 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), validEpoch);
     }
 
+    function testNextProvingPeriodChallengeEpochBeforeCurrentBlock() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = makeSamplePiece(2);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        vm.roll(10);
+        uint256 currentBlock = vm.getBlockNumber();
+        uint256 pastEpoch = currentBlock - 1;
+
+        uint256 maxFinality = pdpVerifier.INACTIVITY_WINDOW() / 2;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(PDPVerifier.ExcessiveChallengeDelay.selector, type(uint256).max, maxFinality)
+        );
+        pdpVerifier.nextProvingPeriod(setId, pastEpoch, "");
+    }
+
     function testNextProvingPeriodWithNoData() public {
         // Get the NO_CHALLENGE_SCHEDULED constant value for clarity
         uint256 noChallenge = NO_CHALLENGE_SCHEDULED;

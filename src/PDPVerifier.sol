@@ -1011,7 +1011,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // Bring added pieces into proving set
         challengeRange[setId] = dataSetLeafCount[setId];
-        {
+        unchecked {
             uint256 delayEpochs = challengeEpoch - block.number;
             require(delayEpochs >= CHALLENGE_FINALITY, InsufficientChallengeDelay(delayEpochs, CHALLENGE_FINALITY));
             require(delayEpochs <= MAX_FINALITY, ExcessiveChallengeDelay(delayEpochs, MAX_FINALITY));
