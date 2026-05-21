@@ -41,8 +41,7 @@ contract PDPFeesTest is Test {
         assertEq(PDPFees.DEFAULT_FEE_PER_TIB, expectedFee, "DEFAULT_FEE_PER_TIB should be 0.00023 FIL");
     }
 
-    function testSybilFee() public pure {
-        uint256 fee = PDPFees.sybilFee();
-        assertEq(fee, PDPFees.SYBIL_FEE, "Sybil fee should match the constant");
+    function testCleanupDepositConstant() public pure {
+        assertEq(PDPFees.cleanupDeposit(), 0.1 ether, "FIL_CLEANUP_DEPOSIT should be 0.1 FIL");
     }
 }

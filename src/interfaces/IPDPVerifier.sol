@@ -30,6 +30,7 @@ interface IPDPVerifier is IPDPEvents {
     function claimDataSetStorageProvider(uint256 setId, bytes calldata extraData) external;
     function createDataSet(address listenerAddr, bytes calldata extraData) external payable returns (uint256);
     function deleteDataSet(uint256 setId, bytes calldata extraData) external;
+    function cleanupPieces(uint256 setId, uint256 maxPieces) external returns (bool done);
     function addPieces(uint256 setId, address listenerAddr, Cids.Cid[] calldata pieceData, bytes calldata extraData)
         external
         payable
@@ -45,9 +46,6 @@ interface IPDPVerifier is IPDPEvents {
     // Fee view: returns the current effective fee per TiB
     function feePerTiB() external view returns (uint96);
 
-    // USDFC sybil fee amount
-    function USDFC_SYBIL_FEE() external view returns (uint256);
-
-    // FIL sybil fee amount
-    function FIL_SYBIL_FEE() external pure returns (uint256);
+    // FIL cleanup deposit amount held per data set
+    function FIL_CLEANUP_DEPOSIT() external pure returns (uint256);
 }

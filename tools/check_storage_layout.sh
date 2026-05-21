@@ -85,6 +85,20 @@ compare_layouts() {
         local new_entry=$(jq -c --arg l "$label" '.[] | select(.label == $l)' "$new_file")
 
         if [ -z "$new_entry" ]; then
+            # Allow rename where only change is adding the "deprecated" prefix
+            local deprecated_label="deprecated${label^}"
+            local deprecated_entry
+            deprecated_entry=$(jq -c --arg l "$deprecated_label" '.[] | select(.label == $l)' "$new_file")
+            if [ -n "$deprecated_entry" ]; then
+                local dep_slot dep_offset dep_type
+                dep_slot=$(echo "$deprecated_entry" | jq -r '.slot')
+                dep_offset=$(echo "$deprecated_entry" | jq -r '.offset')
+                dep_type=$(echo "$deprecated_entry" | jq -cS '.type')
+                if [ "$dep_slot" = "$slot" ] && [ "$dep_offset" = "$offset" ] && [ "$dep_type" = "$type" ]; then
+                    echo "  Renamed: '$label' → '$deprecated_label' (slot $slot, deprecated)"
+                    continue
+                fi
+            fi
             echo "  DESTRUCTIVE: Variable '$label' (slot $slot, offset $offset) was removed" >&2
             errors=$((errors + 1))
             continue
@@ -123,7 +137,29 @@ compare_layouts() {
         local base_match=$(jq -c --arg l "$label" '.[] | select(.label == $l)' "$base_file")
 
         if [ -z "$base_match" ]; then
-            if [ "$slot" -le "$max_base_slot" ]; then
+            # Check if this is a permitted deprecated rename (already reported in Check 1)
+            local is_deprecated_rename=false
+            if [[ "$label" == deprecated* ]]; then
+                local original_label="${label#deprecated}"
+                original_label="${original_label,}"
+                local base_original
+                base_original=$(jq -c --arg l "$original_label" '.[] | select(.label == $l)' "$base_file")
+                if [ -n "$base_original" ]; then
+                    local orig_slot orig_offset orig_type entry_offset entry_type
+                    orig_slot=$(echo "$base_original" | jq -r '.slot')
+                    orig_offset=$(echo "$base_original" | jq -r '.offset')
+                    orig_type=$(echo "$base_original" | jq -cS '.type')
+                    entry_offset=$(echo "$entry" | jq -r '.offset')
+                    entry_type=$(echo "$entry" | jq -cS '.type')
+                    if [ "$orig_slot" = "$slot" ] && [ "$orig_offset" = "$entry_offset" ] && [ "$orig_type" = "$entry_type" ]; then
+                        is_deprecated_rename=true
+                    fi
+                fi
+            fi
+
+            if $is_deprecated_rename; then
+                : # already reported in Check 1
+            elif [ "$slot" -le "$max_base_slot" ]; then
                 echo "  DESTRUCTIVE: New variable '$label' inserted at slot $slot (must be > $max_base_slot)" >&2
                 errors=$((errors + 1))
             else

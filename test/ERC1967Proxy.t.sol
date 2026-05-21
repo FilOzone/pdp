@@ -8,6 +8,7 @@ import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 
 contract ERC1967ProxyTest is Test {
     PDPVerifier public implementation;
+    PDPVerifier public newImplementation;
     PDPVerifier public proxy;
     address owner = address(0x123);
 
@@ -15,13 +16,11 @@ contract ERC1967ProxyTest is Test {
         // Set owner for testing
         vm.startPrank(owner);
         // Deploy implementation contract
-        implementation = new PDPVerifier(1, address(0), 1, address(0));
+        implementation = new PDPVerifier(1, 150);
+        newImplementation = new PDPVerifier(2, 150);
 
         // Deploy proxy pointing to implementation
-        bytes memory initData = abi.encodeWithSelector(
-            PDPVerifier.initialize.selector,
-            uint256(150) // challengeFinality
-        );
+        bytes memory initData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
 
         ERC1967Proxy proxyContract = new MyERC1967Proxy(address(implementation), initData);
 
@@ -42,9 +41,6 @@ contract ERC1967ProxyTest is Test {
     function testUpgradeImplementation() public {
         assertImplementationEquals(address(implementation));
 
-        // Deploy new implementation
-        PDPVerifier newImplementation = new PDPVerifier(2, address(0), 1, address(0));
-
         // Announce upgrade first (required by new upgrade pattern)
         PDPVerifier.PlannedUpgrade memory plan;
         plan.nextImplementation = address(newImplementation);
@@ -64,8 +60,6 @@ contract ERC1967ProxyTest is Test {
     }
 
     function testUpgradeFromNonOwnerNoGood() public {
-        PDPVerifier newImplementation = new PDPVerifier(2, address(0), 1, address(0));
-
         // Announce upgrade first (as owner)
         PDPVerifier.PlannedUpgrade memory plan;
         plan.nextImplementation = address(newImplementation);
