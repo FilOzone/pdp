@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 // This file is a generated binding and any changes will be lost.
 // Generated with tools/generate_storage_layout.sh
 
-bytes32 constant CHALLENGE_FINALITY_SLOT = bytes32(uint256(0));
+bytes32 constant DEPRECATED_CHALLENGE_FINALITY_SLOT = bytes32(uint256(0));
 bytes32 constant NEXT_DATA_SET_ID_SLOT = bytes32(uint256(1));
 bytes32 constant PIECE_CIDS_SLOT = bytes32(uint256(2));
 bytes32 constant PIECE_LEAF_COUNTS_SLOT = bytes32(uint256(3));

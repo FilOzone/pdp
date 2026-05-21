@@ -1,6 +1,6 @@
 [
   {
-    "label": "challengeFinality",
+    "label": "deprecatedChallengeFinality",
     "offset": 0,
     "slot": "0",
     "type": {
