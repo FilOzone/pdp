@@ -5,6 +5,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [3.4.0] - TBD
+
+This release upgrades the deployed PDPVerifier contract with data-set cleanup deposits and explicit piece-cleanup finalization. New data sets now hold a 0.1 FIL cleanup deposit that is returned to whoever completes cleanup after deletion, giving storage providers and permissionless cleanup callers a concrete incentive to clear on-chain piece state.
+
+The release notes are drafted before deployment. Final release date, implementation addresses, and verification links should be filled in after the Calibration and Mainnet rollouts execute.
+
+The active Mainnet and Calibnet proxies currently report `VERSION() == "3.2.0"`. The `v3.3.0` release was library-only and did not deploy a PDPVerifier implementation, so this rollout intentionally fast-forwards the deployed contract version from `3.2.0` to `3.4.0`.
+
+### Deployed
+
+**Mainnet:**
+- PDPVerifier Implementation: TBD
+- PDPVerifier Proxy: [0xBADd0B92C1c71d02E7d520f64c0876538fa2557F](https://filecoin.blockscout.com/address/0xBADd0B92C1c71d02E7d520f64c0876538fa2557F?tab=contract)
+
+**Calibnet:**
+- PDPVerifier Implementation: TBD
+- PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://filecoin-testnet.blockscout.com/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C?tab=contract)
+
+### Breaking Changes
+- New data-set creation now requires a 0.1 FIL cleanup deposit. Callers of `createDataSet()` and callers that create a data set through `addPieces(NEW_DATA_SET_SENTINEL, ...)` must send at least `FIL_CLEANUP_DEPOSIT()` in `msg.value`; excess FIL is refunded.
+- The previous USDFC sybil-fee payment path has been removed from PDPVerifier. Integrations should use the FIL cleanup deposit flow instead of relying on USDFC sybil-fee payment getters or payment-contract constructor values.
+- PDPVerifier implementation deployment now uses constructor args `(uint64 initializerVersion, uint256 challengeFinality)`. For this rollout, use `initializerVersion = 3`, `challengeFinality = 10` on Calibration, and `challengeFinality = 150` on Mainnet.
+
+### Added
+- Added a per-data-set cleanup deposit that is collected when a data set is created and paid to the caller who completes cleanup ([#270](https://github.com/FilOzone/pdp/pull/270)).
+- Added `cleanupPieces(setId, maxPieces)` so deleted data sets with remaining pieces can be cleaned incrementally, clearing piece CID, leaf-count, and sum-tree storage before finalizing deletion ([#270](https://github.com/FilOzone/pdp/pull/270)).
+- Added `FIL_CLEANUP_DEPOSIT()` to expose the current cleanup deposit amount to typed integrations ([#270](https://github.com/FilOzone/pdp/pull/270)).
+- Added permissionless deletion and cleanup paths after `INACTIVITY_WINDOW`, while keeping cleanup provider-restricted during the inactivity window ([#270](https://github.com/FilOzone/pdp/pull/270)).
+
+### Changed
+- Moved `challengeFinality` from proxy storage into an immutable implementation constructor value while preserving `getChallengeFinality()` for callers ([#270](https://github.com/FilOzone/pdp/pull/270)).
+- Updated PDPVerifier deploy and upgrade tooling for the new constructor shape and network-specific challenge finality values ([#270](https://github.com/FilOzone/pdp/pull/270)).
+
+### Maintenance
+- Regenerated PDPVerifier storage layout files and updated storage-layout checks to support intentional deprecated-slot renames ([#270](https://github.com/FilOzone/pdp/pull/270)).
+- Added cleanup-focused tests covering incremental cleanup, zero-piece data sets, permissionless cleanup after inactivity, deposit payout timing, and storage-slot clearing ([#270](https://github.com/FilOzone/pdp/pull/270)).
+
 ## [3.3.0] - 2026-05-07
 
 This release updates the PDP Solidity library with raw-size helper functions for PieceCIDv2 values. `Cids.rawPieceSize(padding, height)` derives the exact original raw byte size from FRC-0069 padding and tree height, while `Cids.leafCountToRawSize(leaves)` converts aggregate data-bearing leaf counts into raw byte estimates for callers that already work with PDP leaf totals. These helpers are useful for indexers, services, and integrations that need to recover or report user-data sizes from piece metadata without reimplementing the PieceCID sizing math.
@@ -318,7 +355,8 @@ For the set of changes since the last tag:
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v3.4.0...HEAD
+[3.4.0]: https://github.com/filozone/pdp/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/filozone/pdp/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/filozone/pdp/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/filozone/pdp/compare/v3.0.0...v3.1.0
