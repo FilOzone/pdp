@@ -11,6 +11,8 @@ This release upgrades the deployed PDPVerifier contract with data-set cleanup de
 
 The release notes are drafted before deployment. Final release date, implementation addresses, and verification links should be filled in after the Calibration and Mainnet rollouts execute.
 
+The active Mainnet and Calibnet proxies currently report `VERSION() == "3.2.0"`. The `v3.3.0` release was library-only and did not deploy a PDPVerifier implementation, so this rollout intentionally fast-forwards the deployed contract version from `3.2.0` to `3.4.0`.
+
 ### Deployed
 
 **Mainnet:**
