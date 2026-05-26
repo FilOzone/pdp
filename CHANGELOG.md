@@ -5,23 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-## [3.4.0] - TBD
+## [3.4.0] - 2026-05-28
 
 This release upgrades the deployed PDPVerifier contract with data-set cleanup deposits and explicit piece-cleanup finalization. New data sets now hold a 0.1 FIL cleanup deposit that is returned to whoever completes cleanup after deletion, giving storage providers and permissionless cleanup callers a concrete incentive to clear on-chain piece state.
 
-The release notes are drafted before deployment. Final release date, implementation addresses, and verification links should be filled in after the Calibration and Mainnet rollouts execute.
-
-The active Mainnet and Calibnet proxies currently report `VERSION() == "3.2.0"`. The `v3.3.0` release was library-only and did not deploy a PDPVerifier implementation, so this rollout intentionally fast-forwards the deployed contract version from `3.2.0` to `3.4.0`.
+The active Mainnet and Calibnet proxies now report `VERSION() == "3.4.0"`. The `v3.3.0` release was library-only and did not deploy a PDPVerifier implementation, so this rollout intentionally fast-forwards the deployed contract version from `3.2.0` to `3.4.0`.
 
 ### Deployed
 
+The implementation contracts were deployed from commit [`1370f49f9af958e4e3a1396377035685d55ffdba`](https://github.com/FilOzone/pdp/commit/1370f49f9af958e4e3a1396377035685d55ffdba). The `v3.4.0` release tag may point to a later documentation-only commit that finalizes these release notes.
+
 **Mainnet:**
-- PDPVerifier Implementation: TBD
+- PDPVerifier Implementation: [0xb41A97FEDD2D9497C639A643ec75E56CbCeDe8BA](https://filecoin.blockscout.com/address/0xb41A97FEDD2D9497C639A643ec75E56CbCeDe8BA?tab=contract)
 - PDPVerifier Proxy: [0xBADd0B92C1c71d02E7d520f64c0876538fa2557F](https://filecoin.blockscout.com/address/0xBADd0B92C1c71d02E7d520f64c0876538fa2557F?tab=contract)
+- Proxy Upgrade Transaction: [0x07407b3becb1786e3b4217bfb5774d155d91d9688b0800fe5740689a72c4ed10](https://filecoin.blockscout.com/tx/0x07407b3becb1786e3b4217bfb5774d155d91d9688b0800fe5740689a72c4ed10)
 
 **Calibnet:**
-- PDPVerifier Implementation: TBD
+- PDPVerifier Implementation: [0xd60b90f6D3C42B26a246E141ec701a20Dde2fA61](https://filecoin-testnet.blockscout.com/address/0xd60b90f6D3C42B26a246E141ec701a20Dde2fA61?tab=contract)
 - PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://filecoin-testnet.blockscout.com/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C?tab=contract)
+- Proxy Upgrade Transaction: [0x0bb3597820f0c14a902f6c5672e5b3d1e2f9b7e60174773af07ef6f2762121ad](https://filecoin-testnet.blockscout.com/tx/0x0bb3597820f0c14a902f6c5672e5b3d1e2f9b7e60174773af07ef6f2762121ad)
 
 ### Breaking Changes
 - New data-set creation now requires a 0.1 FIL cleanup deposit. Callers of `createDataSet()` and callers that create a data set through `addPieces(NEW_DATA_SET_SENTINEL, ...)` must send at least `FIL_CLEANUP_DEPOSIT()` in `msg.value`; excess FIL is refunded.
