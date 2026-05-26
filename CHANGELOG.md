@@ -27,6 +27,7 @@ The active Mainnet and Calibnet proxies currently report `VERSION() == "3.2.0"`.
 - New data-set creation now requires a 0.1 FIL cleanup deposit. Callers of `createDataSet()` and callers that create a data set through `addPieces(NEW_DATA_SET_SENTINEL, ...)` must send at least `FIL_CLEANUP_DEPOSIT()` in `msg.value`; excess FIL is refunded.
 - The previous USDFC sybil-fee payment path has been removed from PDPVerifier. Integrations should use the FIL cleanup deposit flow instead of relying on USDFC sybil-fee payment getters or payment-contract constructor values.
 - PDPVerifier implementation deployment now uses constructor args `(uint64 initializerVersion, uint256 challengeFinality)`. For this rollout, use `initializerVersion = 3`, `challengeFinality = 10` on Calibration, and `challengeFinality = 150` on Mainnet.
+- Several data-set liveness failures now revert with custom errors such as `DataSetNotLive()` and `DataSetNotFound()` instead of string revert reasons. Integrations that decode revert data should update their expectations ([#274](https://github.com/FilOzone/pdp/pull/274)).
 
 ### Added
 - Added a per-data-set cleanup deposit that is collected when a data set is created and paid to the caller who completes cleanup ([#270](https://github.com/FilOzone/pdp/pull/270)).
@@ -37,10 +38,12 @@ The active Mainnet and Calibnet proxies currently report `VERSION() == "3.2.0"`.
 ### Changed
 - Moved `challengeFinality` from proxy storage into an immutable implementation constructor value while preserving `getChallengeFinality()` for callers ([#270](https://github.com/FilOzone/pdp/pull/270)).
 - Updated PDPVerifier deploy and upgrade tooling for the new constructor shape and network-specific challenge finality values ([#270](https://github.com/FilOzone/pdp/pull/270)).
+- Kept `getNextPieceId()` and `getNextChallengeEpoch()` readable while a data set is in cleanup mode, allowing cleanup and indexing callers to inspect teardown state after deletion starts ([#274](https://github.com/FilOzone/pdp/pull/274)).
 
 ### Maintenance
 - Regenerated PDPVerifier storage layout files and updated storage-layout checks to support intentional deprecated-slot renames ([#270](https://github.com/FilOzone/pdp/pull/270)).
 - Added cleanup-focused tests covering incremental cleanup, zero-piece data sets, permissionless cleanup after inactivity, deposit payout timing, and storage-slot clearing ([#270](https://github.com/FilOzone/pdp/pull/270)).
+- Removed redundant data-set bounds checks now covered by storage-provider liveness checks, with tests updated for the custom-error revert shape ([#274](https://github.com/FilOzone/pdp/pull/274)).
 
 ## [3.3.0] - 2026-05-07
 
