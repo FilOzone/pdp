@@ -68,7 +68,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetDeleted(setId, 0);
         pdpVerifier.deleteDataSet(setId, empty);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getDataSetLeafCount(setId);
     }
 
@@ -87,7 +87,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetDeleted(setId, 0);
         pdpVerifier.deleteDataSet(setId, empty);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getDataSetStorageProvider(setId);
     }
 
@@ -112,19 +112,19 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         pdpVerifier.deleteDataSet(setId, empty);
         vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.deleteDataSet(setId, empty);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getDataSetStorageProvider(setId);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getDataSetLeafCount(setId);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getDataSetListener(setId);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getPieceCid(setId, 0);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getPieceLeafCount(setId, 0);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotFound.selector);
         pdpVerifier.getNextChallengeEpoch(setId);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.addPieces(setId, address(0), new Cids.Cid[](1), empty);
     }
 
@@ -399,7 +399,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         pieces[0] = makeSamplePiece(64);
         bytes memory addPayload = abi.encode("add", "data");
 
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.addPieces(
             999, // Non-existent data set ID
             address(0),
@@ -490,7 +490,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         // Fail when data set is no longer live
         pieces[0] = makeSamplePiece(1);
         pdpVerifier.deleteDataSet(setId, empty);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
     }
 
@@ -561,7 +561,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         // Attempt to schedule removal of the piece, which should fail
         uint256[] memory pieceIds = new uint256[](1);
         pieceIds[0] = 0;
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
     }
 
@@ -1072,11 +1072,11 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
 
     function testGetActivePiecesNotLive() public {
         // Test with invalid data set ID
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getActivePieces(999, 0, 10);
 
         // Also test getActivePieceCount
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getActivePieceCount(999);
     }
 
@@ -1256,7 +1256,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
     }
 
     function testGetActivePiecesByCursorNotLive() public {
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getActivePiecesByCursor(999, 0, 10);
     }
 
@@ -2496,7 +2496,7 @@ contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
 
     function testFindPieceIdsByCid_InvalidDataSet() public {
         Cids.Cid memory target = makeSamplePiece(64);
-        vm.expectRevert("Data set not live");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.findPieceIdsByCid(999, target, 0, 10);
     }
 
