@@ -98,7 +98,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         pdpVerifier.deleteDataSet(0, empty);
 
         // Test with a data set ID that hasn't been created yet
-        vm.expectRevert("data set id out of bounds");
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.deleteDataSet(999, empty);
     }
 

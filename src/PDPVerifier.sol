@@ -591,10 +591,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // cleanupPieces must be called to finish storage teardown and collect the cleanup deposit.
     // For zero-piece data sets, cleanup is finalized immediately and the deposit is paid to msg.sender.
     function deleteDataSet(uint256 setId, bytes calldata extraData) public {
-        if (setId >= nextDataSetId) {
-            revert("data set id out of bounds");
-        }
-
         address sp = storageProvider[setId];
         require(sp != address(0), DataSetNotLive());
         require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, DataSetAlreadyInCleanup());
