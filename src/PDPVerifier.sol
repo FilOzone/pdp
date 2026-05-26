@@ -248,10 +248,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return nextDataSetId;
     }
 
+    // Returns false if the data set is 1) not yet created 2) fully deleted (cleanup complete)
+    function dataSetExists(uint256 setId) internal view returns (bool) {
+        return storageProvider[setId] != address(0);
+    }
+
     // Returns false if the data set is 1) not yet created 2) deleted or in cleanup mode
     function dataSetLive(uint256 setId) public view returns (bool) {
-        return setId < nextDataSetId && storageProvider[setId] != address(0)
-            && nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL;
+        return dataSetExists(setId) && nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL;
     }
 
     // Returns false if the data set is not live or if the piece id is 1) not yet created 2) deleted
@@ -272,60 +276,60 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Returns the leaf count of a data set
     function getDataSetLeafCount(uint256 setId) public view returns (uint256) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         return dataSetLeafCount[setId];
     }
 
-    // Returns the next piece ID for a data set
+    // Returns the next piece ID for a data set. Also valid during cleanup mode.
     function getNextPieceId(uint256 setId) public view returns (uint256) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetExists(setId), DataSetNotFound());
         return nextPieceId[setId];
     }
 
-    // Returns the next challenge epoch for a data set
+    // Returns the next challenge epoch for a data set. Returns type(uint256).max during cleanup mode.
     function getNextChallengeEpoch(uint256 setId) public view returns (uint256) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetExists(setId), DataSetNotFound());
         return nextChallengeEpoch[setId];
     }
 
     // Returns the listener address for a data set
     function getDataSetListener(uint256 setId) public view returns (address) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         return dataSetListener[setId];
     }
 
     // Returns the storage provider of a data set and the proposed storage provider if any
     function getDataSetStorageProvider(uint256 setId) public view returns (address, address) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         return (storageProvider[setId], dataSetProposedStorageProvider[setId]);
     }
 
     function getDataSetLastProvenEpoch(uint256 setId) public view returns (uint256) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         return dataSetLastProvenEpoch[setId];
     }
 
     // Returns the piece CID for a given data set and piece ID
     function getPieceCid(uint256 setId, uint256 pieceId) public view returns (Cids.Cid memory) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         return pieceCids[setId][pieceId];
     }
 
     // Returns the piece leaf count for a given data set and piece ID
     function getPieceLeafCount(uint256 setId, uint256 pieceId) public view returns (uint256) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         return pieceLeafCounts[setId][pieceId];
     }
 
     // Returns the index of the most recently added leaf that is challengeable in the current proving period
     function getChallengeRange(uint256 setId) public view returns (uint256) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         return challengeRange[setId];
     }
 
     // Returns the piece ids of the pieces scheduled for removal at the start of the next proving period
     function getScheduledRemovals(uint256 setId) public view returns (uint256[] memory) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         uint256[] storage removals = scheduledRemovals[setId];
         uint256[] memory result = new uint256[](removals.length);
         for (uint256 i = 0; i < removals.length; i++) {
@@ -340,7 +344,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @return activeCount The number of active pieces in the data set
      */
     function getActivePieceCount(uint256 setId) public view returns (uint256 activeCount) {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
 
         uint256 maxPieceId = nextPieceId[setId];
         for (uint256 i = 0; i < maxPieceId; i++) {
@@ -366,7 +370,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         view
         returns (Cids.Cid[] memory pieces, uint256[] memory pieceIds, bool hasMore)
     {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
         // Single pass: collect data and check for more
@@ -430,7 +434,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         view
         returns (Cids.Cid[] memory pieces, uint256[] memory pieceIds, bool hasMore)
     {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
         uint256 maxPieceId = nextPieceId[setId];
@@ -494,7 +498,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         view
         returns (uint256[] memory pieceIds)
     {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
         bytes32 targetHash = keccak256(pieceCid.data);
@@ -517,7 +521,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // storage provider proposes new storage provider.  If the storage provider proposes themself delete any outstanding proposed storage provider
     function proposeDataSetStorageProvider(uint256 setId, address newStorageProvider) public {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         address currentStorageProvider = storageProvider[setId];
         require(
             currentStorageProvider == msg.sender, "Only the current storage provider can propose a new storage provider"
@@ -531,7 +535,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function claimDataSetStorageProvider(uint256 setId, bytes calldata extraData) public {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         require(
             dataSetProposedStorageProvider[setId] == msg.sender,
             "Only the proposed storage provider can claim storage provider role"
@@ -587,10 +591,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // cleanupPieces must be called to finish storage teardown and collect the cleanup deposit.
     // For zero-piece data sets, cleanup is finalized immediately and the deposit is paid to msg.sender.
     function deleteDataSet(uint256 setId, bytes calldata extraData) public {
-        if (setId >= nextDataSetId) {
-            revert("data set id out of bounds");
-        }
-
         address sp = storageProvider[setId];
         require(sp != address(0), DataSetNotLive());
         require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, DataSetAlreadyInCleanup());
@@ -740,7 +740,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             require(listenerAddr == address(0), "listener must be zero for existing dataset");
             require(msg.value == 0, "no fee on add to existing dataset");
 
-            require(dataSetLive(setId), "Data set not live");
+            require(dataSetLive(setId), DataSetNotLive());
             require(storageProvider[setId] == msg.sender, "Only the storage provider can add pieces");
 
             return _addPiecesToDataSet(setId, pieceData, extraData);
@@ -775,6 +775,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     error IndexedError(uint256 idx, string msg);
     error CleanupDepositRequired();
+    error DataSetNotFound();
     error DataSetNotLive();
     error DataSetAlreadyInCleanup();
     error OnlyStorageProviderCanDelete();
@@ -808,7 +809,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // schedulePieceDeletions schedules deletion of a batch of pieces from a data set for the start of the next
     // proving period. It must be called by the storage provider.
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
         require(
             pieceIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS,
@@ -1037,7 +1038,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // removes pieces from a data set's state.
     function removePieces(uint256 setId, uint256[] memory pieceIds) internal {
-        require(dataSetLive(setId), "Data set not live");
+        require(dataSetLive(setId), DataSetNotLive());
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < pieceIds.length; i++) {
             totalDelta += removeOnePiece(setId, pieceIds[i]);
