@@ -250,7 +250,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Returns false if the data set is 1) not yet created 2) fully deleted (cleanup complete)
     function dataSetExists(uint256 setId) internal view returns (bool) {
-        return setId < nextDataSetId && storageProvider[setId] != address(0);
+        return storageProvider[setId] != address(0);
     }
 
     // Returns false if the data set is 1) not yet created 2) deleted or in cleanup mode
