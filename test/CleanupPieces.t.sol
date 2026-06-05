@@ -9,7 +9,14 @@ import {PDPFees} from "../src/Fees.sol";
 import {PDPRecordKeeper} from "../src/SimplePDPService.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {NEW_DATA_SET_SENTINEL} from "../src/PDPVerifier.sol";
-import {PIECE_CIDS_SLOT, PIECE_LEAF_COUNTS_SLOT, SUM_TREE_COUNTS_SLOT} from "../src/PDPVerifierLayout.sol";
+import {
+    DATA_SET_LAST_PROVEN_EPOCH_SLOT,
+    DEPRECATED_CLEANUP_MODE_EPOCH_SLOT,
+    PIECE_CIDS_SLOT,
+    PIECE_LEAF_COUNTS_SLOT,
+    STORAGE_PROVIDER_SLOT,
+    SUM_TREE_COUNTS_SLOT
+} from "../src/PDPVerifierLayout.sol";
 
 contract TestListener is PDPListener, PDPRecordKeeper {
     function storageProviderChanged(uint256, address, address, bytes calldata) external override {}
@@ -188,7 +195,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         uint256 setId = _createAndPopulate(1);
         pdpVerifier.deleteDataSet(setId, empty);
 
-        // block.number (1) <= cleanupModeEpoch + INACTIVITY_WINDOW, so only SP can call
+        // block.number (1) <= lastProvenEpoch + INACTIVITY_WINDOW, so only SP can call
         address notSp = address(0xBEEF);
         vm.prank(notSp);
         vm.expectRevert(PDPVerifier.OnlyStorageProviderCanCleanupPieces.selector);
@@ -227,6 +234,115 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         vm.prank(anyone);
         pdpVerifier.deleteDataSet(setId, empty);
         assertFalse(pdpVerifier.dataSetLive(setId));
+    }
+
+    function testAbandonedDataSetDeleteAndCleanupInOneGo() public {
+        uint256 setId = _createAndPopulate(2);
+
+        vm.roll(block.number + pdpVerifier.INACTIVITY_WINDOW() + 1);
+
+        // One third party deletes the abandoned set and cleans up back-to-back,
+        // collecting the deposit as the cleanup bounty.
+        address anyone = address(0xCAFE);
+        vm.deal(anyone, 10 ether);
+        uint256 balanceBefore = anyone.balance;
+
+        vm.startPrank(anyone);
+        pdpVerifier.deleteDataSet(setId, empty);
+        bool done = pdpVerifier.cleanupPieces(setId, 10);
+        vm.stopPrank();
+
+        assertTrue(done);
+        assertEq(anyone.balance - balanceBefore, PDPFees.cleanupDeposit(), "deleter collects cleanup deposit");
+        assertPieceSlotsCleared(setId, 2);
+    }
+
+    function testCleanupGateAnchorsToActivityNotDeleteEpoch() public {
+        uint256 setId = _createAndPopulate(1);
+        uint256 lastProven = pdpVerifier.getDataSetLastProvenEpoch(setId);
+        uint256 window = pdpVerifier.INACTIVITY_WINDOW();
+
+        // SP deletes late in its activity window
+        vm.roll(lastProven + window - 100);
+        pdpVerifier.deleteDataSet(setId, empty);
+
+        // Still within the activity window: third party blocked
+        address anyone = address(0xBEEF);
+        vm.prank(anyone);
+        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanCleanupPieces.selector);
+        pdpVerifier.cleanupPieces(setId, 10);
+
+        // Just past the activity window, well before deleteEpoch + window: the gate
+        // anchors to proving activity, not cleanup-mode entry.
+        vm.roll(lastProven + window + 1);
+        vm.deal(anyone, 10 ether);
+        vm.prank(anyone);
+        bool done = pdpVerifier.cleanupPieces(setId, 10);
+        assertTrue(done);
+        assertPieceSlotsCleared(setId, 1);
+    }
+
+    function testSpDeleteAfterAbandonmentCleanupImmediatelyPermissionless() public {
+        uint256 setId = _createAndPopulate(1);
+
+        vm.roll(block.number + pdpVerifier.INACTIVITY_WINDOW() + 1);
+
+        // SP can always delete, but past the activity window cleanup is open to everyone
+        pdpVerifier.deleteDataSet(setId, empty);
+
+        address anyone = address(0xCAFE);
+        vm.deal(anyone, 10 ether);
+        vm.prank(anyone);
+        assertTrue(pdpVerifier.cleanupPieces(setId, 10));
+        assertPieceSlotsCleared(setId, 1);
+    }
+
+    function testCleanupLegacyActivityBaseline() public {
+        uint256 setId = _createAndPopulate(1);
+
+        // Simulate a data set created before activity tracking: lastProvenEpoch == 0
+        vm.store(address(pdpVerifier), keccak256(abi.encode(setId, DATA_SET_LAST_PROVEN_EPOCH_SLOT)), bytes32(0));
+        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), 0);
+
+        pdpVerifier.deleteDataSet(setId, empty);
+
+        // Gate falls back to LEGACY_ACTIVITY_EPOCH (implementation deployment block)
+        address notSp = address(0xBEEF);
+        vm.prank(notSp);
+        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanCleanupPieces.selector);
+        pdpVerifier.cleanupPieces(setId, 10);
+
+        vm.roll(pdpVerifier.LEGACY_ACTIVITY_EPOCH() + pdpVerifier.INACTIVITY_WINDOW() + 1);
+        vm.deal(notSp, 10 ether);
+        vm.prank(notSp);
+        assertTrue(pdpVerifier.cleanupPieces(setId, 10));
+        assertPieceSlotsCleared(setId, 1);
+    }
+
+    function testLegacyDeletedDataSetCleanupAlwaysPermissionless() public {
+        uint256 setId = _createAndPopulate(2);
+
+        // Simulate a pre-3.4.0 delete: storageProvider zeroed, pieces left behind
+        vm.store(address(pdpVerifier), keccak256(abi.encode(setId, STORAGE_PROVIDER_SLOT)), bytes32(0));
+
+        // No activity-window gate applies; anyone can clean immediately
+        address anyone = address(0xCAFE);
+        vm.deal(anyone, 10 ether);
+        vm.prank(anyone);
+        assertTrue(pdpVerifier.cleanupPieces(setId, 10));
+        assertPieceSlotsCleared(setId, 2);
+    }
+
+    function testFinalizeClearsDeprecatedCleanupModeEpochResidue() public {
+        uint256 setId = _createAndPopulate(1);
+        pdpVerifier.deleteDataSet(setId, empty);
+
+        // Simulate a v3.4.0-era delete that wrote the now-deprecated gate anchor
+        bytes32 slot = keccak256(abi.encode(setId, DEPRECATED_CLEANUP_MODE_EPOCH_SLOT));
+        vm.store(address(pdpVerifier), slot, bytes32(uint256(123)));
+
+        assertTrue(pdpVerifier.cleanupPieces(setId, 10));
+        assertEq(vm.load(address(pdpVerifier), slot), bytes32(0), "deprecated slot cleared");
     }
 
     function testOnlySpCanDeleteWithinInactivityWindow() public {
