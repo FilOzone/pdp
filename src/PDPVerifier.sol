@@ -176,8 +176,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // FIL deposit collected at createDataSet and returned to whoever finalizes cleanup for that data set.
     mapping(uint256 => uint256) cleanupDeposit;
-    // Block number when deleteDataSet was called, used to gate permissionless cleanupPieces calls.
-    mapping(uint256 => uint256) cleanupModeEpoch;
+    // Former cleanupPieces gate anchor; only written by v3.4.0 deleteDataSet.
+    mapping(uint256 => uint256) deprecatedCleanupModeEpoch;
 
     // Methods
 
@@ -584,6 +584,17 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return setId;
     }
 
+    // True within INACTIVITY_WINDOW blocks of the last proving activity. Past that the data set
+    // is abandoned and deleteDataSet/cleanupPieces become permissionless.
+    // Legacy data sets (lastProvenEpoch == 0) use the implementation deployment block as baseline.
+    function _withinActivityWindow(uint256 setId) internal view returns (bool) {
+        uint256 lastActivity = dataSetLastProvenEpoch[setId];
+        if (lastActivity == NO_PROVEN_EPOCH) {
+            lastActivity = LEGACY_ACTIVITY_EPOCH;
+        }
+        return block.number <= lastActivity + INACTIVITY_WINDOW;
+    }
+
     // Removes a data set. Normally called by the storage provider; permissionless after INACTIVITY_WINDOW
     // blocks of SP inactivity (measured from dataSetLastProvenEpoch).
     //
@@ -595,13 +606,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(sp != address(0), DataSetNotLive());
         require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, DataSetAlreadyInCleanup());
 
-        // Permissionless if the SP has been inactive for more than INACTIVITY_WINDOW blocks.
-        // Legacy datasets (lastProvenEpoch == 0) use the implementation deployment block as baseline.
-        uint256 lastActivity = dataSetLastProvenEpoch[setId];
-        if (lastActivity == NO_PROVEN_EPOCH) {
-            lastActivity = LEGACY_ACTIVITY_EPOCH;
-        }
-        if (block.number <= lastActivity + INACTIVITY_WINDOW) {
+        if (_withinActivityWindow(setId)) {
             require(msg.sender == sp, OnlyStorageProviderCanDelete());
         }
 
@@ -619,9 +624,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             _finalizeCleanup(setId);
         } else {
             // Pieces remain: enter cleanup mode. storageProvider and dataSetLastProvenEpoch are kept
-            // so cleanupPieces can apply the same permission gate.
+            // so cleanupPieces can apply the same permission gate; the latter cannot advance here
+            // since provePossession, nextProvingPeriod and addPieces all revert on a deleted set.
             nextChallengeEpoch[setId] = CLEANUP_MODE_SENTINEL;
-            cleanupModeEpoch[setId] = block.number;
         }
     }
 
@@ -629,8 +634,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // has placed the data set in cleanup mode (nextChallengeEpoch == CLEANUP_MODE_SENTINEL), or for
     // legacy data sets deleted before this feature was added (storageProvider == 0 && nextPieceId > 0).
     //
-    // The caller gate mirrors deleteDataSet: SP-exclusive within INACTIVITY_WINDOW blocks of deleteDataSet,
-    // permissionless after. Legacy data sets are always permissionless.
+    // The caller gate is identical to deleteDataSet: SP-exclusive within INACTIVITY_WINDOW blocks of
+    // the last proving activity, permissionless after, so an abandoned data set can be deleted and
+    // cleaned up back-to-back by one caller. Legacy data sets are always permissionless.
     //
     // On the final call that clears all pieces, all remaining data set state is also cleared and
     // the cleanup deposit is transferred to msg.sender. Returns true when cleanup is complete.
@@ -643,11 +649,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         require(isCleanupMode || isLegacyDataset, DataSetNotInCleanupMode());
 
-        if (isCleanupMode) {
-            // Same inactivity gate as deleteDataSet, anchored to when cleanup mode was entered.
-            if (block.number <= cleanupModeEpoch[setId] + INACTIVITY_WINDOW) {
-                require(msg.sender == storageProvider[setId], OnlyStorageProviderCanCleanupPieces());
-            }
+        if (isCleanupMode && _withinActivityWindow(setId)) {
+            require(msg.sender == storageProvider[setId], OnlyStorageProviderCanCleanupPieces());
         }
 
         uint256 pieceCount = nextPieceId[setId];
@@ -684,7 +687,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         delete storageProvider[setId];
         delete dataSetLastProvenEpoch[setId];
         delete nextChallengeEpoch[setId];
-        delete cleanupModeEpoch[setId];
+        // Clears residue from v3.4.0-era deletes.
+        delete deprecatedCleanupModeEpoch[setId];
 
         uint256 deposit = cleanupDeposit[setId];
         delete cleanupDeposit[setId];

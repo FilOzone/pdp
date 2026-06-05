@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Fixed
+- `cleanupPieces()` now uses the same permission gate as `deleteDataSet()`, anchored to last proving activity instead of cleanup-mode entry. The abandonment path previously required two full `INACTIVITY_WINDOW` periods (~60 days); a permissionless deleter can now clean up and collect the deposit immediately. An SP deleting after exceeding the inactivity window no longer gets an exclusive cleanup period (the data set was already permissionlessly deletable). The unused `cleanupModeEpoch` storage is deprecated in place.
+
 ## [3.4.0] - 2026-05-28
 
 This release upgrades the deployed PDPVerifier contract with data-set cleanup deposits and explicit piece-cleanup finalization. New data sets now hold a 0.1 FIL cleanup deposit that is returned to whoever completes cleanup after deletion, giving storage providers and permissionless cleanup callers a concrete incentive to clear on-chain piece state.

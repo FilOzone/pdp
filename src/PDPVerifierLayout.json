@@ -431,7 +431,7 @@
     }
   },
   {
-    "label": "cleanupModeEpoch",
+    "label": "deprecatedCleanupModeEpoch",
     "offset": 0,
     "slot": "18",
     "type": {
