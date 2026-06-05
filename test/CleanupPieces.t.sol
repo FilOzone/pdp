@@ -236,6 +236,18 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         assertFalse(pdpVerifier.dataSetLive(setId));
     }
 
+    function testSpCanDeleteAndCleanupInSameBlock() public {
+        uint256 setId = _createAndPopulate(2);
+
+        uint256 balanceBefore = address(this).balance;
+        pdpVerifier.deleteDataSet(setId, empty);
+        bool done = pdpVerifier.cleanupPieces(setId, 10);
+
+        assertTrue(done);
+        assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "SP receives deposit in same block");
+        assertPieceSlotsCleared(setId, 2);
+    }
+
     function testAbandonedDataSetDeleteAndCleanupInOneGo() public {
         uint256 setId = _createAndPopulate(2);
 
