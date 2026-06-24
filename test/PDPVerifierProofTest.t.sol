@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
+import {BURN_ADDRESS} from "fvm-solidity/FVMActors.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
@@ -51,7 +52,16 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
             challenges[i] = IPDPTypes.PieceIdAndOffset(0, 0);
         }
         emit IPDPEvents.PossessionProven(setId, challenges);
+        uint256 proofFee = pdpVerifier.calculateProofFee(setId);
+        uint256 burnBefore = BURN_ADDRESS.balance;
+        uint256 verifierBefore = address(pdpVerifier).balance;
         pdpVerifier.provePossession{value: 1e18}(setId, proofs);
+        assertEq(BURN_ADDRESS.balance - burnBefore, proofFee, "Proof fee burned to burn address");
+        assertEq(
+            address(pdpVerifier).balance,
+            verifierBefore,
+            "Verifier balance unchanged: deposit held, fee burned, overpay refunded"
+        );
 
         // Verify the next challenge is in a subsequent epoch.
         // Next challenge unchanged by prove
@@ -105,7 +115,17 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
 
         // Test 2: Sending more than the required fee
         RANDOMNESS_PRECOMPILE.mockBeaconRandomness(challengeEpoch, challengeEpoch);
+        uint256 burnBefore = BURN_ADDRESS.balance;
+        uint256 senderBefore = sender.balance;
+        uint256 verifierBefore = address(pdpVerifier).balance;
         pdpVerifier.provePossession{value: correctFee + 1}(setId, proofs);
+        assertEq(BURN_ADDRESS.balance - burnBefore, correctFee, "Proof fee burned to burn address");
+        assertEq(senderBefore - sender.balance, correctFee, "Sender net loss equals fee; 1 wei overpay refunded");
+        assertEq(
+            address(pdpVerifier).balance,
+            verifierBefore,
+            "Verifier balance unchanged: deposit held, fee burned, overpay refunded"
+        );
 
         // Verify that the proof was accepted
         assertEq(
