@@ -139,8 +139,6 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         assertEq(3, pdpVerifier.getNextDataSetId(), "Next data set ID should be 3");
     }
 
-    receive() external payable {}
-
     function testDataSetIdsStartFromOne() public {
         // Test that data set IDs start from 1, not 0
         assertEq(pdpVerifier.getNextDataSetId(), 1, "Next data set ID should start at 1");
@@ -337,8 +335,6 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
     PDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
     bytes empty = new bytes(0);
-
-    receive() external payable {}
 
     function setUp() public override {
         super.setUp();
@@ -1984,8 +1980,6 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         vm.deal(address(pdpVerifierImpl), 100 ether);
     }
 
-    receive() external payable {}
-
     function testCompleteProvingPeriodE2E() public {
         // Step 1: Create a data set
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
@@ -2236,8 +2230,6 @@ contract PDPVerifierFeeTest is MockFVMTest, PieceHelper, ProofBuilderHelper {
         vm.fee(1 gwei);
         listener = new TestingRecordKeeperService();
     }
-
-    receive() external payable {}
 
     function testUpdateProofFeeWithDelayAutoApply() public {
         uint256 current = pdpVerifier.feePerTiB();

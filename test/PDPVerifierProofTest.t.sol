@@ -63,8 +63,6 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY);
     }
 
-    receive() external payable {}
-
     event Debug(string message, uint256 value);
 
     function testProveWithDifferentFeeAmounts() public {

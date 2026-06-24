@@ -68,8 +68,6 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
     TestListener listener;
     bytes empty = new bytes(0);
 
-    receive() external payable {}
-
     function setUp() public override {
         super.setUp();
         PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
