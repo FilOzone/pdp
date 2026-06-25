@@ -68,8 +68,6 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
     TestListener listener;
     bytes empty = new bytes(0);
 
-    receive() external payable {}
-
     function setUp() public override {
         super.setUp();
         PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
@@ -177,6 +175,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
 
         // Net cost is zero; the cleanup deposit was returned at delete time
         assertEq(balanceBefore, address(this).balance, "net cost is zero");
+        assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after deposit returned");
         assertFalse(pdpVerifier.dataSetLive(setId));
     }
 
@@ -202,8 +201,11 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         pdpVerifier.cleanupPieces(setId, 10);
 
         // SP succeeds
+        uint256 balanceBefore = address(this).balance;
         bool done = pdpVerifier.cleanupPieces(setId, 10);
         assertTrue(done);
+        assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "SP receives deposit");
+        assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after cleanup");
         assertPieceSlotsCleared(setId, 1);
     }
 
@@ -221,6 +223,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         bool done = pdpVerifier.cleanupPieces(setId, 10);
         assertTrue(done);
         assertEq(anyone.balance - balanceBefore, PDPFees.cleanupDeposit(), "third party receives deposit");
+        assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after cleanup");
         assertPieceSlotsCleared(setId, 1);
     }
 
@@ -245,6 +248,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
 
         assertTrue(done);
         assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "SP receives deposit in same block");
+        assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after cleanup");
         assertPieceSlotsCleared(setId, 2);
     }
 
@@ -266,6 +270,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
 
         assertTrue(done);
         assertEq(anyone.balance - balanceBefore, PDPFees.cleanupDeposit(), "deleter collects cleanup deposit");
+        assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after cleanup");
         assertPieceSlotsCleared(setId, 2);
     }
 

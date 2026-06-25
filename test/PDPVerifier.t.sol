@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
+import {BURN_ADDRESS} from "fvm-solidity/FVMActors.sol";
 import {Test} from "forge-std/Test.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {Cids} from "../src/Cids.sol";
@@ -62,12 +63,21 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     }
 
     function testDeleteDataSet() public {
+        uint256 deposit = PDPFees.cleanupDeposit();
+        uint256 callerBefore = address(this).balance;
+
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
-        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.cleanupDeposit()}(address(listener), empty);
+        uint256 setId = pdpVerifier.createDataSet{value: deposit}(address(listener), empty);
+        assertEq(address(pdpVerifier).balance, deposit, "Verifier holds deposit after create");
+
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetDeleted(setId, 0);
         pdpVerifier.deleteDataSet(setId, empty);
+
+        assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after delete");
+        assertEq(address(this).balance, callerBefore, "Caller recovered deposit");
+
         vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
         pdpVerifier.getDataSetLeafCount(setId);
     }
@@ -139,8 +149,6 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         assertEq(3, pdpVerifier.getNextDataSetId(), "Next data set ID should be 3");
     }
 
-    receive() external payable {}
-
     function testDataSetIdsStartFromOne() public {
         // Test that data set IDs start from 1, not 0
         assertEq(pdpVerifier.getNextDataSetId(), 1, "Next data set ID should start at 1");
@@ -170,6 +178,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         uint256 finalBalance = address(this).balance;
         uint256 refundedAmount = finalBalance - (initialBalance - required - excessAmount);
         assertEq(refundedAmount, excessAmount, "Excess amount should be refunded");
+        assertEq(address(pdpVerifier).balance, required, "Verifier holds exactly the cleanup deposit");
 
         // Additional checks to ensure the data set was created correctly
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0, "Data set leaf count should be 0");
@@ -337,8 +346,6 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
     PDPVerifier pdpVerifier;
     TestingRecordKeeperService listener;
     bytes empty = new bytes(0);
-
-    receive() external payable {}
 
     function setUp() public override {
         super.setUp();
@@ -1984,8 +1991,6 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         vm.deal(address(pdpVerifierImpl), 100 ether);
     }
 
-    receive() external payable {}
-
     function testCompleteProvingPeriodE2E() public {
         // Step 1: Create a data set
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
@@ -2069,7 +2074,16 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
             pdpVerifier.getNextChallengeEpoch(setId), pdpVerifier.getNextChallengeEpoch(setId)
         );
 
+        uint256 proofFee = pdpVerifier.calculateProofFee(setId);
+        uint256 burnBefore = BURN_ADDRESS.balance;
+        uint256 verifierBefore = address(pdpVerifier).balance;
         pdpVerifier.provePossession{value: 1e18}(setId, proofsProofPeriod1);
+        assertEq(BURN_ADDRESS.balance - burnBefore, proofFee, "Proof fee burned to burn address");
+        assertEq(
+            address(pdpVerifier).balance,
+            verifierBefore,
+            "Verifier balance unchanged: deposit held, fee burned, overpay refunded"
+        );
 
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
         // CHECK: leaf counts
@@ -2236,8 +2250,6 @@ contract PDPVerifierFeeTest is MockFVMTest, PieceHelper, ProofBuilderHelper {
         vm.fee(1 gwei);
         listener = new TestingRecordKeeperService();
     }
-
-    receive() external payable {}
 
     function testUpdateProofFeeWithDelayAutoApply() public {
         uint256 current = pdpVerifier.feePerTiB();
