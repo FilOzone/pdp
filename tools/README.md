@@ -36,6 +36,10 @@ Upgrades a PDPVerifier proxy to a new implementation. For legacy deployments suc
 ### announce-planned-upgrade.sh
 Announces a planned PDPVerifier upgrade on deployments that support the two-step flow. The script accepts either `RPC_URL` or `ETH_RPC_URL`. If the proxy owner is a contract such as a SAFE multisig, the script prints the transaction target and calldata instead of broadcasting directly.
 
+Set exactly one of:
+- `UPGRADE_DELAY_EPOCHS` (preferred): a relative delay, passed to `announceUpgradePlan()`. The delay starts when the announcement transaction executes, so Safe signing time does not consume the requested notice window; read `nextUpgrade()` afterward to record the exact `afterEpoch`.
+- `AFTER_EPOCH` (deprecated): an absolute target epoch, passed to `announcePlannedUpgrade()`, for deployments predating `announceUpgradePlan()`. A past or near-term `AFTER_EPOCH` is clamped up to the next epoch rather than reverting.
+
 ## PDP Interaction Scripts
 We have some scripts for interacting with the PDP service contract through ETH RPC API: 
 - add.sh

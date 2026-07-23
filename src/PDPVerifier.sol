@@ -172,6 +172,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint96 afterEpoch;
     }
 
+    // Pending upgrade announcement
     PlannedUpgrade public nextUpgrade;
 
     // FIL deposit collected at createDataSet and returned to whoever finalizes cleanup for that data set.
@@ -206,11 +207,34 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
-    function announcePlannedUpgrade(PlannedUpgrade calldata plannedUpgrade) external onlyOwner {
-        require(plannedUpgrade.nextImplementation.code.length > 3000);
-        require(plannedUpgrade.afterEpoch > block.number);
-        nextUpgrade = plannedUpgrade;
-        emit UpgradeAnnounced(plannedUpgrade);
+    /// @notice Announce a planned upgrade
+    /// @dev Can only be called by the contract owner
+    /// @param nextImplementation Address of the new implementation contract
+    /// @param delayEpochs Number of epochs from now before the upgrade may occur
+    function announceUpgradePlan(address nextImplementation, uint96 delayEpochs) external {
+        if (delayEpochs == 0) {
+            delayEpochs = 1;
+        }
+        _announcePlannedUpgrade(nextImplementation, uint96(block.number) + delayEpochs);
+    }
+
+    /// @notice Announce a planned upgrade
+    /// @dev Can only be called by the contract owner
+    /// @param plannedUpgrade The planned upgrade details
+    /// @custom:deprecated Use announceUpgradePlan instead
+    function announcePlannedUpgrade(PlannedUpgrade calldata plannedUpgrade) external {
+        uint96 minAfterEpoch = uint96(block.number + 1);
+        _announcePlannedUpgrade(
+            plannedUpgrade.nextImplementation,
+            plannedUpgrade.afterEpoch < minAfterEpoch ? minAfterEpoch : plannedUpgrade.afterEpoch
+        );
+    }
+
+    function _announcePlannedUpgrade(address nextImplementation, uint96 afterEpoch) internal onlyOwner {
+        require(nextImplementation.code.length > 3000, InvalidImplementation(nextImplementation));
+        nextUpgrade.nextImplementation = nextImplementation;
+        nextUpgrade.afterEpoch = afterEpoch;
+        emit UpgradeAnnounced(nextUpgrade);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
@@ -790,6 +814,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error TransferFailed();
     error InsufficientChallengeDelay(uint256 epochs, uint256 minDelay);
     error ExcessiveChallengeDelay(uint256 epochs, uint256 maxDelay);
+    error InvalidImplementation(address implementation);
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
         (uint256 padding, uint8 height,) = Cids.validateCommPv2(piece);
