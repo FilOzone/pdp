@@ -63,6 +63,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event DataSetEmpty(uint256 indexed setId);
 
     event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
+    event PiecesScheduledForRemoval(uint256 indexed setId, uint256[] pieceIds);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
 
     event ProofFeePaid(uint256 indexed setId, uint256 fee);
@@ -840,6 +841,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             // Add to scheduled removals array
             scheduledRemovals[setId].push(pieceId);
         }
+
+        emit PiecesScheduledForRemoval(setId, pieceIds);
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
