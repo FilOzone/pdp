@@ -24,7 +24,8 @@ This issue is the full operational checklist for the rollout and release closeou
 - Use this single issue to track the full rollout across both networks.
 - Confirm the live proxy `VERSION()` separately; it may lag the release baseline if recent releases did not include a PDPVerifier deployment.
 - Record major steps as issue comments as you go rather than editing every detail into the top post.
-- The live proxy already supports planned upgrades, first use `tools/announce-planned-upgrade.sh`, wait until the announced epoch, then use `tools/upgrade.sh`.
+- Use `UPGRADE_DELAY_EPOCHS` for the normal planned-upgrade flow once the live proxy exposes `announceUpgradePlan()`. Use the temporary `AFTER_EPOCH` bootstrap path only when upgrading from an implementation that predates that method; removal is tracked in #288.
+- After an announcement executes, read and record the observed `nextUpgrade.afterEpoch`. Use that observed value for all subsequent readiness checks.
 - Do not deploy until all bytecode-affecting PRs are merged to `main`.
 - If the release tag must match the exact on-chain bytecode, tag the deploy commit before changelog-only closeout changes. Otherwise, tag the finalized release-notes commit and record the implementation deploy commit separately.
 - The current `tools/deploy-calibnet.sh` and `tools/deploy-mainnet.sh` also deploy a fresh proxy. For upgrades, the safest path is still:
@@ -206,12 +207,30 @@ filfox-verifier forge \
 
 - [ ] Calibration planned-upgrade announcement payload generated
 
-Choose an `AFTER_EPOCH` that satisfies the required notice window and will still be in the future when the Safe transaction executes. The default notice window is `2880` Filecoin epochs (~1 day); adjust intentionally if the release needs a longer window.
+Choose exactly one announcement mode below. The default notice window is `2880` Filecoin epochs (~1 day); adjust intentionally if the release needs a longer window.
+
+For the normal delay-based flow, once the live proxy exposes `announceUpgradePlan()`:
 
 ```bash
-CURRENT=$(cast block-number --rpc-url "$RPC_URL")
 NOTICE_EPOCHS=2880
-AFTER_EPOCH=$((CURRENT + NOTICE_EPOCHS))
+unset AFTER_EPOCH
+
+RPC_URL="$RPC_URL" \
+SAFE_ADDRESS="0x3569b2600877a9F42d9Ebdd205386F3F3788F3E5" \
+PDP_VERIFIER_PROXY_ADDRESS="0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C" \
+NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS="<IMPL>" \
+UPGRADE_DELAY_EPOCHS="$NOTICE_EPOCHS" \
+./tools/announce-planned-upgrade.sh
+```
+
+> **Temporary bootstrap compatibility:** The currently deployed PDPVerifier v3.4.0 implementation does not expose `announceUpgradePlan()`. Use the following legacy flow only while the live proxy predates that method—normally for the first bootstrap, or for separately documented rollback recovery. Remove this section only after the full removal criteria in #288 are satisfied.
+
+```bash
+NOTICE_EPOCHS=2880
+SAFE_SIGNING_BUFFER_EPOCHS=2880
+CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL")
+AFTER_EPOCH=$((CURRENT_EPOCH + SAFE_SIGNING_BUFFER_EPOCHS + NOTICE_EPOCHS))
+unset UPGRADE_DELAY_EPOCHS
 
 RPC_URL="$RPC_URL" \
 SAFE_ADDRESS="0x3569b2600877a9F42d9Ebdd205386F3F3788F3E5" \
@@ -226,10 +245,85 @@ If the Safe UI asks whether to use the implementation ABI for the proxy, use the
 - [ ] Stage the Calibration planned-upgrade SAFE transaction
 - [ ] Execute the Calibration planned-upgrade SAFE transaction
 - [ ] Record the Calibration planned-upgrade announcement transaction hash and update the rollout status table
-- [ ] Confirm `nextUpgrade()` matches `<IMPL>` and `AFTER_EPOCH`
-- [ ] Wait until the chain reaches `AFTER_EPOCH`
 
-Optional parallel work while waiting: deploy and verify the Mainnet implementation, then stage the Mainnet planned-upgrade announcement with an `AFTER_EPOCH` after the Calibration window. Do not generate, stage, or execute the final Mainnet `upgradeToAndCall` payload until the Calibration upgrade executes and smoke tests pass.
+Read the actual plan after the Safe transaction executes. This verifies that the requested notice window starts at execution and catches a legacy announcement that no longer preserves the full notice period.
+
+```bash
+ANNOUNCE_TX_HASH="<TX_HASH>"
+NOTICE_EPOCHS=2880 # Must match the requested notice used above
+
+if ! ANNOUNCE_STATUS=$(cast receipt --rpc-url "$RPC_URL" "$ANNOUNCE_TX_HASH" status); then
+  echo "ERROR: failed to read the announcement receipt"
+  exit 1
+fi
+
+ANNOUNCE_STATUS=${ANNOUNCE_STATUS%% *}
+if [ "$ANNOUNCE_STATUS" != "1" ] && [ "$ANNOUNCE_STATUS" != "0x1" ]; then
+  echo "ERROR: announcement transaction did not succeed (status $ANNOUNCE_STATUS)"
+  exit 1
+fi
+
+if ! ANNOUNCE_EPOCH=$(cast receipt --rpc-url "$RPC_URL" "$ANNOUNCE_TX_HASH" blockNumber); then
+  echo "ERROR: failed to read the announcement epoch"
+  exit 1
+fi
+
+if [[ "$ANNOUNCE_EPOCH" =~ ^0x[0-9a-fA-F]+$ ]]; then
+  ANNOUNCE_EPOCH=$((ANNOUNCE_EPOCH))
+elif ! [[ "$ANNOUNCE_EPOCH" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: invalid announcement epoch: $ANNOUNCE_EPOCH"
+  exit 1
+fi
+
+if ! UPGRADE_PLAN_OUTPUT=$(cast call --rpc-url "$RPC_URL" \
+  0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C \
+  "nextUpgrade()(address,uint96)"); then
+  echo "ERROR: failed to read nextUpgrade()"
+  exit 1
+fi
+
+UPGRADE_PLAN=($UPGRADE_PLAN_OUTPUT)
+if [ "${#UPGRADE_PLAN[@]}" -lt 2 ]; then
+  echo "ERROR: malformed nextUpgrade() output"
+  exit 1
+fi
+
+OBSERVED_IMPL=${UPGRADE_PLAN[0]}
+OBSERVED_AFTER_EPOCH=${UPGRADE_PLAN[1]}
+
+if [[ "$OBSERVED_AFTER_EPOCH" =~ ^0x[0-9a-fA-F]+$ ]]; then
+  OBSERVED_AFTER_EPOCH=$((OBSERVED_AFTER_EPOCH))
+elif ! [[ "$OBSERVED_AFTER_EPOCH" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: invalid observed afterEpoch: $OBSERVED_AFTER_EPOCH"
+  exit 1
+fi
+
+MIN_AFTER_EPOCH=$((ANNOUNCE_EPOCH + NOTICE_EPOCHS))
+
+echo "Planned implementation: $OBSERVED_IMPL (expected <IMPL>)"
+echo "Observed afterEpoch: $OBSERVED_AFTER_EPOCH"
+
+if [ "$(printf '%s' "$OBSERVED_IMPL" | tr '[:upper:]' '[:lower:]')" != \
+  "$(printf '%s' "<IMPL>" | tr '[:upper:]' '[:lower:]')" ]; then
+  echo "ERROR: announced implementation mismatch"
+  exit 1
+fi
+
+if [ "$OBSERVED_AFTER_EPOCH" -lt "$MIN_AFTER_EPOCH" ]; then
+  echo "ERROR: announcement does not preserve the requested notice window"
+  echo "STOP: do not stage or execute the upgrade."
+  echo "Generate and execute a replacement announcement, then repeat this verification."
+  exit 1
+fi
+```
+
+- [ ] Confirm the observed implementation and notice-window checks pass
+- [ ] If the announcement reverted or a check failed, stop the rollout. For the legacy bootstrap, recompute a fresh `AFTER_EPOCH`, execute a superseding announcement, record the superseded transaction/plan, and repeat verification.
+- [ ] Do not stage or execute the upgrade transaction until the observed checks pass
+- [ ] Record `OBSERVED_AFTER_EPOCH` in the rollout status table
+- [ ] Wait until the chain reaches `OBSERVED_AFTER_EPOCH`
+
+Optional parallel work while waiting: deploy and verify the Mainnet implementation, then stage the Mainnet planned-upgrade announcement with its requested notice window. Do not generate, stage, or execute the final Mainnet `upgradeToAndCall` payload until the Calibration upgrade executes and smoke tests pass.
 
 - [ ] Calibration SAFE upgrade transaction payload generated
   - If SAFE/contract-owner helper changes are needed first: `tools: support SAFE-owned PDP upgrades`
@@ -257,8 +351,8 @@ If building the transaction via the Safe UI ABI form:
 - [ ] Calibration implementation address, verification links, and calldata shared for independent review
 - [ ] Stage the Calibration SAFE transaction
 - [ ] Confirm the Calibration execution window
-- [ ] Confirm `nextUpgrade()` still matches `<IMPL>` and `AFTER_EPOCH`
-- [ ] Confirm current epoch is greater than or equal to `AFTER_EPOCH`
+- [ ] Confirm `nextUpgrade()` still matches `<IMPL>` and `OBSERVED_AFTER_EPOCH`
+- [ ] Confirm current epoch is greater than or equal to `OBSERVED_AFTER_EPOCH`
 - [ ] Execute the Calibration SAFE upgrade transaction in the Safe UI
 - [ ] Verify the Calibration proxy implementation slot
 - [ ] Verify the Calibration proxy is on `vX.Y.Z`
@@ -396,12 +490,30 @@ filfox-verifier forge \
 
 - [ ] Mainnet planned-upgrade announcement payload generated
 
-Choose an `AFTER_EPOCH` that satisfies the required notice window and will still be in the future when the Safe transaction executes. The default notice window is `2880` Filecoin epochs (~1 day); adjust intentionally if the release needs a longer window.
+Choose exactly one announcement mode below. The default notice window is `2880` Filecoin epochs (~1 day); adjust intentionally if the release needs a longer window.
+
+For the normal delay-based flow, once the live proxy exposes `announceUpgradePlan()`:
 
 ```bash
-CURRENT=$(cast block-number --rpc-url "$RPC_URL")
 NOTICE_EPOCHS=2880
-AFTER_EPOCH=$((CURRENT + NOTICE_EPOCHS))
+unset AFTER_EPOCH
+
+RPC_URL="$RPC_URL" \
+SAFE_ADDRESS="0x3569b2600877a9F42d9Ebdd205386F3F3788F3E5" \
+PDP_VERIFIER_PROXY_ADDRESS="0xBADd0B92C1c71d02E7d520f64c0876538fa2557F" \
+NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS="<IMPL>" \
+UPGRADE_DELAY_EPOCHS="$NOTICE_EPOCHS" \
+./tools/announce-planned-upgrade.sh
+```
+
+> **Temporary bootstrap compatibility:** The currently deployed PDPVerifier v3.4.0 implementation does not expose `announceUpgradePlan()`. Use the following legacy flow only while the live proxy predates that method—normally for the first bootstrap, or for separately documented rollback recovery. Remove this section only after the full removal criteria in #288 are satisfied.
+
+```bash
+NOTICE_EPOCHS=2880
+SAFE_SIGNING_BUFFER_EPOCHS=2880
+CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL")
+AFTER_EPOCH=$((CURRENT_EPOCH + SAFE_SIGNING_BUFFER_EPOCHS + NOTICE_EPOCHS))
+unset UPGRADE_DELAY_EPOCHS
 
 RPC_URL="$RPC_URL" \
 SAFE_ADDRESS="0x3569b2600877a9F42d9Ebdd205386F3F3788F3E5" \
@@ -416,8 +528,83 @@ If the Safe UI asks whether to use the implementation ABI for the proxy, use the
 - [ ] Stage the Mainnet planned-upgrade SAFE transaction
 - [ ] Execute the Mainnet planned-upgrade SAFE transaction
 - [ ] Record the Mainnet planned-upgrade announcement transaction hash and update the rollout status table
-- [ ] Confirm `nextUpgrade()` matches `<IMPL>` and `AFTER_EPOCH`
-- [ ] Wait until the chain reaches `AFTER_EPOCH`
+
+Read the actual plan after the Safe transaction executes. This verifies that the requested notice window starts at execution and catches a legacy announcement that no longer preserves the full notice period.
+
+```bash
+ANNOUNCE_TX_HASH="<TX_HASH>"
+NOTICE_EPOCHS=2880 # Must match the requested notice used above
+
+if ! ANNOUNCE_STATUS=$(cast receipt --rpc-url "$RPC_URL" "$ANNOUNCE_TX_HASH" status); then
+  echo "ERROR: failed to read the announcement receipt"
+  exit 1
+fi
+
+ANNOUNCE_STATUS=${ANNOUNCE_STATUS%% *}
+if [ "$ANNOUNCE_STATUS" != "1" ] && [ "$ANNOUNCE_STATUS" != "0x1" ]; then
+  echo "ERROR: announcement transaction did not succeed (status $ANNOUNCE_STATUS)"
+  exit 1
+fi
+
+if ! ANNOUNCE_EPOCH=$(cast receipt --rpc-url "$RPC_URL" "$ANNOUNCE_TX_HASH" blockNumber); then
+  echo "ERROR: failed to read the announcement epoch"
+  exit 1
+fi
+
+if [[ "$ANNOUNCE_EPOCH" =~ ^0x[0-9a-fA-F]+$ ]]; then
+  ANNOUNCE_EPOCH=$((ANNOUNCE_EPOCH))
+elif ! [[ "$ANNOUNCE_EPOCH" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: invalid announcement epoch: $ANNOUNCE_EPOCH"
+  exit 1
+fi
+
+if ! UPGRADE_PLAN_OUTPUT=$(cast call --rpc-url "$RPC_URL" \
+  0xBADd0B92C1c71d02E7d520f64c0876538fa2557F \
+  "nextUpgrade()(address,uint96)"); then
+  echo "ERROR: failed to read nextUpgrade()"
+  exit 1
+fi
+
+UPGRADE_PLAN=($UPGRADE_PLAN_OUTPUT)
+if [ "${#UPGRADE_PLAN[@]}" -lt 2 ]; then
+  echo "ERROR: malformed nextUpgrade() output"
+  exit 1
+fi
+
+OBSERVED_IMPL=${UPGRADE_PLAN[0]}
+OBSERVED_AFTER_EPOCH=${UPGRADE_PLAN[1]}
+
+if [[ "$OBSERVED_AFTER_EPOCH" =~ ^0x[0-9a-fA-F]+$ ]]; then
+  OBSERVED_AFTER_EPOCH=$((OBSERVED_AFTER_EPOCH))
+elif ! [[ "$OBSERVED_AFTER_EPOCH" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: invalid observed afterEpoch: $OBSERVED_AFTER_EPOCH"
+  exit 1
+fi
+
+MIN_AFTER_EPOCH=$((ANNOUNCE_EPOCH + NOTICE_EPOCHS))
+
+echo "Planned implementation: $OBSERVED_IMPL (expected <IMPL>)"
+echo "Observed afterEpoch: $OBSERVED_AFTER_EPOCH"
+
+if [ "$(printf '%s' "$OBSERVED_IMPL" | tr '[:upper:]' '[:lower:]')" != \
+  "$(printf '%s' "<IMPL>" | tr '[:upper:]' '[:lower:]')" ]; then
+  echo "ERROR: announced implementation mismatch"
+  exit 1
+fi
+
+if [ "$OBSERVED_AFTER_EPOCH" -lt "$MIN_AFTER_EPOCH" ]; then
+  echo "ERROR: announcement does not preserve the requested notice window"
+  echo "STOP: do not stage or execute the upgrade."
+  echo "Generate and execute a replacement announcement, then repeat this verification."
+  exit 1
+fi
+```
+
+- [ ] Confirm the observed implementation and notice-window checks pass
+- [ ] If the announcement reverted or a check failed, stop the rollout. For the legacy bootstrap, recompute a fresh `AFTER_EPOCH`, execute a superseding announcement, record the superseded transaction/plan, and repeat verification.
+- [ ] Do not stage or execute the upgrade transaction until the observed checks pass
+- [ ] Record `OBSERVED_AFTER_EPOCH` in the rollout status table
+- [ ] Wait until the chain reaches `OBSERVED_AFTER_EPOCH`
 
 - [ ] Confirm Calibration upgrade and smoke tests completed successfully before proceeding to final Mainnet upgrade execution
 
@@ -441,8 +628,8 @@ If building the Safe transaction with ABI inputs:
 - [ ] Stage the Mainnet SAFE transaction
 - [ ] Collect SAFE signer approvals
 - [ ] Confirm the Mainnet execution date/time
-- [ ] Confirm `nextUpgrade()` still matches `<IMPL>` and `AFTER_EPOCH`
-- [ ] Confirm current epoch is greater than or equal to `AFTER_EPOCH`
+- [ ] Confirm `nextUpgrade()` still matches `<IMPL>` and `OBSERVED_AFTER_EPOCH`
+- [ ] Confirm current epoch is greater than or equal to `OBSERVED_AFTER_EPOCH`
 - [ ] Execute the Mainnet SAFE upgrade transaction
 - [ ] Verify the Mainnet proxy implementation slot
 - [ ] Verify the Mainnet proxy is on `vX.Y.Z`
