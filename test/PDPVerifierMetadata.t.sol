@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
+import {Cids} from "../src/Cids.sol";
 import {COMPACT_PIECES_SLOT} from "../src/PDPVerifierLayout.sol";
 
 contract PDPVerifierMetadataHarness is PDPVerifier {
@@ -42,6 +43,27 @@ contract PDPVerifierMetadataHarness is PDPVerifier {
 
     function appendCompactPiece(uint256 setId, bytes32 root, uint256 metadata) external {
         compactPieces[setId].push(PieceV2(root, metadata));
+    }
+
+    function addPiecesForTest(uint256 setId, Cids.Cid[] calldata pieces) external returns (uint256) {
+        return _addPiecesToDataSet(setId, pieces, bytes(""));
+    }
+
+    function compactPiece(uint256 setId, uint256 pieceId) external view returns (bytes32 root, uint256 metadata) {
+        PieceV2 storage piece = compactPieces[setId][pieceId];
+        return (piece.root, piece.metadata);
+    }
+
+    function compactPieceCount(uint256 setId) external view returns (uint256) {
+        return compactPieces[setId].length;
+    }
+
+    function setDataSetLeafCount(uint256 setId, uint256 leafCount) external {
+        dataSetLeafCount[setId] = leafCount;
+    }
+
+    function dataSetLeafCountForTest(uint256 setId) external view returns (uint256) {
+        return dataSetLeafCount[setId];
     }
 }
 
@@ -128,6 +150,74 @@ contract PDPVerifierMetadataTest is Test {
         assertEq(
             vm.load(address(harness), bytes32(elementBase + 1)), bytes32(metadata), "metadata occupies member slot one"
         );
+    }
+
+    function testCompactAdditionAppendsRootsMetadataAndFenwickSums() public {
+        uint256 setId = 9;
+        Cids.Cid[] memory firstBatch = new Cids.Cid[](3);
+        firstBatch[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
+        firstBatch[1] = Cids.CommPv2FromDigest(0, 1, bytes32(uint256(2)));
+        firstBatch[2] = Cids.CommPv2FromDigest(0, 2, bytes32(uint256(3)));
+
+        assertEq(harness.addPiecesForTest(setId, firstBatch), 0, "first batch starts at zero");
+        assertEq(harness.compactPieceCount(setId), 3, "first batch appends three pieces");
+
+        Cids.Cid[] memory secondBatch = new Cids.Cid[](2);
+        secondBatch[0] = Cids.CommPv2FromDigest(0, 3, bytes32(uint256(4)));
+        secondBatch[1] = Cids.CommPv2FromDigest(0, 4, bytes32(uint256(5)));
+
+        assertEq(harness.addPiecesForTest(setId, secondBatch), 3, "later batch starts at compact length");
+        assertEq(harness.compactPieceCount(setId), 5, "array length grows monotonically");
+        assertEq(harness.dataSetLeafCountForTest(setId), 31, "batch leaf counts accumulate once");
+
+        uint256[5] memory expectedLeafCounts = [uint256(1), 2, 4, 8, 16];
+        uint256[5] memory expectedSums = [uint256(1), 3, 4, 15, 16];
+        for (uint256 pieceId; pieceId < 5; ++pieceId) {
+            (bytes32 root, uint256 metadata) = harness.compactPiece(setId, pieceId);
+            assertEq(root, bytes32(pieceId + 1), "root");
+            assertEq(harness.piecePadding(metadata), 0, "padding");
+            assertEq(harness.pieceHeight(metadata), pieceId, "height");
+            assertEq(harness.pieceLeafCount(metadata), expectedLeafCounts[pieceId], "leaf count");
+            assertEq(harness.pieceSum(metadata), expectedSums[pieceId], "Fenwick partial sum");
+        }
+    }
+
+    function testCompactAdditionRevertsEntireInvalidBatch() public {
+        uint256 setId = 10;
+        Cids.Cid[] memory pieces = new Cids.Cid[](2);
+        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
+        pieces[1] = Cids.Cid(bytes(""));
+
+        vm.expectRevert("Cid data is too short");
+        harness.addPiecesForTest(setId, pieces);
+
+        assertEq(harness.compactPieceCount(setId), 0, "invalid batch leaves no compact pieces");
+        assertEq(harness.dataSetLeafCountForTest(setId), 0, "invalid batch leaves total unchanged");
+    }
+
+    function testCompactAdditionRejectsDataSetLeafCountOverflow() public {
+        uint256 setId = 11;
+        harness.setDataSetLeafCount(setId, SUM_TREE_MAX);
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
+
+        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        harness.addPiecesForTest(setId, pieces);
+
+        assertEq(harness.compactPieceCount(setId), 0, "overflow leaves no compact pieces");
+        assertEq(harness.dataSetLeafCountForTest(setId), SUM_TREE_MAX, "overflow leaves total unchanged");
+    }
+
+    function testCompactAdditionRejectsFenwickSumOverflow() public {
+        uint256 setId = 12;
+        harness.appendCompactPiece(setId, bytes32(uint256(1)), harness.packPieceMetadata(0, 0, 1, SUM_TREE_MAX));
+        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(2)));
+
+        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        harness.addPiecesForTest(setId, pieces);
+
+        assertEq(harness.compactPieceCount(setId), 1, "sum overflow adds no compact piece");
     }
 
     function _assertRoundTrip(uint256 padding, uint256 height, uint256 leafCount, uint256 sum) private view {

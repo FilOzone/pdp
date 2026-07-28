@@ -809,15 +809,20 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 nPieces = pieceData.length;
         require(nPieces > 0, "Must add at least one piece");
 
-        firstAdded = nextPieceId[setId];
+        firstAdded = compactPieces[setId].length;
+        uint256 newLeafCount = dataSetLeafCount[setId];
         uint256[] memory pieceIds = new uint256[](nPieces);
         Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](nPieces);
 
         for (uint256 i = 0; i < nPieces; i++) {
-            addOnePiece(setId, i, pieceData[i]);
+            uint256 leafCount = addOnePiece(setId, i, pieceData[i]);
+            if (newLeafCount > SUM_TREE_MAX - leafCount) revert PieceMetadataOverflow();
+            newLeafCount += leafCount;
             pieceIds[i] = firstAdded + i;
             pieceCidsAdded[i] = pieceData[i];
         }
+
+        dataSetLeafCount[setId] = newLeafCount;
 
         emit PiecesAdded(setId, pieceIds, pieceCidsAdded);
 
@@ -881,8 +886,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return metadata & (SUM_TREE_MAX << SUM_TREE_SHIFT);
     }
 
-    function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
-        (uint256 padding, uint8 height,) = Cids.validateCommPv2(piece);
+    function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece)
+        internal
+        returns (uint256 leafCount)
+    {
+        (uint256 padding, uint8 height, bytes32 root) = Cids.validateCommPv2(piece);
         if (Cids.isPaddingExcessive(padding, height)) {
             revert IndexedError(callIdx, "Padding is too large");
         }
@@ -890,14 +898,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             revert IndexedError(callIdx, "Piece size must be less than 2^50");
         }
 
-        uint256 leafCount = Cids.leafCount(padding, height);
-        uint256 pieceId = nextPieceId[setId]++;
+        leafCount = Cids.leafCount(padding, height);
+        if (leafCount > LEAF_COUNT_MAX) revert PieceMetadataOverflow();
 
-        sumTreeAdd(setId, leafCount, pieceId);
-        pieceCids[setId][pieceId] = piece;
-        pieceLeafCounts[setId][pieceId] = leafCount;
-        dataSetLeafCount[setId] += leafCount;
-        return pieceId;
+        uint256 pieceId = compactPieces[setId].length;
+        uint256 sum = sumTreeAdd(setId, leafCount, pieceId);
+        compactPieces[setId].push(PieceV2(root, _packPieceMetadata(padding, height, leafCount, sum)));
     }
 
     // schedulePieceDeletions schedules deletion of a batch of pieces from a data set for the start of the next
@@ -1184,17 +1190,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Perform sumtree addition
     //
-    function sumTreeAdd(uint256 setId, uint256 count, uint256 pieceId) internal {
-        uint256 index = pieceId;
-        uint256 h = heightFromIndex(index);
+    function sumTreeAdd(uint256 setId, uint256 count, uint256 pieceId) internal view returns (uint256 sum) {
+        uint256 h = heightFromIndex(pieceId);
 
-        uint256 sum = count;
+        sum = count;
         // Sum BaseArray[j - 2^i] for i in [0, h)
         for (uint256 i = 0; i < h; i++) {
-            uint256 j = index - (1 << i);
-            sum += sumTreeCounts[setId][j];
+            uint256 priorIndex = pieceId - (1 << i);
+            sum += _pieceSum(compactPieces[setId][priorIndex].metadata);
         }
-        sumTreeCounts[setId][pieceId] = sum;
+        if (sum > SUM_TREE_MAX) revert PieceMetadataOverflow();
     }
 
     // Perform sumtree removal

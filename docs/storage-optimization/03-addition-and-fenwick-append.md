@@ -74,3 +74,11 @@ Record:
 - how the dataset total and sum overflow are checked;
 - focused test results;
 - known full-suite failures attributable only to unmigrated readers/removers.
+
+### Implementation record
+
+- `addOnePiece(setId, callIdx, piece)` now validates and decodes one CID, computes its leaf count and compact Fenwick sum, appends `PieceV2(root, metadata)`, and returns its leaf count. `sumTreeAdd(setId, count, pieceId)` is `view` and returns the sum without writing storage.
+- `_addPiecesToDataSet` sets `firstAdded` from `compactPieces[setId].length`, tracks the prospective total in memory, rejects `newLeafCount > SUM_TREE_MAX - leafCount`, and writes `dataSetLeafCount` once after the batch.
+- `forge test --match-path test/PDPVerifierMetadata.t.sol -vv`: 12 passed. The focused harness verifies append IDs and length, CID roots and fields, Fenwick sums, atomic invalid-batch rollback, Fenwick-sum overflow, and dataset-total overflow.
+- `forge build`: passes (only existing dependency shadowing warnings).
+- `forge test`: 142 passed and 59 failed. Failures are expected at this intermediate migration step: legacy getters, proof/search/removal/cleanup consumers still read legacy piece mappings, and the storage-metrics assertion still encodes the old write pattern.
