@@ -929,10 +929,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 // Find the piece that has this leaf, and the offset of the leaf within that piece.
                 challenges[i] = findOnePieceId(setId, challengeIdx, sumTreeTop);
                 Cids.Cid memory pieceCid = getPieceCid(setId, challenges[i].pieceId);
-                bytes32 pieceHash = Cids.digestFromCid(pieceCid);
-                uint8 pieceHeight = Cids.heightFromCid(pieceCid) + 1; // because MerkleVerify.verify assumes that base layer is 1
-                bool ok =
-                    MerkleVerify.verify(proofs[i].proof, pieceHash, proofs[i].leaf, challenges[i].offset, pieceHeight);
+                (, uint8 pieceHeight, bytes32 pieceHash) = Cids.validateCommPv2(pieceCid);
+                bool ok = MerkleVerify.verify(
+                    proofs[i].proof, pieceHash, proofs[i].leaf, challenges[i].offset, pieceHeight + 1
+                );
                 require(ok, "proof did not verify");
             }
         }
