@@ -75,7 +75,8 @@ gen: check-tools $(LAYOUT) $(LAYOUT_JSON)
 
 # Force regeneration - useful when things are broken
 .PHONY: force-gen
-force-gen: clean-gen gen
+force-gen: clean-gen
+	$(MAKE) gen
 	@echo "Force regeneration complete"
 
 # Clean generated files only
