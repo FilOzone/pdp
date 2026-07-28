@@ -449,5 +449,52 @@
         "numberOfBytes": "32"
       }
     }
+  },
+  {
+    "label": "compactPieces",
+    "offset": 0,
+    "slot": "19",
+    "type": {
+      "encoding": "mapping",
+      "key": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      },
+      "label": "mapping(uint256 => struct PDPVerifier.PieceV2[])",
+      "numberOfBytes": "32",
+      "value": {
+        "base": {
+          "encoding": "inplace",
+          "label": "struct PDPVerifier.PieceV2",
+          "members": [
+            {
+              "label": "root",
+              "offset": 0,
+              "slot": "0",
+              "type": {
+                "encoding": "inplace",
+                "label": "bytes32",
+                "numberOfBytes": "32"
+              }
+            },
+            {
+              "label": "metadata",
+              "offset": 0,
+              "slot": "1",
+              "type": {
+                "encoding": "inplace",
+                "label": "uint256",
+                "numberOfBytes": "32"
+              }
+            }
+          ],
+          "numberOfBytes": "64"
+        },
+        "encoding": "dynamic_array",
+        "label": "struct PDPVerifier.PieceV2[]",
+        "numberOfBytes": "32"
+      }
+    }
   }
 ]

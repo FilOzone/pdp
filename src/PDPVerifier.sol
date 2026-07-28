@@ -48,6 +48,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     uint256 private constant PIECES_SCHEDULED_EVENT_BATCH_SIZE = 100;
 
+    uint256 internal constant PADDING_SHIFT = 0;
+    uint256 internal constant HEIGHT_SHIFT = 55;
+    uint256 internal constant LEAF_COUNT_SHIFT = 61;
+    uint256 internal constant SUM_TREE_SHIFT = 112;
+
+    uint256 internal constant PADDING_MAX = (uint256(1) << 55) - 1;
+    uint256 internal constant HEIGHT_MAX = (uint256(1) << 6) - 1;
+    uint256 internal constant LEAF_COUNT_MAX = (uint256(1) << 51) - 1;
+    uint256 internal constant SUM_TREE_MAX = (uint256(1) << 144) - 1;
+
     // Cleanup
     uint256 private constant CLEANUP_MODE_SENTINEL = type(uint256).max;
     uint256 public constant INACTIVITY_WINDOW = 86400;
@@ -181,6 +191,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => uint256) cleanupDeposit;
     // Former cleanupPieces gate anchor; only written by v3.4.0 deleteDataSet.
     mapping(uint256 => uint256) deprecatedCleanupModeEpoch;
+
+    struct PieceV2 {
+        bytes32 root;
+        uint256 metadata;
+    }
+
+    mapping(uint256 setId => PieceV2[] pieces) internal compactPieces;
 
     // Methods
 
@@ -825,6 +842,44 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error InsufficientChallengeDelay(uint256 epochs, uint256 minDelay);
     error ExcessiveChallengeDelay(uint256 epochs, uint256 maxDelay);
     error InvalidImplementation(address implementation);
+    error PieceMetadataOverflow();
+
+    function _packPieceMetadata(uint256 padding, uint256 height, uint256 leafCount, uint256 sum)
+        internal
+        pure
+        returns (uint256)
+    {
+        if (padding > PADDING_MAX || height > HEIGHT_MAX || leafCount > LEAF_COUNT_MAX || sum > SUM_TREE_MAX) {
+            revert PieceMetadataOverflow();
+        }
+        return (padding << PADDING_SHIFT) | (height << HEIGHT_SHIFT) | (leafCount << LEAF_COUNT_SHIFT)
+            | (sum << SUM_TREE_SHIFT);
+    }
+
+    function _piecePadding(uint256 metadata) internal pure returns (uint256) {
+        return (metadata >> PADDING_SHIFT) & PADDING_MAX;
+    }
+
+    function _pieceHeight(uint256 metadata) internal pure returns (uint256) {
+        return (metadata >> HEIGHT_SHIFT) & HEIGHT_MAX;
+    }
+
+    function _pieceLeafCount(uint256 metadata) internal pure returns (uint256) {
+        return (metadata >> LEAF_COUNT_SHIFT) & LEAF_COUNT_MAX;
+    }
+
+    function _pieceSum(uint256 metadata) internal pure returns (uint256) {
+        return (metadata >> SUM_TREE_SHIFT) & SUM_TREE_MAX;
+    }
+
+    function _withPieceSum(uint256 metadata, uint256 sum) internal pure returns (uint256) {
+        if (sum > SUM_TREE_MAX) revert PieceMetadataOverflow();
+        return (metadata & ~(SUM_TREE_MAX << SUM_TREE_SHIFT)) | (sum << SUM_TREE_SHIFT);
+    }
+
+    function _clearPieceMetadataExceptSum(uint256 metadata) internal pure returns (uint256) {
+        return metadata & (SUM_TREE_MAX << SUM_TREE_SHIFT);
+    }
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256) {
         (uint256 padding, uint8 height,) = Cids.validateCommPv2(piece);
