@@ -303,15 +303,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Returns false if the data set is not live or if the piece id is 1) not yet created 2) deleted
     function pieceLive(uint256 setId, uint256 pieceId) public view returns (bool) {
-        return dataSetLive(setId) && pieceId < nextPieceId[setId] && pieceLeafCounts[setId][pieceId] > 0;
+        if (!dataSetLive(setId) || pieceId >= compactPieces[setId].length) return false;
+        return _pieceLeafCount(compactPieces[setId][pieceId].metadata) > 0;
     }
 
     // Returns false if the piece is not live or if the piece id is not yet in challenge range
     function pieceChallengable(uint256 setId, uint256 pieceId) public view returns (bool) {
-        uint256 top = 256 - BitOps.clz(nextPieceId[setId]);
+        uint256 top = 256 - BitOps.clz(compactPieces[setId].length);
         IPDPTypes.PieceIdAndOffset memory ret = findOnePieceId(setId, challengeRange[setId] - 1, top);
         require(
-            ret.offset == pieceLeafCounts[setId][ret.pieceId] - 1,
+            ret.offset == _pieceLeafCount(compactPieces[setId][ret.pieceId].metadata) - 1,
             "challengeRange -1 should align with the very last leaf of a piece"
         );
         return pieceLive(setId, pieceId) && pieceId <= ret.pieceId;
@@ -326,7 +327,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns the next piece ID for a data set. Also valid during cleanup mode.
     function getNextPieceId(uint256 setId) public view returns (uint256) {
         require(dataSetExists(setId), DataSetNotFound());
-        return nextPieceId[setId];
+        return compactPieces[setId].length;
     }
 
     // Returns the next challenge epoch for a data set. Returns type(uint256).max during cleanup mode.
@@ -355,13 +356,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns the piece CID for a given data set and piece ID
     function getPieceCid(uint256 setId, uint256 pieceId) public view returns (Cids.Cid memory) {
         require(dataSetLive(setId), DataSetNotLive());
-        return pieceCids[setId][pieceId];
+        if (pieceId >= compactPieces[setId].length) return Cids.Cid(new bytes(0));
+        PieceV2 storage piece = compactPieces[setId][pieceId];
+        return _pieceCid(piece.root, piece.metadata);
     }
 
     // Returns the piece leaf count for a given data set and piece ID
     function getPieceLeafCount(uint256 setId, uint256 pieceId) public view returns (uint256) {
         require(dataSetLive(setId), DataSetNotLive());
-        return pieceLeafCounts[setId][pieceId];
+        if (pieceId >= compactPieces[setId].length) return 0;
+        return _pieceLeafCount(compactPieces[setId][pieceId].metadata);
     }
 
     // Returns the index of the most recently added leaf that is challengeable in the current proving period
@@ -389,9 +393,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function getActivePieceCount(uint256 setId) public view returns (uint256 activeCount) {
         require(dataSetLive(setId), DataSetNotLive());
 
-        uint256 maxPieceId = nextPieceId[setId];
+        uint256 maxPieceId = compactPieces[setId].length;
         for (uint256 i = 0; i < maxPieceId; i++) {
-            if (pieceLeafCounts[setId][i] > 0) {
+            if (_pieceLeafCount(compactPieces[setId][i].metadata) > 0) {
                 activeCount++;
             }
         }
@@ -417,7 +421,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(limit > 0, "Limit must be greater than 0");
 
         // Single pass: collect data and check for more
-        uint256 maxPieceId = nextPieceId[setId];
+        uint256 maxPieceId = compactPieces[setId].length;
 
         // Over-allocate arrays to limit size
         Cids.Cid[] memory tempPieces = new Cids.Cid[](limit);
@@ -427,9 +431,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 resultIndex = 0;
 
         for (uint256 i = 0; i < maxPieceId; i++) {
-            if (pieceLeafCounts[setId][i] > 0) {
+            PieceV2 storage piece = compactPieces[setId][i];
+            if (_pieceLeafCount(piece.metadata) > 0) {
                 if (activeCount >= offset && resultIndex < limit) {
-                    tempPieces[resultIndex] = pieceCids[setId][i];
+                    tempPieces[resultIndex] = _pieceCid(piece.root, piece.metadata);
                     tempPieceIds[resultIndex] = i;
                     resultIndex++;
                 } else if (activeCount >= offset + limit) {
@@ -480,7 +485,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
-        uint256 maxPieceId = nextPieceId[setId];
+        uint256 maxPieceId = compactPieces[setId].length;
 
         // if startPieceId is beyond all pieces, return empty
         if (startPieceId >= maxPieceId) {
@@ -494,8 +499,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // Start from startPieceId and collect up to limit
         for (uint256 i = startPieceId; i < maxPieceId && resultIndex < limit; i++) {
-            if (pieceLeafCounts[setId][i] > 0) {
-                tempPieces[resultIndex] = pieceCids[setId][i];
+            PieceV2 storage piece = compactPieces[setId][i];
+            if (_pieceLeafCount(piece.metadata) > 0) {
+                tempPieces[resultIndex] = _pieceCid(piece.root, piece.metadata);
                 tempPieceIds[resultIndex] = i;
                 resultIndex++;
             }
@@ -505,7 +511,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (resultIndex > 0) {
             uint256 lastFound = tempPieceIds[resultIndex - 1];
             for (uint256 i = lastFound + 1; i < maxPieceId; i++) {
-                if (pieceLeafCounts[setId][i] > 0) {
+                if (_pieceLeafCount(compactPieces[setId][i].metadata) > 0) {
                     hasMore = true;
                     break;
                 }
@@ -544,22 +550,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
-        bytes calldata pieceCidData = pieceCid.data;
-        bytes32 targetHash;
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            let len := pieceCidData.length
-            calldatacopy(ptr, pieceCidData.offset, len)
-            targetHash := keccak256(ptr, len)
-        }
-        uint256 maxPieceId = nextPieceId[setId];
+        (uint256 padding, uint8 height, bytes32 root) = Cids.validateCommPv2(pieceCid);
+        uint256 maxPieceId = compactPieces[setId].length;
 
         pieceIds = new uint256[](limit);
         uint256 count = 0;
 
         for (uint256 i = startPieceId; i < maxPieceId && count < limit; i++) {
-            if (pieceLeafCounts[setId][i] == 0) continue;
-            if (keccak256(pieceCids[setId][i].data) == targetHash) {
+            PieceV2 storage piece = compactPieces[setId][i];
+            if (_pieceLeafCount(piece.metadata) == 0) continue;
+            if (
+                piece.root == root && _piecePadding(piece.metadata) == padding && _pieceHeight(piece.metadata) == height
+            ) {
                 pieceIds[count++] = i;
             }
         }
@@ -877,6 +879,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return (metadata >> SUM_TREE_SHIFT) & SUM_TREE_MAX;
     }
 
+    function _pieceCid(bytes32 root, uint256 metadata) internal pure returns (Cids.Cid memory) {
+        return Cids.CommPv2FromDigest(_piecePadding(metadata), uint8(_pieceHeight(metadata)), root);
+    }
+
     function _withPieceSum(uint256 metadata, uint256 sum) internal pure returns (uint256) {
         if (sum > SUM_TREE_MAX) revert PieceMetadataOverflow();
         return (metadata & ~(SUM_TREE_MAX << SUM_TREE_SHIFT)) | (sum << SUM_TREE_SHIFT);
@@ -919,8 +925,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         for (uint256 i = 0; i < pieceIds.length; i++) {
             uint256 pieceId = pieceIds[i];
-            require(pieceId < nextPieceId[setId], "Can only schedule removal of existing pieces");
-            require(pieceLeafCounts[setId][pieceId] > 0, "Can only schedule removal of live pieces");
+            require(pieceId < compactPieces[setId].length, "Can only schedule removal of existing pieces");
+            require(
+                _pieceLeafCount(compactPieces[setId][pieceId].metadata) > 0, "Can only schedule removal of live pieces"
+            );
 
             // Check for duplicates using bitmap
             uint256 slotIndex = pieceId >> 8;
@@ -970,7 +978,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 seed = drawChallengeSeed(setId);
         {
             uint256 leafCount = challengeRange[setId];
-            uint256 sumTreeTop = 256 - BitOps.clz(nextPieceId[setId]);
+            uint256 sumTreeTop = 256 - BitOps.clz(compactPieces[setId].length);
             for (uint64 i = 0; i < nProofs; i++) {
                 // Hash (SHA3) the seed,  data set id, and proof index to create challenge.
                 // Note -- there is a slight deviation here from the uniform distribution.
@@ -989,10 +997,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
                 // Find the piece that has this leaf, and the offset of the leaf within that piece.
                 challenges[i] = findOnePieceId(setId, challengeIdx, sumTreeTop);
-                Cids.Cid memory pieceCid = getPieceCid(setId, challenges[i].pieceId);
-                (, uint8 pieceHeight, bytes32 pieceHash) = Cids.validateCommPv2(pieceCid);
+                PieceV2 storage piece = compactPieces[setId][challenges[i].pieceId];
                 bool ok = MerkleVerify.verify(
-                    proofs[i].proof, pieceHash, proofs[i].leaf, challenges[i].offset, pieceHeight + 1
+                    proofs[i].proof, piece.root, proofs[i].leaf, challenges[i].offset, _pieceHeight(piece.metadata) + 1
                 );
                 require(ok, "proof did not verify");
             }
@@ -1225,6 +1232,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         returns (IPDPTypes.PieceIdAndOffset memory)
     {
         require(leafIndex < dataSetLeafCount[setId], "Leaf index out of bounds");
+        uint256 pieceCount = compactPieces[setId].length;
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
 
@@ -1233,22 +1241,25 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         for (uint256 h = top; h > 0; h--) {
             // Search has taken us past the end of the sumtree
             // Only option is to go left
-            if (searchPtr >= nextPieceId[setId]) {
+            if (searchPtr >= pieceCount) {
                 searchPtr -= 1 << (h - 1);
                 continue;
             }
 
-            candidate = acc + sumTreeCounts[setId][searchPtr];
+            uint256 metadata = compactPieces[setId][searchPtr].metadata;
+            uint256 sum = _pieceSum(metadata);
+            candidate = acc + sum;
             // Go right
             if (candidate <= leafIndex) {
-                acc += sumTreeCounts[setId][searchPtr];
+                acc += sum;
                 searchPtr += 1 << (h - 1);
             } else {
                 // Go left
                 searchPtr -= 1 << (h - 1);
             }
         }
-        candidate = acc + sumTreeCounts[setId][searchPtr];
+        uint256 finalMetadata = compactPieces[setId][searchPtr].metadata;
+        candidate = acc + _pieceSum(finalMetadata);
         if (candidate <= leafIndex) {
             // Choose right
             return IPDPTypes.PieceIdAndOffset(searchPtr + 1, leafIndex - candidate);
@@ -1263,7 +1274,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         returns (IPDPTypes.PieceIdAndOffset[] memory)
     {
         // The top of the sumtree is the largest power of 2 less than the number of pieces
-        uint256 top = 256 - BitOps.clz(nextPieceId[setId]);
+        uint256 top = 256 - BitOps.clz(compactPieces[setId].length);
         IPDPTypes.PieceIdAndOffset[] memory result = new IPDPTypes.PieceIdAndOffset[](leafIndexs.length);
         for (uint256 i = 0; i < leafIndexs.length; i++) {
             result[i] = findOnePieceId(setId, leafIndexs[i], top);

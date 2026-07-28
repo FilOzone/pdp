@@ -1370,7 +1370,7 @@ contract SumTreeInternalTestPDPVerifier is PDPVerifier {
     }
 
     function getSumTreeCounts(uint256 setId, uint256 pieceId) public view returns (uint256) {
-        return sumTreeCounts[setId][pieceId];
+        return _pieceSum(compactPieces[setId][pieceId].metadata);
     }
 }
 
@@ -1547,6 +1547,40 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         Cids.Cid memory expectedCid = pieceDataArray[3];
         Cids.Cid memory actualCid = pdpVerifier.getPieceCid(testSetId, 3);
         assertEq(actualCid.data, expectedCid.data, "Incorrect piece CID");
+    }
+
+    function testFindPieceIdsFromCompactMetadata() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](3);
+        pieces[0] = makeSamplePiece(2);
+        pieces[1] = makeSamplePiece(3);
+        pieces[2] = makeSamplePiece(5);
+        pdpVerifier.addPieces(testSetId, address(0), pieces, empty);
+
+        uint256[] memory leafIndexes = new uint256[](6);
+        leafIndexes[0] = 0;
+        leafIndexes[1] = 1;
+        leafIndexes[2] = 2;
+        leafIndexes[3] = 4;
+        leafIndexes[4] = 5;
+        leafIndexes[5] = 9;
+
+        uint256[] memory expectedPieceIds = new uint256[](6);
+        expectedPieceIds[0] = 0;
+        expectedPieceIds[1] = 0;
+        expectedPieceIds[2] = 1;
+        expectedPieceIds[3] = 1;
+        expectedPieceIds[4] = 2;
+        expectedPieceIds[5] = 2;
+
+        uint256[] memory expectedOffsets = new uint256[](6);
+        expectedOffsets[0] = 0;
+        expectedOffsets[1] = 1;
+        expectedOffsets[2] = 0;
+        expectedOffsets[3] = 2;
+        expectedOffsets[4] = 0;
+        expectedOffsets[5] = 4;
+
+        assertFindPiecesAndOffsets(testSetId, leafIndexes, expectedPieceIds, expectedOffsets);
     }
 
     function setUpTestingArray() public returns (uint256[] memory counts, uint256[] memory expectedSumTreeCounts) {
@@ -2658,5 +2692,113 @@ contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
         uint256[] memory results = pdpVerifier.findPieceIdsByCid(setId, target, 0, 10);
         assertEq(results.length, 1);
         assertEq(results[0], 9);
+    }
+}
+
+contract CompactReaderHarness is PDPVerifier {
+    constructor(uint256 challengeFinality) PDPVerifier(1, challengeFinality) {}
+
+    function clearCompactPieceForTest(uint256 setId, uint256 pieceId) external {
+        PieceV2 storage piece = compactPieces[setId][pieceId];
+        piece.metadata = _clearPieceMetadataExceptSum(piece.metadata);
+    }
+}
+
+contract PDPVerifierCompactReaderTest is MockFVMTest, PieceHelper {
+    CompactReaderHarness pdpVerifier;
+    TestingRecordKeeperService listener;
+    uint256 setId;
+    bytes empty = new bytes(0);
+
+    function setUp() public override {
+        super.setUp();
+        CompactReaderHarness impl = new CompactReaderHarness(2);
+        MyERC1967Proxy proxy =
+            new MyERC1967Proxy(address(impl), abi.encodeWithSelector(PDPVerifier.initialize.selector));
+        pdpVerifier = CompactReaderHarness(address(proxy));
+        listener = new TestingRecordKeeperService();
+        setId = pdpVerifier.createDataSet{value: PDPFees.cleanupDeposit()}(address(listener), empty);
+    }
+
+    function testCompactGettersRoundTripRangeAndAppendBatches() public {
+        Cids.Cid[] memory firstBatch = new Cids.Cid[](1);
+        firstBatch[0] = Cids.CommPv2FromDigest(0, 2, bytes32(0));
+        assertEq(pdpVerifier.addPieces(setId, address(0), firstBatch, empty), 0);
+        assertEq(pdpVerifier.getNextPieceId(setId), 1);
+
+        Cids.Cid[] memory secondBatch = new Cids.Cid[](1);
+        secondBatch[0] = Cids.CommPv2FromDigest(504, 5, bytes32(uint256(2)));
+        assertEq(pdpVerifier.addPieces(setId, address(0), secondBatch, empty), 1);
+        assertEq(pdpVerifier.getNextPieceId(setId), 2);
+        assertEq(pdpVerifier.getPieceCid(setId, 0).data, firstBatch[0].data);
+        assertEq(pdpVerifier.getPieceCid(setId, 1).data, secondBatch[0].data);
+        assertTrue(pdpVerifier.pieceLive(setId, 0));
+        assertEq(pdpVerifier.getPieceLeafCount(setId, 0), 4);
+
+        assertFalse(pdpVerifier.pieceLive(setId, 2));
+        assertEq(pdpVerifier.getPieceLeafCount(setId, 2), 0);
+        assertEq(pdpVerifier.getPieceCid(setId, 2).data, bytes(""));
+    }
+
+    function testCompactPaginationAndSearchSkipHoles() public {
+        Cids.Cid memory target = makeSamplePiece(64);
+        Cids.Cid[] memory pieces = new Cids.Cid[](5);
+        pieces[0] = target;
+        pieces[1] = makeSamplePiece(128);
+        pieces[2] = target;
+        pieces[3] = makeSamplePiece(256);
+        pieces[4] = target;
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+        pdpVerifier.clearCompactPieceForTest(setId, 1);
+        pdpVerifier.clearCompactPieceForTest(setId, 3);
+
+        assertEq(pdpVerifier.getActivePieceCount(setId), 3);
+        (Cids.Cid[] memory offsetPieces, uint256[] memory offsetIds, bool offsetHasMore) =
+            pdpVerifier.getActivePieces(setId, 1, 1);
+        assertEq(offsetPieces.length, 1);
+        assertEq(offsetIds[0], 2);
+        assertTrue(offsetHasMore);
+
+        (Cids.Cid[] memory cursorPieces, uint256[] memory cursorIds, bool cursorHasMore) =
+            pdpVerifier.getActivePiecesByCursor(setId, 1, 2);
+        assertEq(cursorPieces.length, 2);
+        assertEq(cursorIds[0], 2);
+        assertEq(cursorIds[1], 4);
+        assertFalse(cursorHasMore);
+
+        uint256[] memory matches = pdpVerifier.findPieceIdsByCid(setId, target, 0, 10);
+        assertEq(matches.length, 3);
+        assertEq(matches[0], 0);
+        assertEq(matches[1], 2);
+        assertEq(matches[2], 4);
+    }
+
+    function testCidSearchRejectsMalformedQuery() public {
+        vm.expectRevert("Cid data is too short");
+        pdpVerifier.findPieceIdsByCid(setId, Cids.Cid(hex""), 0, 1);
+    }
+
+    function testSchedulingRejectsCompactDeletedOutOfRangeAndDuplicates() public {
+        Cids.Cid[] memory pieces = new Cids.Cid[](2);
+        pieces[0] = makeSamplePiece(64);
+        pieces[1] = makeSamplePiece(128);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+        pdpVerifier.clearCompactPieceForTest(setId, 0);
+
+        uint256[] memory deleted = new uint256[](1);
+        deleted[0] = 0;
+        vm.expectRevert("Can only schedule removal of live pieces");
+        pdpVerifier.schedulePieceDeletions(setId, deleted, empty);
+
+        uint256[] memory outOfRange = new uint256[](1);
+        outOfRange[0] = 2;
+        vm.expectRevert("Can only schedule removal of existing pieces");
+        pdpVerifier.schedulePieceDeletions(setId, outOfRange, empty);
+
+        uint256[] memory duplicates = new uint256[](2);
+        duplicates[0] = 1;
+        duplicates[1] = 1;
+        vm.expectRevert("Piece ID already scheduled for removal");
+        pdpVerifier.schedulePieceDeletions(setId, duplicates, empty);
     }
 }
