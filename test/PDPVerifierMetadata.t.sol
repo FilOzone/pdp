@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
 import {Cids} from "../src/Cids.sol";
 import {COMPACT_PIECES_SLOT} from "../src/PDPVerifierLayout.sol";
+import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
 
 contract PDPVerifierMetadataHarness is PDPVerifier {
     constructor() PDPVerifier(1, 2) {}
@@ -64,6 +65,11 @@ contract PDPVerifierMetadataHarness is PDPVerifier {
 
     function dataSetLeafCountForTest(uint256 setId) external view returns (uint256) {
         return dataSetLeafCount[setId];
+    }
+
+    function removePiecesForTest(uint256 setId, uint256[] calldata pieceIds) external {
+        storageProvider[setId] = msg.sender;
+        removePieces(setId, pieceIds);
     }
 }
 
@@ -180,6 +186,66 @@ contract PDPVerifierMetadataTest is Test {
             assertEq(harness.pieceLeafCount(metadata), expectedLeafCounts[pieceId], "leaf count");
             assertEq(harness.pieceSum(metadata), expectedSums[pieceId], "Fenwick partial sum");
         }
+    }
+
+    function testCompactRemovalOfLeafNodePreservesAncestorSumAndLookup() public {
+        uint256 setId = 9;
+        Cids.Cid[] memory pieces = new Cids.Cid[](3);
+        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
+        pieces[1] = Cids.CommPv2FromDigest(0, 1, bytes32(uint256(2)));
+        pieces[2] = Cids.CommPv2FromDigest(0, 2, bytes32(uint256(3)));
+        harness.addPiecesForTest(setId, pieces);
+
+        uint256[] memory removed = new uint256[](1);
+        removed[0] = 0;
+        harness.removePiecesForTest(setId, removed);
+
+        (bytes32 root, uint256 metadata) = harness.compactPiece(setId, 0);
+        assertEq(root, bytes32(0), "removed root cleared");
+        _assertMetadata(metadata, 0, 0, 0, 0);
+        (, uint256 ancestorMetadata) = harness.compactPiece(setId, 1);
+        _assertMetadata(ancestorMetadata, 0, 1, 2, 2);
+        assertEq(harness.compactPieceCount(setId), 3, "ordinary removal keeps stable IDs");
+
+        uint256[] memory leaves = new uint256[](2);
+        leaves[0] = 0;
+        leaves[1] = 2;
+        IPDPTypes.PieceIdAndOffset[] memory found = harness.findPieceIds(setId, leaves);
+        assertEq(found[0].pieceId, 1, "lookup crosses removed left boundary");
+        assertEq(found[0].offset, 0, "first surviving piece offset");
+        assertEq(found[1].pieceId, 2, "lookup reaches piece after boundary");
+        assertEq(found[1].offset, 0, "second surviving piece offset");
+    }
+
+    function testCompactRemovalOfInternalNodeRetainsPartialSumAndAppendsAtTail() public {
+        uint256 setId = 10;
+        Cids.Cid[] memory pieces = new Cids.Cid[](3);
+        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
+        pieces[1] = Cids.CommPv2FromDigest(0, 1, bytes32(uint256(2)));
+        pieces[2] = Cids.CommPv2FromDigest(0, 2, bytes32(uint256(3)));
+        harness.addPiecesForTest(setId, pieces);
+
+        uint256[] memory removed = new uint256[](1);
+        removed[0] = 1;
+        harness.removePiecesForTest(setId, removed);
+
+        (bytes32 root, uint256 metadata) = harness.compactPiece(setId, 1);
+        assertEq(root, bytes32(0), "removed root cleared");
+        _assertMetadata(metadata, 0, 0, 0, 1);
+        assertFalse(harness.pieceLive(setId, 1), "removed internal node is not live");
+        assertEq(harness.getPieceLeafCount(setId, 1), 0, "removed internal node has zero leaves");
+
+        uint256[] memory leaves = new uint256[](2);
+        leaves[0] = 0;
+        leaves[1] = 1;
+        IPDPTypes.PieceIdAndOffset[] memory found = harness.findPieceIds(setId, leaves);
+        assertEq(found[0].pieceId, 0, "lookup retains piece before removed boundary");
+        assertEq(found[1].pieceId, 2, "lookup crosses removed internal boundary");
+
+        Cids.Cid[] memory append = new Cids.Cid[](1);
+        append[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(4)));
+        assertEq(harness.addPiecesForTest(setId, append), 3, "append does not fill removed hole");
+        assertEq(harness.compactPieceCount(setId), 4, "append grows compact array tail");
     }
 
     function testCompactAdditionRevertsEntireInvalidBatch() public {

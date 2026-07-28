@@ -10,12 +10,10 @@ import {PDPRecordKeeper} from "../src/SimplePDPService.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {NEW_DATA_SET_SENTINEL} from "../src/PDPVerifier.sol";
 import {
+    COMPACT_PIECES_SLOT,
     DATA_SET_LAST_PROVEN_EPOCH_SLOT,
     DEPRECATED_CLEANUP_MODE_EPOCH_SLOT,
-    PIECE_CIDS_SLOT,
-    PIECE_LEAF_COUNTS_SLOT,
-    STORAGE_PROVIDER_SLOT,
-    SUM_TREE_COUNTS_SLOT
+    STORAGE_PROVIDER_SLOT
 } from "../src/PDPVerifierLayout.sol";
 
 contract TestListener is PDPListener, PDPRecordKeeper {
@@ -90,40 +88,42 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         }
     }
 
-    // Asserts that pieceCids, pieceLeafCounts, and sumTreeCounts are all zero for
-    // every piece slot [0, numPieces) on the given data set.  Reads raw storage via
-    // vm.load so that the check works even after the data set is no longer live.
-    function assertPieceSlotsCleared(uint256 setId, uint256 numPieces) internal view {
-        // Inner mapping root keyed by setId — shared across all pieces.
-        bytes32 cidRoot = keccak256(abi.encode(setId, PIECE_CIDS_SLOT));
-        bytes32 leafRoot = keccak256(abi.encode(setId, PIECE_LEAF_COUNTS_SLOT));
-        bytes32 sumRoot = keccak256(abi.encode(setId, SUM_TREE_COUNTS_SLOT));
+    function compactPieceArrayHeader(uint256 setId) internal pure returns (bytes32) {
+        return keccak256(abi.encode(setId, uint256(COMPACT_PIECES_SLOT)));
+    }
 
+    function compactPieceRootSlot(uint256 setId, uint256 pieceId) internal pure returns (bytes32) {
+        bytes32 arrayHeader = compactPieceArrayHeader(setId);
+        return bytes32(uint256(keccak256(abi.encodePacked(arrayHeader))) + (2 * pieceId));
+    }
+
+    function compactPieceMetadataSlot(uint256 setId, uint256 pieceId) internal pure returns (bytes32) {
+        return bytes32(uint256(compactPieceRootSlot(setId, pieceId)) + 1);
+    }
+
+    // Reads raw storage so the check remains valid after finalization removes
+    // the dynamic-array header.
+    function assertCompactPieceSlotsCleared(uint256 setId, uint256 numPieces) internal view {
         for (uint256 pieceId = 0; pieceId < numPieces; pieceId++) {
-            // pieceCids stores a `bytes` value; for a 39-byte CID the header holds length*2+1=79.
-            // After delete, the header must be zero.
-            bytes32 cidHeaderSlot = keccak256(abi.encode(pieceId, cidRoot));
-            assertEq(vm.load(address(pdpVerifier), cidHeaderSlot), bytes32(0), "pieceCids header not cleared");
-            // For a 39-byte CID (long encoding), the payload occupies 2 slots at keccak256(headerSlot).
-            // ceil(39/32) = 2, so both data slots must be zero for storage to be fully reclaimed.
-            bytes32 cidDataSlot = keccak256(abi.encodePacked(cidHeaderSlot));
-            assertEq(vm.load(address(pdpVerifier), cidDataSlot), bytes32(0), "pieceCids data slot 0 not cleared");
             assertEq(
-                vm.load(address(pdpVerifier), bytes32(uint256(cidDataSlot) + 1)),
+                vm.load(address(pdpVerifier), compactPieceRootSlot(setId, pieceId)),
                 bytes32(0),
-                "pieceCids data slot 1 not cleared"
+                "compact root not cleared"
             );
             assertEq(
-                vm.load(address(pdpVerifier), keccak256(abi.encode(pieceId, leafRoot))),
+                vm.load(address(pdpVerifier), compactPieceMetadataSlot(setId, pieceId)),
                 bytes32(0),
-                "pieceLeafCounts not cleared"
-            );
-            assertEq(
-                vm.load(address(pdpVerifier), keccak256(abi.encode(pieceId, sumRoot))),
-                bytes32(0),
-                "sumTreeCounts not cleared"
+                "compact metadata not cleared"
             );
         }
+    }
+
+    function assertCompactPieceArrayCleared(uint256 setId) internal view {
+        assertEq(
+            vm.load(address(pdpVerifier), compactPieceArrayHeader(setId)),
+            bytes32(0),
+            "compact array length not cleared"
+        );
     }
 
     // --- cleanupPieces basics ---
@@ -136,13 +136,23 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         // clean 2 of 3
         bool done = pdpVerifier.cleanupPieces(setId, 2);
         assertFalse(done, "should not be done after 2 of 3");
+        assertEq(pdpVerifier.getNextPieceId(setId), 1, "partial cleanup removes exactly maxPieces");
+        assertTrue(
+            vm.load(address(pdpVerifier), compactPieceRootSlot(setId, 0)) != bytes32(0),
+            "partial cleanup retains the remaining root"
+        );
+        assertTrue(
+            vm.load(address(pdpVerifier), compactPieceMetadataSlot(setId, 0)) != bytes32(0),
+            "partial cleanup retains the remaining metadata"
+        );
 
         // clean last piece
         uint256 balanceBefore = address(this).balance;
         done = pdpVerifier.cleanupPieces(setId, 1);
         assertTrue(done, "should be done after last piece");
         assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "deposit returned on completion");
-        assertPieceSlotsCleared(setId, 3);
+        assertCompactPieceSlotsCleared(setId, 3);
+        assertCompactPieceArrayCleared(setId);
     }
 
     function testCleanupPiecesInOneCall() public {
@@ -153,7 +163,8 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         bool done = pdpVerifier.cleanupPieces(setId, 100);
         assertTrue(done);
         assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit());
-        assertPieceSlotsCleared(setId, 2);
+        assertCompactPieceSlotsCleared(setId, 2);
+        assertCompactPieceArrayCleared(setId);
     }
 
     function testCleanupPiecesDepositNotPaidUntilComplete() public {
@@ -177,6 +188,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         assertEq(balanceBefore, address(this).balance, "net cost is zero");
         assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after deposit returned");
         assertFalse(pdpVerifier.dataSetLive(setId));
+        assertCompactPieceArrayCleared(setId);
     }
 
     function testZeroPieceDataSetCleanupPiecesReverts() public {
@@ -206,7 +218,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         assertTrue(done);
         assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "SP receives deposit");
         assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after cleanup");
-        assertPieceSlotsCleared(setId, 1);
+        assertCompactPieceSlotsCleared(setId, 1);
     }
 
     function testCleanupPermissionlessAfterInactivityWindow() public {
@@ -224,7 +236,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         assertTrue(done);
         assertEq(anyone.balance - balanceBefore, PDPFees.cleanupDeposit(), "third party receives deposit");
         assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after cleanup");
-        assertPieceSlotsCleared(setId, 1);
+        assertCompactPieceSlotsCleared(setId, 1);
     }
 
     function testPermissionlessDeleteAfterInactivity() public {
@@ -249,7 +261,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         assertTrue(done);
         assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "SP receives deposit in same block");
         assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after cleanup");
-        assertPieceSlotsCleared(setId, 2);
+        assertCompactPieceSlotsCleared(setId, 2);
     }
 
     function testAbandonedDataSetDeleteAndCleanupInOneGo() public {
@@ -271,7 +283,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         assertTrue(done);
         assertEq(anyone.balance - balanceBefore, PDPFees.cleanupDeposit(), "deleter collects cleanup deposit");
         assertEq(address(pdpVerifier).balance, 0, "Verifier balance is 0 after cleanup");
-        assertPieceSlotsCleared(setId, 2);
+        assertCompactPieceSlotsCleared(setId, 2);
     }
 
     function testCleanupGateAnchorsToActivityNotDeleteEpoch() public {
@@ -296,7 +308,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         vm.prank(anyone);
         bool done = pdpVerifier.cleanupPieces(setId, 10);
         assertTrue(done);
-        assertPieceSlotsCleared(setId, 1);
+        assertCompactPieceSlotsCleared(setId, 1);
     }
 
     function testSpDeleteAfterAbandonmentCleanupImmediatelyPermissionless() public {
@@ -311,7 +323,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         vm.deal(anyone, 10 ether);
         vm.prank(anyone);
         assertTrue(pdpVerifier.cleanupPieces(setId, 10));
-        assertPieceSlotsCleared(setId, 1);
+        assertCompactPieceSlotsCleared(setId, 1);
     }
 
     function testCleanupLegacyActivityBaseline() public {
@@ -333,21 +345,18 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         vm.deal(notSp, 10 ether);
         vm.prank(notSp);
         assertTrue(pdpVerifier.cleanupPieces(setId, 10));
-        assertPieceSlotsCleared(setId, 1);
+        assertCompactPieceSlotsCleared(setId, 1);
     }
 
-    function testLegacyDeletedDataSetCleanupAlwaysPermissionless() public {
+    function testLegacyDeletedDataSetCleanupRequiresCleanupMode() public {
         uint256 setId = _createAndPopulate(2);
 
-        // Simulate a pre-3.4.0 delete: storageProvider zeroed, pieces left behind
+        // A legacy storageProvider value alone must not activate the removed
+        // legacy-mapping cleanup path.
         vm.store(address(pdpVerifier), keccak256(abi.encode(setId, STORAGE_PROVIDER_SLOT)), bytes32(0));
 
-        // No activity-window gate applies; anyone can clean immediately
-        address anyone = address(0xCAFE);
-        vm.deal(anyone, 10 ether);
-        vm.prank(anyone);
-        assertTrue(pdpVerifier.cleanupPieces(setId, 10));
-        assertPieceSlotsCleared(setId, 2);
+        vm.expectRevert(PDPVerifier.DataSetNotInCleanupMode.selector);
+        pdpVerifier.cleanupPieces(setId, 10);
     }
 
     function testFinalizeClearsDeprecatedCleanupModeEpochResidue() public {
