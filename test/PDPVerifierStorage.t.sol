@@ -27,14 +27,40 @@ contract PDPVerifierStorageTest is MockFVMTest {
     }
 
     function testAddPiecesStorageMetrics() public {
+        uint256[4] memory batchSizes = [uint256(1), 4, 16, 32];
+        // Measurements include fixed dataset/sum-tree activity; compact records add two slots each.
+        uint256[4] memory expectedReads = [uint256(12), 25, 85, 165];
+        uint256[4] memory expectedWrites = [uint256(4), 13, 49, 97];
+        uint256[4] memory expectedTouchedObjects = [uint256(7), 7, 8, 9];
+        uint256[4] memory expectedModifiedObjects = [uint256(3), 3, 4, 5];
+
+        for (uint256 i; i < batchSizes.length; ++i) {
+            StorageMetrics memory metrics = _measureAddPieces(batchSizes[i]);
+
+            emit log_named_uint("batch size", batchSizes[i]);
+            emit log_named_uint("storage reads", metrics.reads);
+            emit log_named_uint("storage writes", metrics.writes);
+            emit log_named_uint("KAMT objects touched", metrics.kamtObjectsTouched);
+            emit log_named_uint("KAMT objects modified", metrics.kamtObjectsModified);
+            emit log_named_uint("new occupied slots", metrics.newOccupiedSlots);
+
+            assertEq(metrics.reads, expectedReads[i], "unexpected storage read count");
+            assertEq(metrics.writes, expectedWrites[i], "unexpected storage write count");
+            assertEq(metrics.kamtObjectsTouched, expectedTouchedObjects[i], "unexpected KAMT object access count");
+            assertEq(metrics.kamtObjectsModified, expectedModifiedObjects[i], "unexpected KAMT object write count");
+            assertEq(metrics.newOccupiedSlots, 2 * batchSizes[i], "unexpected storage growth");
+        }
+    }
+
+    function _measureAddPieces(uint256 batchSize) private returns (StorageMetrics memory metrics) {
         uint256 setId = verifier.createDataSet{value: PDPFees.cleanupDeposit()}(address(0), bytes(""));
 
-        // Seed the data set before recording so shared counters already occupy storage.
+        // Seed the data set before recording so the array header and shared counters already occupy storage.
         Cids.Cid[] memory seed = new Cids.Cid[](1);
         seed[0] = Cids.CommPv2FromDigest(0, 5, bytes32(uint256(1)));
         verifier.addPieces(setId, address(0), seed, bytes(""));
 
-        Cids.Cid[] memory pieces = new Cids.Cid[](4);
+        Cids.Cid[] memory pieces = new Cids.Cid[](batchSize);
         for (uint256 i; i < pieces.length; ++i) {
             pieces[i] = Cids.CommPv2FromDigest(0, uint8(6 + i), bytes32(i + 2));
         }
@@ -42,19 +68,7 @@ contract PDPVerifierStorageTest is MockFVMTest {
         vm.startStateDiffRecording();
         verifier.addPieces(setId, address(0), pieces, bytes(""));
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
-        StorageMetrics memory metrics = _storageMetrics(accesses, address(verifier));
-
-        emit log_named_uint("storage reads", metrics.reads);
-        emit log_named_uint("storage writes", metrics.writes);
-        emit log_named_uint("KAMT objects touched", metrics.kamtObjectsTouched);
-        emit log_named_uint("KAMT objects modified", metrics.kamtObjectsModified);
-        emit log_named_uint("new occupied slots", metrics.newOccupiedSlots);
-
-        assertEq(metrics.reads, 21, "unexpected storage read count");
-        assertEq(metrics.writes, 28, "unexpected storage write count");
-        assertEq(metrics.kamtObjectsTouched, 23, "unexpected KAMT object access count");
-        assertEq(metrics.kamtObjectsModified, 18, "unexpected KAMT object write count");
-        assertEq(metrics.newOccupiedSlots, 20, "unexpected storage growth");
+        return _storageMetrics(accesses, address(verifier));
     }
 
     function _storageMetrics(Vm.AccountAccess[] memory accesses, address storageAccount)

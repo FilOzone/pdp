@@ -38,7 +38,36 @@ The current measured four-piece baseline is:
 | KAMT objects modified | 18 |
 | Newly occupied slots | 20 |
 
-The compact representation must reduce newly occupied slots to **8** for the same four pieces. [INFERENCE] A contiguous array should reduce modified KAMT objects to roughly 3–4 for that scenario, depending on slot alignment and shared counters.
+## Compact measurement results
+
+`PDPVerifierStorageTest.testAddPiecesStorageMetrics` creates a fresh dataset for each
+batch, adds one seed piece before recording, then records only the measured
+`addPieces` call. Values below are measured state-diff counts for the verifier account.
+
+| Pieces | Reads | Writes | KAMT objects touched | KAMT objects modified | Newly occupied slots |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 12 | 4 | 7 | 3 | 2 |
+| 4 | 25 | 13 | 7 | 3 | 8 |
+| 16 | 85 | 49 | 8 | 4 | 32 |
+| 32 | 165 | 97 | 9 | 5 | 64 |
+
+Every batch satisfies the two-slot invariant: newly occupied slots equal
+`2 * pieces`. Against the five-slot legacy representation, the calculated slot
+reduction is 3/60% for one piece, 12/60% for four, 48/60% for sixteen, and
+96/60% for thirty-two. The four-piece comparison is therefore 20 to 8 slots.
+
+For four pieces, writes change from the legacy baseline's 28 to 13
+(-15, calculated 53.6% reduction); touched KAMT objects change from 23 to 7,
+and modified objects from 18 to 3. No legacy measurements exist for the other
+batch sizes, so this document does not infer corresponding cross-layout changes.
+
+[INFERENCE] Reads and writes scale as `5 * N + 7` and `3 * N + 1`,
+respectively, in this compiler/test configuration: fixed dataset and sum-tree
+activity contributes the constant component, while each compact record adds its
+per-piece component. [INFERENCE] The 16- and 32-piece cases cross contiguous
+arity-32 KAMT-slot boundaries: touched/modified object counts rise from 7/3 at
+four pieces to 8/4 and 9/5. Those object counts are alignment- and
+compiler-dependent characterizations, not portable layout guarantees.
 
 ## Available layouts
 
