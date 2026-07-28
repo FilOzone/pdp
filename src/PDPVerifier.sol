@@ -842,12 +842,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             scheduledRemovals[setId].push(pieceId);
         }
 
-        emit PiecesScheduledForRemoval(setId, pieceIds);
-
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
             PDPListener(listenerAddr).piecesScheduledRemove(setId, pieceIds, extraData);
         }
+
+        emit PiecesScheduledForRemoval(setId, pieceIds);
     }
 
     // Verifies and records that the provider proved possession of the
