@@ -209,8 +209,9 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         expectedPieceIds[1] = 2;
         emit IPDPEvents.PiecesAdded(1, expectedPieceIds, pieces);
 
-        uint256 firstAdded =
-            pdpVerifier.addPieces{value: createFee}(NEW_DATA_SET_SENTINEL, address(listener), pieces, combinedExtraData);
+        uint256 firstAdded = pdpVerifier.addPieces{value: createFee}(
+            NEW_DATA_SET_SENTINEL, address(listener), pieces, combinedExtraData
+        );
 
         // Verify the data set was created correctly
         assertEq(firstAdded, 1, "First piece ID should be 1");
@@ -232,8 +233,9 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         bytes memory combinedExtraData = abi.encode(empty, empty);
         Cids.Cid[] memory pieces = new Cids.Cid[](0);
 
-        uint256 firstAdded =
-            pdpVerifier.addPieces{value: createFee}(NEW_DATA_SET_SENTINEL, address(listener), pieces, combinedExtraData);
+        uint256 firstAdded = pdpVerifier.addPieces{value: createFee}(
+            NEW_DATA_SET_SENTINEL, address(listener), pieces, combinedExtraData
+        );
 
         assertEq(firstAdded, 1, "First piece ID should be 1");
         assertEq(pdpVerifier.getDataSetLeafCount(firstAdded), 0, "Data set leaf count should be 0");
@@ -1061,8 +1063,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getActivePieceCount(setId), 5, "Should have 5 active pieces");
 
         // Test offset beyond range
-        (Cids.Cid[] memory pieces1, /*uint256[] memory ids1*/, bool hasMore1) =
-            pdpVerifier.getActivePieces(setId, 10, 5);
+        (Cids.Cid[] memory pieces1,/*uint256[] memory ids1*/, bool hasMore1) = pdpVerifier.getActivePieces(setId, 10, 5);
         assertEq(pieces1.length, 0, "Should return empty when offset beyond range");
         assertEq(hasMore1, false, "Should not have more items");
 

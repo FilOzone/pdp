@@ -19,8 +19,13 @@ optimizer_runs = 1
 via_ir = true
 
 [profile.default.lint]
+severity = ["high", "med", "low", "info", "gas", "code-size"]
 exclude_lints = [
+    "block-timestamp",
+    "custom-errors",
     "incorrect-shift",
+    "interface-naming",
     "mixed-case-function",
-    "asm-keccak256" # flagging on a view function; revisit when forge supports inline suppression
+    "multi-contract-file",
+    "unsafe-typecast",
 ]

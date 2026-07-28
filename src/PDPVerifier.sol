@@ -525,7 +525,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
-        bytes32 targetHash = keccak256(pieceCid.data);
+        bytes calldata pieceCidData = pieceCid.data;
+        bytes32 targetHash;
+        assembly ("memory-safe") {
+            let ptr := mload(0x40)
+            let len := pieceCidData.length
+            calldatacopy(ptr, pieceCidData.offset, len)
+            targetHash := keccak256(ptr, len)
+        }
         uint256 maxPieceId = nextPieceId[setId];
 
         pieceIds = new uint256[](limit);
@@ -1058,9 +1065,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
-            PDPListener(listenerAddr).nextProvingPeriod(
-                setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData
-            );
+            PDPListener(listenerAddr)
+                .nextProvingPeriod(setId, nextChallengeEpoch[setId], dataSetLeafCount[setId], extraData);
         }
         emit NextProvingPeriod(setId, challengeEpoch, dataSetLeafCount[setId]);
     }

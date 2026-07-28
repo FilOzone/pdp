@@ -103,8 +103,12 @@ contract SimplePDPService is PDPListener, IPDPProvingSchedule, Initializable, UU
 
     // Modifier to ensure only the PDP verifier contract can call certain functions
     modifier onlyPDPVerifier() {
-        require(msg.sender == pdpVerifierAddress, "Caller is not the PDP verifier");
+        _onlyPDPVerifier();
         _;
+    }
+
+    function _onlyPDPVerifier() internal view {
+        require(msg.sender == pdpVerifierAddress, "Caller is not the PDP verifier");
     }
 
     // SLA specification functions setting values for PDP service providers
@@ -221,7 +225,10 @@ contract SimplePDPService is PDPListener, IPDPProvingSchedule, Initializable, UU
         uint256, /*challengedLeafCount*/
         uint256, /*seed*/
         uint256 challengeCount
-    ) external onlyPDPVerifier {
+    )
+        external
+        onlyPDPVerifier
+    {
         if (provenThisPeriod[dataSetId]) {
             revert("Only one proof of possession allowed per proving period. Open a new proving period.");
         }
@@ -253,7 +260,10 @@ contract SimplePDPService is PDPListener, IPDPProvingSchedule, Initializable, UU
         uint256,
         /*leafCount*/
         bytes calldata
-    ) external onlyPDPVerifier {
+    )
+        external
+        onlyPDPVerifier
+    {
         // initialize state for new data set
         if (provingDeadlines[dataSetId] == NO_PROVING_DEADLINE) {
             uint256 firstDeadline = block.number + getMaxProvingPeriod();
