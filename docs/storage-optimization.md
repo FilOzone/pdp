@@ -34,8 +34,8 @@ The current measured four-piece baseline is:
 |---|---:|
 | Reads | 21 |
 | Writes | 28 |
-| KAMT objects touched | 23 |
-| KAMT objects modified | 18 |
+| KAMT objects touched | 24 |
+| KAMT objects modified | 19 |
 | Newly occupied slots | 20 |
 
 ## Compact measurement results
@@ -57,8 +57,8 @@ reduction is 3/60% for one piece, 12/60% for four, 48/60% for sixteen, and
 96/60% for thirty-two. The four-piece comparison is therefore 20 to 8 slots.
 
 For four pieces, writes change from the legacy baseline's 28 to 13
-(-15, calculated 53.6% reduction); touched KAMT objects change from 23 to 7,
-and modified objects from 18 to 3. No legacy measurements exist for the other
+(-15, calculated 53.6% reduction); touched KAMT objects change from 24 to 7,
+and modified objects from 19 to 3. No legacy measurements exist for the other
 batch sizes, so this document does not infer corresponding cross-layout changes.
 
 [INFERENCE] Reads and writes scale as `5 * N + 7` and `3 * N + 1`,
