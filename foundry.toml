@@ -21,7 +21,6 @@ via_ir = true
 [profile.default.lint]
 severity = ["high", "med", "low", "info", "gas", "code-size"]
 exclude_lints = [
-    "asm-keccak256", # flagging on a view function; revisit when forge supports inline suppression
     "block-timestamp",
     "custom-errors",
     "incorrect-shift",
