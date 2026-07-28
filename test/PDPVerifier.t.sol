@@ -5,6 +5,7 @@ import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {BURN_ADDRESS} from "fvm-solidity/FVMActors.sol";
 import {Test} from "forge-std/Test.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
@@ -2137,19 +2138,34 @@ contract PDPVerifierMigrateTest is Test {
     }
 
     function testAnnouncePlannedUpgrade() public {
+        _testAnnouncePlannedUpgrade(true);
+    }
+
+    function testAnnounceUpgradePlan() public {
+        _testAnnouncePlannedUpgrade(false);
+    }
+
+    function _testAnnouncePlannedUpgrade(bool useDeprecatedMethod) internal {
         // Initially, no upgrade is planned
         (address nextImplementation, uint96 afterEpoch) = pdpVerifier.nextUpgrade();
         assertEq(nextImplementation, address(0));
         assertEq(afterEpoch, uint96(0));
 
         // Announce upgrade
+        nextImplementation = address(newImplementation);
+        uint96 delay = 2000;
+        afterEpoch = uint96(vm.getBlockNumber()) + delay;
         PDPVerifier.PlannedUpgrade memory plan;
-        plan.nextImplementation = address(newImplementation);
-        plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
+        plan.nextImplementation = nextImplementation;
+        plan.afterEpoch = afterEpoch;
 
         vm.expectEmit(false, false, false, true);
         emit PDPVerifier.UpgradeAnnounced(plan);
-        pdpVerifier.announcePlannedUpgrade(plan);
+        if (useDeprecatedMethod) {
+            pdpVerifier.announcePlannedUpgrade(plan);
+        } else {
+            pdpVerifier.announceUpgradePlan(nextImplementation, delay);
+        }
 
         // Verify upgrade plan is stored
         (nextImplementation, afterEpoch) = pdpVerifier.nextUpgrade();
@@ -2179,32 +2195,70 @@ contract PDPVerifierMigrateTest is Test {
     }
 
     function testAnnouncePlannedUpgradeOnlyOwner() public {
-        PDPVerifier.PlannedUpgrade memory plan;
-        plan.nextImplementation = address(newImplementation);
-        plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
+        _testAnnouncePlannedUpgradeOnlyOwner(true);
+    }
 
+    function testAnnounceUpgradePlanOnlyOwner() public {
+        _testAnnouncePlannedUpgradeOnlyOwner(false);
+    }
+
+    function _testAnnouncePlannedUpgradeOnlyOwner(bool useDeprecatedMethod) internal {
         // Non-owner cannot announce upgrade
         vm.prank(address(0x1234));
-        vm.expectRevert();
-        pdpVerifier.announcePlannedUpgrade(plan);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(0x1234)));
+        if (useDeprecatedMethod) {
+            PDPVerifier.PlannedUpgrade memory plan;
+            plan.nextImplementation = address(newImplementation);
+            plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
+            pdpVerifier.announcePlannedUpgrade(plan);
+        } else {
+            pdpVerifier.announceUpgradePlan(address(newImplementation), 2000);
+        }
     }
 
     function testAnnouncePlannedUpgradeInvalidImplementation() public {
-        PDPVerifier.PlannedUpgrade memory plan;
-        plan.nextImplementation = address(0x123); // Invalid address with no code
-        plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
-
-        vm.expectRevert();
-        pdpVerifier.announcePlannedUpgrade(plan);
+        _testAnnouncePlannedUpgradeInvalidImplementation(true);
     }
 
-    function testAnnouncePlannedUpgradeInvalidEpoch() public {
-        PDPVerifier.PlannedUpgrade memory plan;
-        plan.nextImplementation = address(newImplementation);
-        plan.afterEpoch = uint96(vm.getBlockNumber()); // Must be in the future
+    function testAnnounceUpgradePlanInvalidImplementation() public {
+        _testAnnouncePlannedUpgradeInvalidImplementation(false);
+    }
 
-        vm.expectRevert();
-        pdpVerifier.announcePlannedUpgrade(plan);
+    function _testAnnouncePlannedUpgradeInvalidImplementation(bool useDeprecatedMethod) internal {
+        if (useDeprecatedMethod) {
+            PDPVerifier.PlannedUpgrade memory plan;
+            plan.nextImplementation = address(0x123); // Invalid address with no code
+            plan.afterEpoch = uint96(vm.getBlockNumber()) + 2000;
+            vm.expectRevert(abi.encodeWithSelector(PDPVerifier.InvalidImplementation.selector, address(0x123)));
+            pdpVerifier.announcePlannedUpgrade(plan);
+        } else {
+            vm.expectRevert(abi.encodeWithSelector(PDPVerifier.InvalidImplementation.selector, address(0x123)));
+            pdpVerifier.announceUpgradePlan(address(0x123), 2000); // Invalid address with no code
+        }
+    }
+
+    // A low or past afterEpoch/delay is clamped up to the minimum rather than reverting
+    function testAnnouncePlannedUpgradeMinimumDelay() public {
+        _testAnnouncePlannedUpgradeMinimumDelay(true);
+    }
+
+    function testAnnounceUpgradePlanMinimumDelay() public {
+        _testAnnouncePlannedUpgradeMinimumDelay(false);
+    }
+
+    function _testAnnouncePlannedUpgradeMinimumDelay(bool useDeprecatedMethod) internal {
+        if (useDeprecatedMethod) {
+            PDPVerifier.PlannedUpgrade memory plan;
+            plan.nextImplementation = address(newImplementation);
+            plan.afterEpoch = 0;
+            pdpVerifier.announcePlannedUpgrade(plan);
+        } else {
+            pdpVerifier.announceUpgradePlan(address(newImplementation), 0);
+        }
+
+        (address nextImplementation, uint96 afterEpoch) = pdpVerifier.nextUpgrade();
+        assertEq(nextImplementation, address(newImplementation));
+        assertEq(afterEpoch, vm.getBlockNumber() + 1);
     }
 
     function testMigrate() public {
