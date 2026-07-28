@@ -141,6 +141,22 @@ cast call --rpc-url https://api.node.glif.io/rpc/v1 \
 
 If the owner is a SAFE or other contract owner, use `tools/upgrade.sh` to generate calldata for the owner workflow rather than broadcasting directly.
 
+### 5. Confirm the PDP Upgrade Plan
+
+- [ ] Named PDP technical owner recorded; they own the written, verified upgrade plan and go/no-go decision
+- [ ] Exact currently deployed Calibration and Mainnet `PDPVerifier` versions checked against the target version and recorded
+- [ ] PDP-related cross-repo changes linked, or explicitly recorded as `none`
+
+### 6. Record PDP Rollback Safety
+
+- [ ] Rollback decision recorded as `safe` or `unsafe`, with rationale
+- [ ] Applicable PDP rollback procedure/script linked, or a reason recorded for why rollback is not the mitigation
+
+### 7. Validate PDP in FOC Devnet
+
+- [ ] Before Calibration, run foc-devnet with the target `PDPVerifier` upgrade and link evidence that the post-upgrade PDP state is valid
+- [ ] Exact current and target `PDPVerifier` versions used by the validation recorded
+
 ## Calibration Rollout
 
 - [ ] Deploy the new `PDPVerifier` implementation to Calibration
@@ -324,6 +340,9 @@ Check that:
 - the old and new pagination calls agree
 - `findPieceIdsByCid()` returns the expected piece ID(s)
 
+- [ ] Verify `createDataSet` succeeds on Calibration through a PDP integration path
+  - Record the data set ID, transaction link, deployed PDP version, and either manual test evidence or a passing dealbot canary graph.
+
 - [ ] Record Calibration result in an issue comment; send external update if needed
   - If release notes need to be drafted or refreshed first: `docs(changelog): draft vX.Y.Z release notes`
 - [ ] Confirm no blocker remains for Mainnet rollout
@@ -463,6 +482,9 @@ cast call --rpc-url https://api.node.glif.io/rpc/v1 \
   0xBADd0B92C1c71d02E7d520f64c0876538fa2557F \
   "nextUpgrade()(address,uint96)"
 ```
+
+- [ ] Verify `createDataSet` succeeds on Mainnet through a PDP integration path
+  - Record the data set ID, transaction link, deployed PDP version, and either manual test evidence or a passing dealbot canary graph.
 
 - [ ] Publish completion/update communication
 
