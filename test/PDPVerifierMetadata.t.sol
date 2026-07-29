@@ -43,7 +43,7 @@ contract PDPVerifierMetadataHarness is PDPVerifier {
     }
 
     function appendCompactPiece(uint256 setId, bytes32 root, uint256 metadata) external {
-        compactPieces[setId].push(PieceV2(root, metadata));
+        compactPieces[setId].push(PieceV2({root: root, metadata: metadata}));
     }
 
     function addPiecesForTest(uint256 setId, Cids.Cid[] calldata pieces) external returns (uint256) {

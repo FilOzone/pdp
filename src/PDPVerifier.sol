@@ -897,7 +897,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 pieceId = compactPieces[setId].length;
         uint256 sum = sumTreeAdd(setId, leafCount, pieceId);
-        compactPieces[setId].push(PieceV2(root, _packPieceMetadata(padding, height, leafCount, sum)));
+        compactPieces[setId].push(PieceV2({root: root, metadata: _packPieceMetadata(padding, height, leafCount, sum)}));
     }
 
     // schedulePieceDeletions schedules deletion of a batch of pieces from a data set for the start of the next
