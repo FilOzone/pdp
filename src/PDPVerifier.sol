@@ -187,6 +187,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Former cleanupPieces gate anchor; only written by v3.4.0 deleteDataSet.
     mapping(uint256 => uint256) deprecatedCleanupModeEpoch;
 
+    // Test-only state used to reproduce the deployed contract's storage-tree size on a local devnet.
+    mapping(uint256 => uint256) private balastSlots;
+
     struct PieceV2 {
         bytes32 root;
         uint256 metadata;
@@ -210,6 +213,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
         nextDataSetId = 1; // Data sets start at 1
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
+    }
+
+    /// @notice Fills `n` deterministic, hash-distributed storage slots starting at `start`.
+    /// @dev Test-only helper. Sequential mapping keys produce pseudorandom physical storage slots.
+    function balast(uint256 start, uint256 n) external {
+        uint256 end = start + n;
+        for (uint256 key = start; key < end;) {
+            balastSlots[key] = key + 1;
+            unchecked {
+                ++key;
+            }
+        }
     }
 
     string public constant VERSION = "3.4.0";
