@@ -880,10 +880,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return metadata & (SUM_TREE_MAX << SUM_TREE_SHIFT);
     }
 
-    function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece)
-        internal
-        returns (uint256 leafCount)
-    {
+    function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256 leafCount) {
         (uint256 padding, uint8 height, bytes32 root) = Cids.validateCommPv2(piece);
         if (Cids.isPaddingExcessive(padding, height)) {
             revert IndexedError(callIdx, "Padding is too large");
