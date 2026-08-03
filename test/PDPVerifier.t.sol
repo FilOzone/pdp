@@ -1553,7 +1553,7 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         pdpVerifier.addPieces(testSetId, address(0), pieceDataArray, empty);
         assertEq(pdpVerifier.getDataSetLeafCount(testSetId), 87, "Incorrect final data set leaf count");
         assertEq(pdpVerifier.getNextPieceId(testSetId), 8, "Incorrect next piece ID");
-        assertEq(pdpVerifier.getCompactPieceSum(testSetId, 7), 87, "Incorrect Fenwick sum");
+        assertEq(pdpVerifier.getCompactPieceSum(testSetId, 7), 87, "Incorrect sum tree count");
         assertEq(pdpVerifier.getPieceLeafCount(testSetId, 7), 34, "Incorrect piece leaf count");
         Cids.Cid memory expectedCid = pieceDataArray[3];
         Cids.Cid memory actualCid = pdpVerifier.getPieceCid(testSetId, 3);
@@ -1594,7 +1594,7 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         assertFindPiecesAndOffsets(testSetId, leafIndexes, expectedPieceIds, expectedOffsets);
     }
 
-    function setUpTestingArray() public returns (uint256[] memory counts, uint256[] memory expectedFenwickSums) {
+    function setUpTestingArray() public returns (uint256[] memory counts, uint256[] memory expectedSumTreeCounts) {
         counts = new uint256[](8);
         counts[0] = 200;
         counts[1] = 100;
@@ -1605,16 +1605,16 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         counts[6] = 400;
         counts[7] = 40;
 
-        // Fenwick partial sums after the selected pieces are removed.
-        expectedFenwickSums = new uint256[](8);
-        expectedFenwickSums[0] = 200;
-        expectedFenwickSums[1] = 300;
-        expectedFenwickSums[2] = 0;
-        expectedFenwickSums[3] = 330;
-        expectedFenwickSums[4] = 50;
-        expectedFenwickSums[5] = 50;
-        expectedFenwickSums[6] = 400;
-        expectedFenwickSums[7] = 820;
+        // Correct sum tree values assuming that pieceIdsToRemove are deleted
+        expectedSumTreeCounts = new uint256[](8);
+        expectedSumTreeCounts[0] = 200;
+        expectedSumTreeCounts[1] = 300;
+        expectedSumTreeCounts[2] = 0;
+        expectedSumTreeCounts[3] = 330;
+        expectedSumTreeCounts[4] = 50;
+        expectedSumTreeCounts[5] = 50;
+        expectedSumTreeCounts[6] = 400;
+        expectedSumTreeCounts[7] = 820;
 
         uint256[] memory pieceIdsToRemove = new uint256[](2);
         pieceIdsToRemove[0] = 2;
@@ -1641,23 +1641,24 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         }
     }
 
-    function testFenwickSums() public {
-        (uint256[] memory counts, uint256[] memory expectedFenwickSums) = setUpTestingArray();
+    function testSumTree() public {
+        (uint256[] memory counts, uint256[] memory expectedSumTreeCounts) = setUpTestingArray();
+        // Assert that the sum tree count is correct
         for (uint256 i = 0; i < counts.length; i++) {
-            assertEq(pdpVerifier.getCompactPieceSum(testSetId, i), expectedFenwickSums[i], "Incorrect Fenwick sum");
+            assertEq(pdpVerifier.getCompactPieceSum(testSetId, i), expectedSumTreeCounts[i], "Incorrect sum tree count");
         }
 
         // Assert final data set leaf count
         assertEq(pdpVerifier.getDataSetLeafCount(testSetId), 820, "Incorrect final data set leaf count");
     }
 
-    function assertFenwickInvariant(uint256 setId) internal view {
+    function assertSumTreeInvariant(uint256 setId) internal view {
         uint256 nextPieceId = pdpVerifier.getNextPieceId(setId);
         for (uint256 index = 0; index < nextPieceId; index++) {
             uint256 height = pdpVerifier.getTestHeightFromIndex(index);
             uint256 range = 1 << height;
 
-            require(index + 1 >= range, "Fenwick range underflow");
+            require(index + 1 >= range, "SumTree range underflow");
 
             uint256 expectedSum = 0;
             for (uint256 j = index + 1 - range; j <= index; j++) {
@@ -1668,12 +1669,12 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
             assertEq(
                 actualSum,
                 expectedSum,
-                string(abi.encodePacked("Fenwick invariant failed at index ", vm.toString(index)))
+                string(abi.encodePacked("SumTree invariant failed at index ", vm.toString(index)))
             );
         }
     }
 
-    function testFenwickInvariantAddsAndRemovals() public {
+    function testSumTreeInvariantAddsAndRemovals() public {
         uint256 numRounds = 5;
         uint256 piecesPerRound = 8;
 
@@ -1693,11 +1694,11 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
 
             pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
-            assertFenwickInvariant(testSetId);
+            assertSumTreeInvariant(testSetId);
         }
     }
 
-    function testFenwickAlternatingPattern() public {
+    function testSumTreeAlternatingPattern() public {
         uint256 numOperations = 10;
 
         for (uint256 i = 0; i < numOperations; i++) {
@@ -1712,7 +1713,7 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
             }
 
             pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
-            assertFenwickInvariant(testSetId);
+            assertSumTreeInvariant(testSetId);
         }
     }
 

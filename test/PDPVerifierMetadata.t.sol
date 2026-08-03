@@ -158,7 +158,7 @@ contract PDPVerifierMetadataTest is Test {
         );
     }
 
-    function testCompactAdditionAppendsRootsMetadataAndFenwickSums() public {
+    function testCompactAdditionAppendsRootsMetadataAndSumTreeCounts() public {
         uint256 setId = 9;
         Cids.Cid[] memory firstBatch = new Cids.Cid[](3);
         firstBatch[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
@@ -184,7 +184,7 @@ contract PDPVerifierMetadataTest is Test {
             assertEq(harness.piecePadding(metadata), 0, "padding");
             assertEq(harness.pieceHeight(metadata), pieceId, "height");
             assertEq(harness.pieceLeafCount(metadata), expectedLeafCounts[pieceId], "leaf count");
-            assertEq(harness.pieceSum(metadata), expectedSums[pieceId], "Fenwick partial sum");
+            assertEq(harness.pieceSum(metadata), expectedSums[pieceId], "sum tree count");
         }
     }
 
@@ -274,7 +274,7 @@ contract PDPVerifierMetadataTest is Test {
         assertEq(harness.dataSetLeafCountForTest(setId), SUM_TREE_MAX, "overflow leaves total unchanged");
     }
 
-    function testCompactAdditionRejectsFenwickSumOverflow() public {
+    function testCompactAdditionRejectsSumTreeCountOverflow() public {
         uint256 setId = 12;
         harness.appendCompactPiece(setId, bytes32(uint256(1)), harness.packPieceMetadata(0, 0, 1, SUM_TREE_MAX));
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
