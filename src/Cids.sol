@@ -13,7 +13,7 @@ library Cids {
 
     // Checks that CID is PieceCIDv2 and decomposes it into its components.
     // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
-    function validateCommPv2(Cid memory cid) internal pure returns (uint256 padding, uint8 height, bytes32 root) {
+    function validateCommPv2(Cid calldata cid) internal pure returns (uint256 padding, uint8 height, bytes32 root) {
         require(cid.data.length >= 4, "Cid data is too short");
         for (uint256 i = 0; i < 4; i++) {
             if (cid.data[i] != COMMP_V2_PREFIX[i]) {
@@ -42,9 +42,9 @@ library Cids {
         require(offset <= cid.data.length - 32, "CommPv2 digest is too short");
         require(offset == cid.data.length - 32, "CommPv2 digest length is invalid");
 
-        bytes memory data = cid.data;
+        bytes calldata data = cid.data;
         assembly {
-            root := mload(add(add(data, 0x20), offset))
+            root := calldataload(add(data.offset, offset))
         }
     }
 
@@ -148,7 +148,11 @@ library Cids {
 
     // Helper function reading uvarints <= 256 bits.
     // Returns (value, offset) with offset advanced to the following byte.
-    function _readUvarint(bytes memory data, uint256 offset) internal pure returns (uint256 value, uint256 newOffset) {
+    function _readUvarint(bytes calldata data, uint256 offset)
+        internal
+        pure
+        returns (uint256 value, uint256 newOffset)
+    {
         uint256 i;
         while (true) {
             require(offset + i < data.length, "Uvarint is unterminated");

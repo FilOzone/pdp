@@ -504,7 +504,7 @@
               "slot": "1",
               "type": {
                 "encoding": "inplace",
-                "label": "uint256",
+                "label": "PieceMetadata",
                 "numberOfBytes": "32"
               }
             }

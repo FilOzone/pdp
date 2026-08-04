@@ -1026,7 +1026,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         uint256[] memory sizes1 = new uint256[](5);
         (Cids.Cid[] memory pieces1, uint256[] memory ids1, bool hasMore1) = pdpVerifier.getActivePieces(setId, 0, 5);
         for (uint256 i = 0; i < pieces1.length; i++) {
-            (uint256 padding, uint8 height,) = Cids.validateCommPv2(pieces1[i]);
+            (uint256 padding, uint8 height,) = this.validateCommPv2(pieces1[i]);
             sizes1[i] = Cids.pieceSize(padding, height);
         }
         assertEq(pieces1.length, 5, "First page should have 5 pieces");
@@ -1039,7 +1039,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         uint256[] memory sizes2 = new uint256[](5);
         (Cids.Cid[] memory pieces2, uint256[] memory ids2, bool hasMore2) = pdpVerifier.getActivePieces(setId, 5, 5);
         for (uint256 i = 0; i < pieces2.length; i++) {
-            (uint256 padding, uint8 height,) = Cids.validateCommPv2(pieces2[i]);
+            (uint256 padding, uint8 height,) = this.validateCommPv2(pieces2[i]);
             sizes2[i] = Cids.pieceSize(padding, height);
         }
         assertEq(pieces2.length, 5, "Second page should have 5 pieces");
@@ -1190,7 +1190,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
                 pdpVerifier.getActivePieces(setId, offset, pageSize);
             uint256[] memory sizes = new uint256[](pieces.length);
             for (uint256 i = 0; i < pieces.length; i++) {
-                (uint256 padding, uint8 height,) = Cids.validateCommPv2(pieces[i]);
+                (uint256 padding, uint8 height,) = this.validateCommPv2(pieces[i]);
                 sizes[i] = Cids.pieceSize(padding, height);
             }
 
@@ -1381,7 +1381,7 @@ contract SumTreeInternalTestPDPVerifier is PDPVerifier {
     }
 
     function getCompactPieceSum(uint256 setId, uint256 pieceId) public view returns (uint256) {
-        return _pieceSum(compactPieces[setId][pieceId].metadata);
+        return compactPieces[setId][pieceId].metadata.sum();
     }
 }
 
@@ -2711,7 +2711,7 @@ contract CompactReaderHarness is PDPVerifier {
 
     function clearCompactPieceForTest(uint256 setId, uint256 pieceId) external {
         PieceV2 storage piece = compactPieces[setId][pieceId];
-        piece.metadata = _clearPieceMetadataExceptSum(piece.metadata);
+        piece.metadata = piece.metadata.clearExceptSum();
     }
 }
 

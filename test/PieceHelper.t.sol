@@ -6,6 +6,14 @@ import {Cids} from "../src/Cids.sol";
 import {BitOps} from "../src/BitOps.sol";
 
 contract PieceHelper is Test {
+    function validateCommPv2(Cids.Cid calldata cid)
+        external
+        pure
+        returns (uint256 padding, uint8 height, bytes32 root)
+    {
+        return Cids.validateCommPv2(cid);
+    }
+
     // Constructs a PieceData structure for a Merkle tree.
     function makePiece(bytes32[][] memory tree, uint256 leafCount) internal pure returns (Cids.Cid memory) {
         if (leafCount == 0) {
@@ -70,46 +78,46 @@ contract PieceHelper is Test {
 }
 
 contract PieceHelperTest is Test, PieceHelper {
-    function testMakePiece() public pure {
+    function testMakePiece() public view {
         bytes32[][] memory tree = new bytes32[][](1);
         tree[0] = new bytes32[](10);
         Cids.Cid memory piece = makePiece(tree, 10);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
     }
 
-    function testMakeSamplePiece() public pure {
+    function testMakeSamplePiece() public view {
         makeSamplePiece(0);
         Cids.Cid memory piece = makeSamplePiece(1);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePiece(2);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePiece(3);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePiece(4);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePiece(10);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePiece(127);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePiece(128);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePiece(1024);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
     }
 
-    function testMakeSamplePieceBytes() public pure {
+    function testMakeSamplePieceBytes() public view {
         Cids.Cid memory piece = makeSamplePieceBytes(0);
         piece = makeSamplePieceBytes(1);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePieceBytes(2);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePieceBytes(32);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePieceBytes(31);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePieceBytes(127);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
         piece = makeSamplePieceBytes(128);
-        Cids.validateCommPv2(piece);
+        this.validateCommPv2(piece);
     }
 }

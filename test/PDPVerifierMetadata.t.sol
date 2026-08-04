@@ -6,6 +6,15 @@ import {PDPVerifier} from "../src/PDPVerifier.sol";
 import {Cids} from "../src/Cids.sol";
 import {COMPACT_PIECES_SLOT} from "../src/PDPVerifierLayout.sol";
 import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
+import {
+    PieceMetadata,
+    PieceMetadataLibrary,
+    PADDING_MAX,
+    HEIGHT_MAX,
+    LEAF_COUNT_MAX,
+    SUM_TREE_MAX,
+    PieceMetadataOverflow
+} from "../src/PieceMetadata.sol";
 
 contract PDPVerifierMetadataHarness is PDPVerifier {
     constructor() PDPVerifier(1, 2) {}
@@ -15,35 +24,35 @@ contract PDPVerifierMetadataHarness is PDPVerifier {
         pure
         returns (uint256)
     {
-        return _packPieceMetadata(padding, height, leafCount, sum);
+        return PieceMetadata.unwrap(PieceMetadataLibrary.pack(padding, height, leafCount, sum));
     }
 
     function piecePadding(uint256 metadata) external pure returns (uint256) {
-        return _piecePadding(metadata);
+        return PieceMetadata.wrap(metadata).padding();
     }
 
     function pieceHeight(uint256 metadata) external pure returns (uint256) {
-        return _pieceHeight(metadata);
+        return PieceMetadata.wrap(metadata).height();
     }
 
     function pieceLeafCount(uint256 metadata) external pure returns (uint256) {
-        return _pieceLeafCount(metadata);
+        return PieceMetadata.wrap(metadata).leafCount();
     }
 
     function pieceSum(uint256 metadata) external pure returns (uint256) {
-        return _pieceSum(metadata);
+        return PieceMetadata.wrap(metadata).sum();
     }
 
     function withPieceSum(uint256 metadata, uint256 sum) external pure returns (uint256) {
-        return _withPieceSum(metadata, sum);
+        return PieceMetadata.unwrap(PieceMetadata.wrap(metadata).withSum(sum));
     }
 
     function clearPieceMetadataExceptSum(uint256 metadata) external pure returns (uint256) {
-        return _clearPieceMetadataExceptSum(metadata);
+        return PieceMetadata.unwrap(PieceMetadata.wrap(metadata).clearExceptSum());
     }
 
     function appendCompactPiece(uint256 setId, bytes32 root, uint256 metadata) external {
-        compactPieces[setId].push(PieceV2({root: root, metadata: metadata}));
+        compactPieces[setId].push(PieceV2({root: root, metadata: PieceMetadata.wrap(metadata)}));
     }
 
     function addPiecesForTest(uint256 setId, Cids.Cid[] calldata pieces) external returns (uint256) {
@@ -52,7 +61,7 @@ contract PDPVerifierMetadataHarness is PDPVerifier {
 
     function compactPiece(uint256 setId, uint256 pieceId) external view returns (bytes32 root, uint256 metadata) {
         PieceV2 storage piece = compactPieces[setId][pieceId];
-        return (piece.root, piece.metadata);
+        return (piece.root, PieceMetadata.unwrap(piece.metadata));
     }
 
     function compactPieceCount(uint256 setId) external view returns (uint256) {
@@ -74,11 +83,6 @@ contract PDPVerifierMetadataHarness is PDPVerifier {
 }
 
 contract PDPVerifierMetadataTest is Test {
-    uint256 private constant PADDING_MAX = (uint256(1) << 55) - 1;
-    uint256 private constant HEIGHT_MAX = (uint256(1) << 6) - 1;
-    uint256 private constant LEAF_COUNT_MAX = (uint256(1) << 51) - 1;
-    uint256 private constant SUM_TREE_MAX = (uint256(1) << 144) - 1;
-
     PDPVerifierMetadataHarness private harness;
 
     function setUp() public {
@@ -116,19 +120,19 @@ contract PDPVerifierMetadataTest is Test {
     }
 
     function testPackPieceMetadataRejectsOverflowingFields() public {
-        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        vm.expectRevert(PieceMetadataOverflow.selector);
         harness.packPieceMetadata(PADDING_MAX + 1, 0, 0, 0);
 
-        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        vm.expectRevert(PieceMetadataOverflow.selector);
         harness.packPieceMetadata(0, HEIGHT_MAX + 1, 0, 0);
 
-        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        vm.expectRevert(PieceMetadataOverflow.selector);
         harness.packPieceMetadata(0, 0, LEAF_COUNT_MAX + 1, 0);
 
-        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        vm.expectRevert(PieceMetadataOverflow.selector);
         harness.packPieceMetadata(0, 0, 0, SUM_TREE_MAX + 1);
 
-        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        vm.expectRevert(PieceMetadataOverflow.selector);
         harness.withPieceSum(0, SUM_TREE_MAX + 1);
     }
 
@@ -267,7 +271,7 @@ contract PDPVerifierMetadataTest is Test {
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
 
-        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        vm.expectRevert(PieceMetadataOverflow.selector);
         harness.addPiecesForTest(setId, pieces);
 
         assertEq(harness.compactPieceCount(setId), 0, "overflow leaves no compact pieces");
@@ -280,7 +284,7 @@ contract PDPVerifierMetadataTest is Test {
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(2)));
 
-        vm.expectRevert(PDPVerifier.PieceMetadataOverflow.selector);
+        vm.expectRevert(PieceMetadataOverflow.selector);
         harness.addPiecesForTest(setId, pieces);
 
         assertEq(harness.compactPieceCount(setId), 1, "sum overflow adds no compact piece");

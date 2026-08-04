@@ -12,6 +12,13 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {FVMPay} from "fvm-solidity/FVMPay.sol";
 import {FVMRandom} from "fvm-solidity/FVMRandom.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
+import {
+    PieceMetadata,
+    PieceMetadataLibrary,
+    LEAF_COUNT_MAX,
+    SUM_TREE_MAX,
+    PieceMetadataOverflow
+} from "./PieceMetadata.sol";
 
 /// @title PDPListener
 /// @notice Interface for PDP Service applications managing data storage.
@@ -192,7 +199,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     struct PieceV2 {
         bytes32 root;
-        uint256 metadata;
+        PieceMetadata metadata;
     }
 
     mapping(uint256 setId => PieceV2[] pieces) internal compactPieces;
@@ -314,7 +321,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns false if the data set is not live or if the piece id is 1) not yet created 2) deleted
     function pieceLive(uint256 setId, uint256 pieceId) public view returns (bool) {
         if (!dataSetLive(setId) || pieceId >= compactPieces[setId].length) return false;
-        return _pieceLeafCount(compactPieces[setId][pieceId].metadata) > 0;
+        return compactPieces[setId][pieceId].metadata.leafCount() > 0;
     }
 
     // Returns false if the piece is not live or if the piece id is not yet in challenge range
@@ -322,7 +329,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 top = 256 - BitOps.clz(compactPieces[setId].length);
         IPDPTypes.PieceIdAndOffset memory ret = findOnePieceId(setId, challengeRange[setId] - 1, top);
         require(
-            ret.offset == _pieceLeafCount(compactPieces[setId][ret.pieceId].metadata) - 1,
+            ret.offset == compactPieces[setId][ret.pieceId].metadata.leafCount() - 1,
             "challengeRange -1 should align with the very last leaf of a piece"
         );
         return pieceLive(setId, pieceId) && pieceId <= ret.pieceId;
@@ -368,7 +375,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(dataSetLive(setId), DataSetNotLive());
         if (pieceId >= compactPieces[setId].length) return Cids.Cid(new bytes(0));
         PieceV2 storage piece = compactPieces[setId][pieceId];
-        if (_pieceLeafCount(piece.metadata) == 0) return Cids.Cid(new bytes(0));
+        if (piece.metadata.leafCount() == 0) return Cids.Cid(new bytes(0));
         return _pieceCid(piece.root, piece.metadata);
     }
 
@@ -376,7 +383,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function getPieceLeafCount(uint256 setId, uint256 pieceId) public view returns (uint256) {
         require(dataSetLive(setId), DataSetNotLive());
         if (pieceId >= compactPieces[setId].length) return 0;
-        return _pieceLeafCount(compactPieces[setId][pieceId].metadata);
+        return compactPieces[setId][pieceId].metadata.leafCount();
     }
 
     // Returns the index of the most recently added leaf that is challengeable in the current proving period
@@ -406,7 +413,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 maxPieceId = compactPieces[setId].length;
         for (uint256 i = 0; i < maxPieceId; i++) {
-            if (_pieceLeafCount(compactPieces[setId][i].metadata) > 0) {
+            if (compactPieces[setId][i].metadata.leafCount() > 0) {
                 activeCount++;
             }
         }
@@ -443,7 +450,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         for (uint256 i = 0; i < maxPieceId; i++) {
             PieceV2 storage piece = compactPieces[setId][i];
-            if (_pieceLeafCount(piece.metadata) > 0) {
+            if (piece.metadata.leafCount() > 0) {
                 if (activeCount >= offset && resultIndex < limit) {
                     tempPieces[resultIndex] = _pieceCid(piece.root, piece.metadata);
                     tempPieceIds[resultIndex] = i;
@@ -511,7 +518,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Start from startPieceId and collect up to limit
         for (uint256 i = startPieceId; i < maxPieceId && resultIndex < limit; i++) {
             PieceV2 storage piece = compactPieces[setId][i];
-            if (_pieceLeafCount(piece.metadata) > 0) {
+            if (piece.metadata.leafCount() > 0) {
                 tempPieces[resultIndex] = _pieceCid(piece.root, piece.metadata);
                 tempPieceIds[resultIndex] = i;
                 resultIndex++;
@@ -522,7 +529,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (resultIndex > 0) {
             uint256 lastFound = tempPieceIds[resultIndex - 1];
             for (uint256 i = lastFound + 1; i < maxPieceId; i++) {
-                if (_pieceLeafCount(compactPieces[setId][i].metadata) > 0) {
+                if (compactPieces[setId][i].metadata.leafCount() > 0) {
                     hasMore = true;
                     break;
                 }
@@ -569,10 +576,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         for (uint256 i = startPieceId; i < maxPieceId && count < limit; i++) {
             PieceV2 storage piece = compactPieces[setId][i];
-            if (_pieceLeafCount(piece.metadata) == 0) continue;
-            if (
-                piece.root == root && _piecePadding(piece.metadata) == padding && _pieceHeight(piece.metadata) == height
-            ) {
+            if (piece.metadata.leafCount() == 0) continue;
+            if (piece.root == root && piece.metadata.padding() == padding && piece.metadata.height() == height) {
                 pieceIds[count++] = i;
             }
         }
@@ -852,47 +857,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error InsufficientChallengeDelay(uint256 epochs, uint256 minDelay);
     error ExcessiveChallengeDelay(uint256 epochs, uint256 maxDelay);
     error InvalidImplementation(address implementation);
-    error PieceMetadataOverflow();
 
-    function _packPieceMetadata(uint256 padding, uint256 height, uint256 leafCount, uint256 sum)
-        internal
-        pure
-        returns (uint256)
-    {
-        if (padding > PADDING_MAX || height > HEIGHT_MAX || leafCount > LEAF_COUNT_MAX || sum > SUM_TREE_MAX) {
-            revert PieceMetadataOverflow();
-        }
-        return (padding << PADDING_SHIFT) | (height << HEIGHT_SHIFT) | (leafCount << LEAF_COUNT_SHIFT)
-            | (sum << SUM_TREE_SHIFT);
-    }
-
-    function _piecePadding(uint256 metadata) internal pure returns (uint256) {
-        return (metadata >> PADDING_SHIFT) & PADDING_MAX;
-    }
-
-    function _pieceHeight(uint256 metadata) internal pure returns (uint256) {
-        return (metadata >> HEIGHT_SHIFT) & HEIGHT_MAX;
-    }
-
-    function _pieceLeafCount(uint256 metadata) internal pure returns (uint256) {
-        return (metadata >> LEAF_COUNT_SHIFT) & LEAF_COUNT_MAX;
-    }
-
-    function _pieceSum(uint256 metadata) internal pure returns (uint256) {
-        return (metadata >> SUM_TREE_SHIFT) & SUM_TREE_MAX;
-    }
-
-    function _pieceCid(bytes32 root, uint256 metadata) internal pure returns (Cids.Cid memory) {
-        return Cids.CommPv2FromDigest(_piecePadding(metadata), uint8(_pieceHeight(metadata)), root);
-    }
-
-    function _withPieceSum(uint256 metadata, uint256 sum) internal pure returns (uint256) {
-        if (sum > SUM_TREE_MAX) revert PieceMetadataOverflow();
-        return (metadata & ~(SUM_TREE_MAX << SUM_TREE_SHIFT)) | (sum << SUM_TREE_SHIFT);
-    }
-
-    function _clearPieceMetadataExceptSum(uint256 metadata) internal pure returns (uint256) {
-        return metadata & (SUM_TREE_MAX << SUM_TREE_SHIFT);
+    function _pieceCid(bytes32 root, PieceMetadata metadata) internal pure returns (Cids.Cid memory) {
+        return Cids.CommPv2FromDigest(metadata.padding(), uint8(metadata.height()), root);
     }
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256 leafCount) {
@@ -909,7 +876,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 pieceId = compactPieces[setId].length;
         uint256 sum = sumTreeAdd(setId, leafCount, pieceId);
-        compactPieces[setId].push(PieceV2({root: root, metadata: _packPieceMetadata(padding, height, leafCount, sum)}));
+        compactPieces[setId].push(
+            PieceV2({root: root, metadata: PieceMetadataLibrary.pack(padding, height, leafCount, sum)})
+        );
     }
 
     // schedulePieceDeletions schedules deletion of a batch of pieces from a data set for the start of the next
@@ -926,9 +895,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         for (uint256 i = 0; i < pieceIds.length; i++) {
             uint256 pieceId = pieceIds[i];
             require(pieceId < compactPieces[setId].length, "Can only schedule removal of existing pieces");
-            require(
-                _pieceLeafCount(compactPieces[setId][pieceId].metadata) > 0, "Can only schedule removal of live pieces"
-            );
+            require(compactPieces[setId][pieceId].metadata.leafCount() > 0, "Can only schedule removal of live pieces");
 
             // Check for duplicates using bitmap
             uint256 slotIndex = pieceId >> 8;
@@ -999,7 +966,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 challenges[i] = findOnePieceId(setId, challengeIdx, sumTreeTop);
                 PieceV2 storage piece = compactPieces[setId][challenges[i].pieceId];
                 bool ok = MerkleVerify.verify(
-                    proofs[i].proof, piece.root, proofs[i].leaf, challenges[i].offset, _pieceHeight(piece.metadata) + 1
+                    proofs[i].proof, piece.root, proofs[i].leaf, challenges[i].offset, piece.metadata.height() + 1
                 );
                 require(ok, "proof did not verify");
             }
@@ -1165,7 +1132,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // the number of leafs by which to reduce the total data set leaf count.
     function removeOnePiece(uint256 setId, uint256 pieceId) internal returns (uint256) {
         PieceV2 storage piece = compactPieces[setId][pieceId];
-        uint256 delta = _pieceLeafCount(piece.metadata);
+        uint256 delta = piece.metadata.leafCount();
         sumTreeRemove(setId, pieceId, delta);
         piece.root = bytes32(0);
         return delta;
@@ -1204,7 +1171,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // Sum BaseArray[j - 2^i] for i in [0, h)
         for (uint256 i = 0; i < h; i++) {
             uint256 priorIndex = pieceId - (1 << i);
-            sum += _pieceSum(compactPieces[setId][priorIndex].metadata);
+            sum += compactPieces[setId][priorIndex].metadata.sum();
         }
         if (sum > SUM_TREE_MAX) revert PieceMetadataOverflow();
     }
@@ -1223,10 +1190,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // 2) the highest node right of the removal index
         while (h <= top && index < pieceCount) {
             PieceV2 storage piece = pieces[index];
-            uint256 sum = _pieceSum(piece.metadata) - delta;
-            piece.metadata = index == removedIndex
-                ? _clearPieceMetadataExceptSum(_withPieceSum(piece.metadata, sum))
-                : _withPieceSum(piece.metadata, sum);
+            uint256 sum = piece.metadata.sum() - delta;
+            piece.metadata =
+                index == removedIndex ? piece.metadata.withSum(sum).clearExceptSum() : piece.metadata.withSum(sum);
             index += 1 << h;
             h = heightFromIndex(index);
         }
@@ -1253,8 +1219,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 continue;
             }
 
-            uint256 metadata = compactPieces[setId][searchPtr].metadata;
-            uint256 sum = _pieceSum(metadata);
+            PieceMetadata metadata = compactPieces[setId][searchPtr].metadata;
+            uint256 sum = metadata.sum();
             candidate = acc + sum;
             // Go right
             if (candidate <= leafIndex) {
@@ -1265,8 +1231,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 searchPtr -= 1 << (h - 1);
             }
         }
-        uint256 finalMetadata = compactPieces[setId][searchPtr].metadata;
-        candidate = acc + _pieceSum(finalMetadata);
+        PieceMetadata finalMetadata = compactPieces[setId][searchPtr].metadata;
+        candidate = acc + finalMetadata.sum();
         if (candidate <= leafIndex) {
             // Choose right
             return IPDPTypes.PieceIdAndOffset(searchPtr + 1, leafIndex - candidate);
