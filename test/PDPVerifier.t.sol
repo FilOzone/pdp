@@ -539,6 +539,8 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         // Remove piece
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 0;
+        vm.expectEmit(true, false, false, true);
+        emit IPDPEvents.PiecesScheduledForRemoval(setId, toRemove);
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
         vm.expectEmit(true, true, false, false);
@@ -587,6 +589,8 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         uint256[] memory toRemove = new uint256[](2);
         toRemove[0] = 0;
         toRemove[1] = 2;
+        vm.expectEmit(true, false, false, true);
+        emit IPDPEvents.PiecesScheduledForRemoval(setId, toRemove);
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
         vm.expectEmit(true, true, false, false);
@@ -609,6 +613,25 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getPieceLeafCount(setId, 0), 0);
         assertEq(pdpVerifier.getPieceLeafCount(setId, 1), 64 / 32);
         assertEq(pdpVerifier.getPieceLeafCount(setId, 2), 0);
+    }
+
+    function testSchedulePieceDeletionsEmitsPiecesScheduledForRemoval() public {
+        uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+        Cids.Cid[] memory pieces = new Cids.Cid[](3);
+        pieces[0] = makeSamplePiece(2);
+        pieces[1] = makeSamplePiece(2);
+        pieces[2] = makeSamplePiece(2);
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        uint256[] memory toRemove = new uint256[](2);
+        toRemove[0] = 0;
+        toRemove[1] = 2;
+
+        vm.expectEmit(true, false, false, true);
+        emit IPDPEvents.PiecesScheduledForRemoval(setId, toRemove);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
     }
 
     function testSchedulePieceDeletionsDuplicatePrevention() public {
