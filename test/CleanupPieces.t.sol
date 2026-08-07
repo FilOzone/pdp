@@ -348,11 +348,11 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         assertCompactPieceSlotsCleared(setId, 1);
     }
 
-    function testLegacyDeletedDataSetCleanupRequiresCleanupMode() public {
+    function testCompactDataSetDoesNotUseHistoricalLegacyCleanupPath() public {
         uint256 setId = _createAndPopulate(2);
 
-        // A legacy storageProvider value alone must not activate the removed
-        // legacy-mapping cleanup path.
+        // A cleared storageProvider value alone must not activate the historical
+        // legacy-mapping cleanup path for a compact data set.
         vm.store(address(pdpVerifier), keccak256(abi.encode(setId, STORAGE_PROVIDER_SLOT)), bytes32(0));
 
         vm.expectRevert(PDPVerifier.DataSetNotInCleanupMode.selector);
