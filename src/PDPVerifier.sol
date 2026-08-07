@@ -305,6 +305,45 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return limit == 0 || setId < limit;
     }
 
+    function _pieceCount(uint256 setId, bool legacy) internal view returns (uint256) {
+        return legacy ? nextPieceId[setId] : compactPieces[setId].length;
+    }
+
+    function _pieceLeafCount(uint256 setId, uint256 pieceId, bool legacy) internal view returns (uint256) {
+        if (legacy) return pieceLeafCounts[setId][pieceId];
+        if (pieceId >= compactPieces[setId].length) return 0;
+        return compactPieces[setId][pieceId].metadata.leafCount();
+    }
+
+    function _pieceCidAt(uint256 setId, uint256 pieceId, bool legacy) internal view returns (Cids.Cid memory) {
+        if (legacy) return pieceCids[setId][pieceId];
+        if (pieceId >= compactPieces[setId].length) return Cids.Cid(new bytes(0));
+        PieceV2 storage piece = compactPieces[setId][pieceId];
+        if (piece.metadata.leafCount() == 0) return Cids.Cid(new bytes(0));
+        return _pieceCid(piece.root, piece.metadata);
+    }
+
+    function _sumTreeValue(uint256 setId, uint256 pieceId, bool legacy) internal view returns (uint256) {
+        return legacy ? sumTreeCounts[setId][pieceId] : compactPieces[setId][pieceId].metadata.sum();
+    }
+
+    function _proofRootAndHeight(uint256 setId, uint256 pieceId, bool legacy)
+        internal
+        view
+        returns (bytes32 root, uint256 height)
+    {
+        if (!legacy) {
+            PieceV2 storage piece = compactPieces[setId][pieceId];
+            return (piece.root, piece.metadata.height() + 1);
+        }
+
+        bytes memory cidData = pieceCids[setId][pieceId].data;
+        height = uint8(cidData[cidData.length - 33]) + 1;
+        assembly ("memory-safe") {
+            root := mload(add(cidData, mload(cidData)))
+        }
+    }
+
     // Returns false if the data set is 1) not yet created 2) fully deleted (cleanup complete)
     function dataSetExists(uint256 setId) internal view returns (bool) {
         return storageProvider[setId] != address(0);
@@ -317,16 +356,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Returns false if the data set is not live or if the piece id is 1) not yet created 2) deleted
     function pieceLive(uint256 setId, uint256 pieceId) public view returns (bool) {
-        if (!dataSetLive(setId) || pieceId >= compactPieces[setId].length) return false;
-        return compactPieces[setId][pieceId].metadata.leafCount() > 0;
+        if (!dataSetLive(setId)) return false;
+        bool legacy = _usesLegacyPieceStorage(setId);
+        return pieceId < _pieceCount(setId, legacy) && _pieceLeafCount(setId, pieceId, legacy) > 0;
     }
 
     // Returns false if the piece is not live or if the piece id is not yet in challenge range
     function pieceChallengable(uint256 setId, uint256 pieceId) public view returns (bool) {
-        uint256 top = 256 - BitOps.clz(compactPieces[setId].length);
-        IPDPTypes.PieceIdAndOffset memory ret = findOnePieceId(setId, challengeRange[setId] - 1, top);
+        bool legacy = _usesLegacyPieceStorage(setId);
+        uint256 top = 256 - BitOps.clz(_pieceCount(setId, legacy));
+        IPDPTypes.PieceIdAndOffset memory ret = findOnePieceId(setId, challengeRange[setId] - 1, top, legacy);
         require(
-            ret.offset == compactPieces[setId][ret.pieceId].metadata.leafCount() - 1,
+            ret.offset == _pieceLeafCount(setId, ret.pieceId, legacy) - 1,
             "challengeRange -1 should align with the very last leaf of a piece"
         );
         return pieceLive(setId, pieceId) && pieceId <= ret.pieceId;
@@ -341,7 +382,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns the next piece ID for a data set. Also valid during cleanup mode.
     function getNextPieceId(uint256 setId) public view returns (uint256) {
         require(dataSetExists(setId), DataSetNotFound());
-        return compactPieces[setId].length;
+        return _pieceCount(setId, _usesLegacyPieceStorage(setId));
     }
 
     // Returns the next challenge epoch for a data set. Returns type(uint256).max during cleanup mode.
@@ -370,17 +411,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns the piece CID for a given data set and piece ID
     function getPieceCid(uint256 setId, uint256 pieceId) public view returns (Cids.Cid memory) {
         require(dataSetLive(setId), DataSetNotLive());
-        if (pieceId >= compactPieces[setId].length) return Cids.Cid(new bytes(0));
-        PieceV2 storage piece = compactPieces[setId][pieceId];
-        if (piece.metadata.leafCount() == 0) return Cids.Cid(new bytes(0));
-        return _pieceCid(piece.root, piece.metadata);
+        return _pieceCidAt(setId, pieceId, _usesLegacyPieceStorage(setId));
     }
 
     // Returns the piece leaf count for a given data set and piece ID
     function getPieceLeafCount(uint256 setId, uint256 pieceId) public view returns (uint256) {
         require(dataSetLive(setId), DataSetNotLive());
-        if (pieceId >= compactPieces[setId].length) return 0;
-        return compactPieces[setId][pieceId].metadata.leafCount();
+        return _pieceLeafCount(setId, pieceId, _usesLegacyPieceStorage(setId));
     }
 
     // Returns the index of the most recently added leaf that is challengeable in the current proving period
@@ -408,9 +445,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function getActivePieceCount(uint256 setId) public view returns (uint256 activeCount) {
         require(dataSetLive(setId), DataSetNotLive());
 
-        uint256 maxPieceId = compactPieces[setId].length;
+        bool legacy = _usesLegacyPieceStorage(setId);
+        uint256 maxPieceId = _pieceCount(setId, legacy);
         for (uint256 i = 0; i < maxPieceId; i++) {
-            if (compactPieces[setId][i].metadata.leafCount() > 0) {
+            if (_pieceLeafCount(setId, i, legacy) > 0) {
                 activeCount++;
             }
         }
@@ -436,20 +474,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(limit > 0, "Limit must be greater than 0");
 
         // Single pass: collect data and check for more
-        uint256 maxPieceId = compactPieces[setId].length;
+        bool legacy = _usesLegacyPieceStorage(setId);
+        uint256 maxPieceId = _pieceCount(setId, legacy);
 
         // Over-allocate arrays to limit size
         Cids.Cid[] memory tempPieces = new Cids.Cid[](limit);
         uint256[] memory tempPieceIds = new uint256[](limit);
-
         uint256 activeCount = 0;
         uint256 resultIndex = 0;
 
         for (uint256 i = 0; i < maxPieceId; i++) {
-            PieceV2 storage piece = compactPieces[setId][i];
-            if (piece.metadata.leafCount() > 0) {
+            if (_pieceLeafCount(setId, i, legacy) > 0) {
                 if (activeCount >= offset && resultIndex < limit) {
-                    tempPieces[resultIndex] = _pieceCid(piece.root, piece.metadata);
+                    tempPieces[resultIndex] = _pieceCidAt(setId, i, legacy);
                     tempPieceIds[resultIndex] = i;
                     resultIndex++;
                 } else if (activeCount >= offset + limit) {
@@ -500,9 +537,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
-        uint256 maxPieceId = compactPieces[setId].length;
-
-        // if startPieceId is beyond all pieces, return empty
+        bool legacy = _usesLegacyPieceStorage(setId);
+        uint256 maxPieceId = _pieceCount(setId, legacy);
+        // If startPieceId is beyond all pieces, return empty
         if (startPieceId >= maxPieceId) {
             return (new Cids.Cid[](0), new uint256[](0), false);
         }
@@ -514,9 +551,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // Start from startPieceId and collect up to limit
         for (uint256 i = startPieceId; i < maxPieceId && resultIndex < limit; i++) {
-            PieceV2 storage piece = compactPieces[setId][i];
-            if (piece.metadata.leafCount() > 0) {
-                tempPieces[resultIndex] = _pieceCid(piece.root, piece.metadata);
+            if (_pieceLeafCount(setId, i, legacy) > 0) {
+                tempPieces[resultIndex] = _pieceCidAt(setId, i, legacy);
                 tempPieceIds[resultIndex] = i;
                 resultIndex++;
             }
@@ -526,7 +562,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (resultIndex > 0) {
             uint256 lastFound = tempPieceIds[resultIndex - 1];
             for (uint256 i = lastFound + 1; i < maxPieceId; i++) {
-                if (compactPieces[setId][i].metadata.leafCount() > 0) {
+                if (_pieceLeafCount(setId, i, legacy) > 0) {
                     hasMore = true;
                     break;
                 }
@@ -565,18 +601,27 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
-        (uint256 padding, uint8 height, bytes32 root) = Cids.validateCommPv2(pieceCid);
-        uint256 maxPieceId = compactPieces[setId].length;
+        bool legacy = _usesLegacyPieceStorage(setId);
+        bytes32 targetHash;
+        uint256 padding;
+        uint8 height;
+        bytes32 root;
+        if (legacy) {
+            targetHash = keccak256(pieceCid.data);
+        } else {
+            (padding, height, root) = Cids.validateCommPv2(pieceCid);
+        }
+        uint256 maxPieceId = _pieceCount(setId, legacy);
 
         pieceIds = new uint256[](limit);
         uint256 count = 0;
-
         for (uint256 i = startPieceId; i < maxPieceId && count < limit; i++) {
-            PieceV2 storage piece = compactPieces[setId][i];
-            if (piece.metadata.leafCount() == 0) continue;
-            if (piece.root == root && piece.metadata.padding() == padding && piece.metadata.height() == height) {
-                pieceIds[count++] = i;
-            }
+            if (_pieceLeafCount(setId, i, legacy) == 0) continue;
+            bool matches = legacy
+                ? keccak256(pieceCids[setId][i].data) == targetHash
+                : compactPieces[setId][i].root == root && compactPieces[setId][i].metadata.padding() == padding
+                    && compactPieces[setId][i].metadata.height() == height;
+            if (matches) pieceIds[count++] = i;
         }
 
         assembly ("memory-safe") {
@@ -942,7 +987,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 seed = drawChallengeSeed(setId);
         {
             uint256 leafCount = challengeRange[setId];
-            uint256 sumTreeTop = 256 - BitOps.clz(compactPieces[setId].length);
+            bool legacy = _usesLegacyPieceStorage(setId);
+            uint256 sumTreeTop = 256 - BitOps.clz(_pieceCount(setId, legacy));
             for (uint64 i = 0; i < nProofs; i++) {
                 // Hash (SHA3) the seed,  data set id, and proof index to create challenge.
                 // Note -- there is a slight deviation here from the uniform distribution.
@@ -960,11 +1006,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
 
                 // Find the piece that has this leaf, and the offset of the leaf within that piece.
-                challenges[i] = findOnePieceId(setId, challengeIdx, sumTreeTop);
-                PieceV2 storage piece = compactPieces[setId][challenges[i].pieceId];
-                bool ok = MerkleVerify.verify(
-                    proofs[i].proof, piece.root, proofs[i].leaf, challenges[i].offset, piece.metadata.height() + 1
-                );
+                challenges[i] = findOnePieceId(setId, challengeIdx, sumTreeTop, legacy);
+                (bytes32 root, uint256 height) = _proofRootAndHeight(setId, challenges[i].pieceId, legacy);
+                bool ok = MerkleVerify.verify(proofs[i].proof, root, proofs[i].leaf, challenges[i].offset, height);
                 require(ok, "proof did not verify");
             }
         }
@@ -1196,28 +1240,26 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Perform sumtree find
-    function findOnePieceId(uint256 setId, uint256 leafIndex, uint256 top)
+    function findOnePieceId(uint256 setId, uint256 leafIndex, uint256 top, bool legacy)
         internal
         view
         returns (IPDPTypes.PieceIdAndOffset memory)
     {
         require(leafIndex < dataSetLeafCount[setId], "Leaf index out of bounds");
-        uint256 pieceCount = compactPieces[setId].length;
+        uint256 pieceCount = _pieceCount(setId, legacy);
         uint256 searchPtr = (1 << top) - 1;
         uint256 acc = 0;
 
         // Binary search until we find the index of the sumtree leaf covering the index range
         uint256 candidate;
         for (uint256 h = top; h > 0; h--) {
-            // Search has taken us past the end of the sumtree
-            // Only option is to go left
+            // Search has taken us past the end of the sumtree, so the only option is to go left.
             if (searchPtr >= pieceCount) {
                 searchPtr -= 1 << (h - 1);
                 continue;
             }
 
-            PieceMetadata metadata = compactPieces[setId][searchPtr].metadata;
-            uint256 sum = metadata.sum();
+            uint256 sum = _sumTreeValue(setId, searchPtr, legacy);
             candidate = acc + sum;
             // Go right
             if (candidate <= leafIndex) {
@@ -1228,12 +1270,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 searchPtr -= 1 << (h - 1);
             }
         }
-        PieceMetadata finalMetadata = compactPieces[setId][searchPtr].metadata;
-        candidate = acc + finalMetadata.sum();
+        candidate = acc + _sumTreeValue(setId, searchPtr, legacy);
         if (candidate <= leafIndex) {
             // Choose right
             return IPDPTypes.PieceIdAndOffset(searchPtr + 1, leafIndex - candidate);
-        } // Choose left
+        }
+        // Choose left
         return IPDPTypes.PieceIdAndOffset(searchPtr, leafIndex - acc);
     }
 
@@ -1244,10 +1286,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         returns (IPDPTypes.PieceIdAndOffset[] memory)
     {
         // The top of the sumtree is the largest power of 2 less than the number of pieces
-        uint256 top = 256 - BitOps.clz(compactPieces[setId].length);
+        bool legacy = _usesLegacyPieceStorage(setId);
+        uint256 top = 256 - BitOps.clz(_pieceCount(setId, legacy));
         IPDPTypes.PieceIdAndOffset[] memory result = new IPDPTypes.PieceIdAndOffset[](leafIndexs.length);
         for (uint256 i = 0; i < leafIndexs.length; i++) {
-            result[i] = findOnePieceId(setId, leafIndexs[i], top);
+            result[i] = findOnePieceId(setId, leafIndexs[i], top, legacy);
         }
         return result;
     }
