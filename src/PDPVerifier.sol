@@ -729,7 +729,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
         emit DataSetDeleted(setId, deletedLeafCount);
 
-        if (compactPieces[setId].length == 0) {
+        bool legacy = _usesLegacyPieceStorage(setId);
+        if (_pieceCount(setId, legacy) == 0) {
             // Zero-piece data set: finalize cleanup immediately and pay deposit to caller.
             _finalizeCleanup(setId);
         } else {
@@ -740,41 +741,54 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    // Releases storage for a deleted data set piece-by-piece. Can only be called after deleteDataSet
-    // has placed the data set in cleanup mode (nextChallengeEpoch == CLEANUP_MODE_SENTINEL).
+    // Releases storage for a deleted data set piece-by-piece. This is available after deleteDataSet
+    // has placed the data set in cleanup mode (nextChallengeEpoch == CLEANUP_MODE_SENTINEL), or for
+    // legacy data sets deleted before cleanup mode existed (storageProvider == 0 && nextPieceId > 0).
     //
     // The caller gate is identical to deleteDataSet: SP-exclusive within INACTIVITY_WINDOW blocks of
     // the last proving activity, permissionless after, so an abandoned data set can be deleted and
-    // cleaned up back-to-back by one caller.
+    // cleaned up back-to-back by one caller. Historical deleted legacy data sets are permissionless.
     //
     // On the final call that clears all pieces, all remaining data set state is also cleared and
     // the cleanup deposit is transferred to msg.sender. Returns true when cleanup is complete.
     function cleanupPieces(uint256 setId, uint256 maxPieces) external returns (bool done) {
         require(maxPieces > 0, MaxPiecesMustBePositive());
 
-        require(nextChallengeEpoch[setId] == CLEANUP_MODE_SENTINEL, DataSetNotInCleanupMode());
+        bool legacy = _usesLegacyPieceStorage(setId);
+        bool isCleanupMode = nextChallengeEpoch[setId] == CLEANUP_MODE_SENTINEL;
+        bool isHistoricalLegacyDelete = legacy && storageProvider[setId] == address(0) && nextPieceId[setId] > 0;
+        require(isCleanupMode || isHistoricalLegacyDelete, DataSetNotInCleanupMode());
 
-        if (_withinActivityWindow(setId)) {
+        if (isCleanupMode && _withinActivityWindow(setId)) {
             require(msg.sender == storageProvider[setId], OnlyStorageProviderCanCleanupPieces());
         }
 
-        PieceV2[] storage pieces = compactPieces[setId];
-        uint256 pieceCount = pieces.length;
+        uint256 pieceCount = _pieceCount(setId, legacy);
         uint256 toClean = pieceCount < maxPieces ? pieceCount : maxPieces;
-
-        for (uint256 i = 0; i < toClean; i++) {
-            delete pieces[pieces.length - 1];
-            pieces.pop();
+        if (legacy) {
+            for (uint256 i = 0; i < toClean; i++) {
+                uint256 pieceId = pieceCount - 1 - i;
+                delete pieceCids[setId][pieceId];
+                delete pieceLeafCounts[setId][pieceId];
+                delete sumTreeCounts[setId][pieceId];
+            }
+            nextPieceId[setId] = pieceCount - toClean;
+        } else {
+            PieceV2[] storage pieces = compactPieces[setId];
+            for (uint256 i = 0; i < toClean; i++) {
+                delete pieces[pieces.length - 1];
+                pieces.pop();
+            }
         }
 
-        if (pieces.length == 0) {
+        if (_pieceCount(setId, legacy) == 0) {
             _finalizeCleanup(setId);
             done = true;
         }
     }
 
     // Clears all remaining singleton state for a data set and transfers the cleanup deposit to msg.sender.
-    // Must only be called when compactPieces[setId].length == 0.
+    // Must only be called when the selected piece representation's count is zero.
     function _finalizeCleanup(uint256 setId) internal {
         // Clear scheduled removal bitmap entries before deleting the array.
         uint256[] storage removals = scheduledRemovals[setId];
@@ -861,14 +875,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 nPieces = pieceData.length;
         require(nPieces > 0, "Must add at least one piece");
 
-        firstAdded = compactPieces[setId].length;
+        bool legacy = _usesLegacyPieceStorage(setId);
+        firstAdded = _pieceCount(setId, legacy);
         uint256 newLeafCount = dataSetLeafCount[setId];
         uint256[] memory pieceIds = new uint256[](nPieces);
         Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](nPieces);
 
         for (uint256 i = 0; i < nPieces; i++) {
-            uint256 leafCount = addOnePiece(setId, i, pieceData[i]);
-            if (newLeafCount > SUM_TREE_MAX - leafCount) revert PieceMetadataOverflow();
+            uint256 leafCount = addOnePiece(setId, i, pieceData[i], legacy);
+            if (!legacy && newLeafCount > SUM_TREE_MAX - leafCount) revert PieceMetadataOverflow();
             newLeafCount += leafCount;
             pieceIds[i] = firstAdded + i;
             pieceCidsAdded[i] = pieceData[i];
@@ -904,7 +919,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return Cids.CommPv2FromDigest(metadata.padding(), uint8(metadata.height()), root);
     }
 
-    function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece) internal returns (uint256 leafCount) {
+    function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece, bool legacy)
+        internal
+        returns (uint256 leafCount)
+    {
         (uint256 padding, uint8 height, bytes32 root) = Cids.validateCommPv2(piece);
         if (Cids.isPaddingExcessive(padding, height)) {
             revert IndexedError(callIdx, "Padding is too large");
@@ -914,13 +932,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         leafCount = Cids.leafCount(padding, height);
-        if (leafCount > LEAF_COUNT_MAX) revert PieceMetadataOverflow();
+        if (!legacy && leafCount > LEAF_COUNT_MAX) revert PieceMetadataOverflow();
 
-        uint256 pieceId = compactPieces[setId].length;
-        uint256 sum = sumTreeAdd(setId, leafCount, pieceId);
-        compactPieces[setId].push(
-            PieceV2({root: root, metadata: PieceMetadataLibrary.pack(padding, height, leafCount, sum)})
-        );
+        uint256 pieceId = _pieceCount(setId, legacy);
+        uint256 sum = sumTreeAdd(setId, leafCount, pieceId, legacy);
+        if (legacy) {
+            pieceCids[setId][pieceId] = piece;
+            pieceLeafCounts[setId][pieceId] = leafCount;
+            nextPieceId[setId] = pieceId + 1;
+        } else {
+            compactPieces[setId].push(
+                PieceV2({root: root, metadata: PieceMetadataLibrary.pack(padding, height, leafCount, sum)})
+            );
+        }
     }
 
     // schedulePieceDeletions schedules deletion of a batch of pieces from a data set for the start of the next
@@ -934,10 +958,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             "Too many removals wait for next proving period to schedule"
         );
 
+        bool legacy = _usesLegacyPieceStorage(setId);
+        uint256 pieceCount = _pieceCount(setId, legacy);
         for (uint256 i = 0; i < pieceIds.length; i++) {
             uint256 pieceId = pieceIds[i];
-            require(pieceId < compactPieces[setId].length, "Can only schedule removal of existing pieces");
-            require(compactPieces[setId][pieceId].metadata.leafCount() > 0, "Can only schedule removal of live pieces");
+            require(pieceId < pieceCount, "Can only schedule removal of existing pieces");
+            require(_pieceLeafCount(setId, pieceId, legacy) > 0, "Can only schedule removal of live pieces");
 
             // Check for duplicates using bitmap
             uint256 slotIndex = pieceId >> 8;
@@ -1162,20 +1188,25 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // removes pieces from a data set's state.
     function removePieces(uint256 setId, uint256[] memory pieceIds) internal {
         require(dataSetLive(setId), DataSetNotLive());
+        bool legacy = _usesLegacyPieceStorage(setId);
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < pieceIds.length; i++) {
-            totalDelta += removeOnePiece(setId, pieceIds[i]);
+            totalDelta += removeOnePiece(setId, pieceIds[i], legacy);
         }
         dataSetLeafCount[setId] -= totalDelta;
     }
 
-    // removeOnePiece clears a compact piece's root and non-sum metadata and returns
+    // removeOnePiece clears a piece's live data while retaining its updated Fenwick sum and returns
     // the number of leafs by which to reduce the total data set leaf count.
-    function removeOnePiece(uint256 setId, uint256 pieceId) internal returns (uint256) {
-        PieceV2 storage piece = compactPieces[setId][pieceId];
-        uint256 delta = piece.metadata.leafCount();
-        sumTreeRemove(setId, pieceId, delta);
-        piece.root = bytes32(0);
+    function removeOnePiece(uint256 setId, uint256 pieceId, bool legacy) internal returns (uint256) {
+        uint256 delta = _pieceLeafCount(setId, pieceId, legacy);
+        sumTreeRemove(setId, pieceId, delta, legacy);
+        if (legacy) {
+            delete pieceLeafCounts[setId][pieceId];
+            delete pieceCids[setId][pieceId];
+        } else {
+            compactPieces[setId][pieceId].root = bytes32(0);
+        }
         return delta;
     }
 
@@ -1205,23 +1236,26 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Perform sumtree addition
     //
-    function sumTreeAdd(uint256 setId, uint256 count, uint256 pieceId) internal view returns (uint256 sum) {
+    function sumTreeAdd(uint256 setId, uint256 count, uint256 pieceId, bool legacy) internal returns (uint256 sum) {
         uint256 h = heightFromIndex(pieceId);
 
         sum = count;
         // Sum BaseArray[j - 2^i] for i in [0, h)
         for (uint256 i = 0; i < h; i++) {
             uint256 priorIndex = pieceId - (1 << i);
-            sum += compactPieces[setId][priorIndex].metadata.sum();
+            sum += _sumTreeValue(setId, priorIndex, legacy);
         }
-        if (sum > SUM_TREE_MAX) revert PieceMetadataOverflow();
+        if (legacy) {
+            sumTreeCounts[setId][pieceId] = sum;
+        } else if (sum > SUM_TREE_MAX) {
+            revert PieceMetadataOverflow();
+        }
     }
 
     // Perform sumtree removal
     //
-    function sumTreeRemove(uint256 setId, uint256 index, uint256 delta) internal {
-        PieceV2[] storage pieces = compactPieces[setId];
-        uint256 pieceCount = pieces.length;
+    function sumTreeRemove(uint256 setId, uint256 index, uint256 delta, bool legacy) internal {
+        uint256 pieceCount = _pieceCount(setId, legacy);
         uint256 removedIndex = index;
         uint256 top = uint256(256 - BitOps.clz(pieceCount));
         uint256 h = uint256(heightFromIndex(index));
@@ -1230,10 +1264,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // 1) the top of the tree or
         // 2) the highest node right of the removal index
         while (h <= top && index < pieceCount) {
-            PieceV2 storage piece = pieces[index];
-            uint256 sum = piece.metadata.sum() - delta;
-            piece.metadata =
-                index == removedIndex ? piece.metadata.withSum(sum).clearExceptSum() : piece.metadata.withSum(sum);
+            uint256 sum = _sumTreeValue(setId, index, legacy) - delta;
+            if (legacy) {
+                sumTreeCounts[setId][index] = sum;
+            } else {
+                PieceV2 storage piece = compactPieces[setId][index];
+                piece.metadata =
+                    index == removedIndex ? piece.metadata.withSum(sum).clearExceptSum() : piece.metadata.withSum(sum);
+            }
             index += 1 << h;
             h = heightFromIndex(index);
         }

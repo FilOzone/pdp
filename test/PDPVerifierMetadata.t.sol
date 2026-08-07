@@ -17,7 +17,9 @@ import {
 } from "../src/PieceMetadata.sol";
 
 contract PDPVerifierMetadataHarness is PDPVerifier {
-    constructor() PDPVerifier(1, 2) {}
+    constructor() PDPVerifier(1, 2) {
+        legacyPieceStorageIdLimit = 1;
+    }
 
     function packPieceMetadata(uint256 padding, uint256 height, uint256 leafCount, uint256 sum)
         external
