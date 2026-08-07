@@ -63,7 +63,6 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         );
     }
 
-
     function testDeleteDataSet() public {
         uint256 deposit = PDPFees.cleanupDeposit();
         uint256 callerBefore = address(this).balance;
