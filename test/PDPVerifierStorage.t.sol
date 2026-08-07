@@ -28,10 +28,11 @@ contract PDPVerifierStorageTest is MockFVMTest {
 
     function testAddPiecesStorageMetrics() public {
         uint256[4] memory batchSizes = [uint256(1), 4, 16, 32];
-        // Measurements include fixed dataset/sum-tree activity; compact records add two slots each.
-        uint256[4] memory expectedReads = [uint256(12), 25, 85, 165];
+        // Measurements include one format-boundary read plus fixed dataset/sum-tree activity;
+        // compact records add two slots each.
+        uint256[4] memory expectedReads = [uint256(13), 26, 86, 166];
         uint256[4] memory expectedWrites = [uint256(4), 13, 49, 97];
-        uint256[4] memory expectedTouchedObjects = [uint256(7), 7, 8, 9];
+        uint256[4] memory expectedTouchedObjects = [uint256(8), 8, 9, 10];
         uint256[4] memory expectedModifiedObjects = [uint256(3), 3, 4, 5];
 
         for (uint256 i; i < batchSizes.length; ++i) {
