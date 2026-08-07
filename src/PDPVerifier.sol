@@ -776,7 +776,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         } else {
             PieceV2[] storage pieces = compactPieces[setId];
             for (uint256 i = 0; i < toClean; i++) {
-                delete pieces[pieces.length - 1];
                 pieces.pop();
             }
         }
