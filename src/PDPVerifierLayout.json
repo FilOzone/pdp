@@ -451,29 +451,9 @@
     }
   },
   {
-    "label": "balastSlots",
-    "offset": 0,
-    "slot": "19",
-    "type": {
-      "encoding": "mapping",
-      "key": {
-        "encoding": "inplace",
-        "label": "uint256",
-        "numberOfBytes": "32"
-      },
-      "label": "mapping(uint256 => uint256)",
-      "numberOfBytes": "32",
-      "value": {
-        "encoding": "inplace",
-        "label": "uint256",
-        "numberOfBytes": "32"
-      }
-    }
-  },
-  {
     "label": "compactPieces",
     "offset": 0,
-    "slot": "20",
+    "slot": "19",
     "type": {
       "encoding": "mapping",
       "key": {

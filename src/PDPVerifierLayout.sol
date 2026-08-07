@@ -24,5 +24,4 @@ bytes32 constant FEE_STATUS_SLOT = bytes32(uint256(15));
 bytes32 constant NEXT_UPGRADE_SLOT = bytes32(uint256(16));
 bytes32 constant CLEANUP_DEPOSIT_SLOT = bytes32(uint256(17));
 bytes32 constant DEPRECATED_CLEANUP_MODE_EPOCH_SLOT = bytes32(uint256(18));
-bytes32 constant BALAST_SLOTS_SLOT = bytes32(uint256(19));
-bytes32 constant COMPACT_PIECES_SLOT = bytes32(uint256(20));
+bytes32 constant COMPACT_PIECES_SLOT = bytes32(uint256(19));

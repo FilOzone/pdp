@@ -17,7 +17,6 @@ import {IPDPEvents} from "../src/interfaces/IPDPEvents.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 import {ProofBuilderHelper} from "./ProofBuilderHelper.t.sol";
 import {NEW_DATA_SET_SENTINEL, NO_CHALLENGE_SCHEDULED} from "../src/PDPVerifier.sol";
-import {BALAST_SLOTS_SLOT} from "../src/PDPVerifierLayout.sol";
 
 contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     TestingRecordKeeperService listener;
@@ -64,15 +63,6 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         );
     }
 
-    function testBalastFillsRequestedStorageRange() public {
-        pdpVerifier.balast(7, 3);
-
-        assertEq(vm.load(address(pdpVerifier), keccak256(abi.encode(6, BALAST_SLOTS_SLOT))), bytes32(0));
-        assertEq(vm.load(address(pdpVerifier), keccak256(abi.encode(7, BALAST_SLOTS_SLOT))), bytes32(uint256(8)));
-        assertEq(vm.load(address(pdpVerifier), keccak256(abi.encode(8, BALAST_SLOTS_SLOT))), bytes32(uint256(9)));
-        assertEq(vm.load(address(pdpVerifier), keccak256(abi.encode(9, BALAST_SLOTS_SLOT))), bytes32(uint256(10)));
-        assertEq(vm.load(address(pdpVerifier), keccak256(abi.encode(10, BALAST_SLOTS_SLOT))), bytes32(0));
-    }
 
     function testDeleteDataSet() public {
         uint256 deposit = PDPFees.cleanupDeposit();
