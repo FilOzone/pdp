@@ -496,5 +496,15 @@
         "numberOfBytes": "32"
       }
     }
+  },
+  {
+    "label": "legacyPieceStorageIdLimit",
+    "offset": 0,
+    "slot": "20",
+    "type": {
+      "encoding": "inplace",
+      "label": "uint64",
+      "numberOfBytes": "8"
+    }
   }
 ]

@@ -200,6 +200,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     mapping(uint256 setId => PieceV2[] pieces) internal compactPieces;
+    // Exclusive upper bound for data set IDs that use the legacy piece mappings.
+    // Zero means the compact-storage cutover has not been initialized, so all data sets remain legacy.
+    uint64 public legacyPieceStorageIdLimit;
 
     // Methods
 
@@ -216,6 +219,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         nextDataSetId = 1; // Data sets start at 1
+        legacyPieceStorageIdLimit = 1;
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
@@ -225,6 +229,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
 
     function migrate() external onlyProxy onlyOwner reinitializer(REINITIALIZER_VERSION) {
+        if (legacyPieceStorageIdLimit == 0) {
+            legacyPieceStorageIdLimit = nextDataSetId;
+        }
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
@@ -291,6 +298,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Returns the next data set ID
     function getNextDataSetId() public view returns (uint64) {
         return nextDataSetId;
+    }
+
+    function _usesLegacyPieceStorage(uint256 setId) internal view returns (bool) {
+        uint64 limit = legacyPieceStorageIdLimit;
+        return limit == 0 || setId < limit;
     }
 
     // Returns false if the data set is 1) not yet created 2) fully deleted (cleanup complete)

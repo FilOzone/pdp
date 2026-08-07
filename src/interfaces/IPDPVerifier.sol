@@ -11,6 +11,7 @@ interface IPDPVerifier is IPDPEvents {
     // View functions
     function getChallengeFinality() external view returns (uint256);
     function getNextDataSetId() external view returns (uint64);
+    function legacyPieceStorageIdLimit() external view returns (uint64);
     function dataSetLive(uint256 setId) external view returns (bool);
     function pieceLive(uint256 setId, uint256 pieceId) external view returns (bool);
     function pieceChallengable(uint256 setId, uint256 pieceId) external view returns (bool);
