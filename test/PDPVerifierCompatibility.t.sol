@@ -125,6 +125,8 @@ contract PDPVerifierCompatibilityTest is MockFVMTest, PieceHelper, ProofBuilderH
         removals[0] = 1;
         verifier.schedulePieceDeletions(legacySetId, removals, "");
         verifier.schedulePieceDeletions(compactSetId, removals, "");
+        verifier.processPieceDeletions(legacySetId, removals.length);
+        verifier.processPieceDeletions(compactSetId, removals.length);
         verifier.nextProvingPeriod(legacySetId, block.number + CHALLENGE_FINALITY_DELAY, "");
         verifier.nextProvingPeriod(compactSetId, block.number + CHALLENGE_FINALITY_DELAY, "");
 
@@ -167,6 +169,39 @@ contract PDPVerifierCompatibilityTest is MockFVMTest, PieceHelper, ProofBuilderH
         assertTrue(verifier.cleanupPieces(compactSetId, 2));
         assertEq(_legacyPieceCount(legacySetId), 0);
         assertEq(_compactPieceCount(compactSetId), 0);
+    }
+
+    function testLegacyPartialDeletionPreservesPendingRemovalMarkerInSameBitmapSlot() public {
+        uint256 legacySetId = _createDataSetWithPieces(_samplePieces());
+        uint64 boundary = verifier.getNextDataSetId();
+        _upgradeAndMigrate(2);
+
+        assertEq(verifier.legacyPieceStorageIdLimit(), boundary);
+        assertTrue(legacySetId < boundary);
+        assertEq(_legacyPieceCount(legacySetId), 3);
+        assertEq(_compactPieceCount(legacySetId), 0);
+
+        uint256[] memory scheduled = new uint256[](3);
+        scheduled[0] = 0;
+        scheduled[1] = 1;
+        scheduled[2] = 2;
+        verifier.schedulePieceDeletions(legacySetId, scheduled, "");
+
+        uint256[] memory suffix = new uint256[](2);
+        suffix[0] = 1;
+        suffix[1] = 2;
+        verifier.processPieceDeletions(legacySetId, suffix.length);
+
+        uint256[] memory pending = new uint256[](1);
+        pending[0] = 0;
+        assertEq(verifier.getScheduledRemovals(legacySetId), pending);
+        assertTrue(verifier.pieceLive(legacySetId, 0));
+        assertFalse(verifier.pieceLive(legacySetId, 1));
+        assertFalse(verifier.pieceLive(legacySetId, 2));
+
+        vm.expectRevert("Piece ID already scheduled for removal");
+        verifier.schedulePieceDeletions(legacySetId, pending, "");
+        assertEq(verifier.getScheduledRemovals(legacySetId), pending);
     }
 
     function testPossessionProofWorksForBothRepresentations() public {
