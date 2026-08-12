@@ -643,7 +643,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         }
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
-        vm.expectRevert("Must schedule at least one piece");
+        vm.expectRevert(PDPVerifier.EmptyRemovalBatch.selector);
         pdpVerifier.schedulePieceDeletions(setId, new uint256[](0), empty);
     }
 

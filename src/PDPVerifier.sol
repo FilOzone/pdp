@@ -817,6 +817,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DataSetAlreadyInCleanup();
     error OnlyStorageProviderCanDelete();
     error MaxPiecesMustBePositive();
+    error EmptyRemovalBatch();
     error DataSetNotInCleanupMode();
     error OnlyStorageProviderCanCleanupPieces();
     error DepositTransferFailed();
@@ -849,7 +850,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
         require(dataSetLive(setId), DataSetNotLive());
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
-        require(pieceIds.length > 0, "Must schedule at least one piece");
+        require(pieceIds.length > 0, EmptyRemovalBatch());
         require(
             pieceIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS,
             "Too many removals wait for next proving period to schedule"
