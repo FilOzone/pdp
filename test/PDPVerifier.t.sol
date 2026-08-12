@@ -619,18 +619,28 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
         );
-        Cids.Cid[] memory pieces = new Cids.Cid[](3);
-        pieces[0] = makeSamplePiece(2);
-        pieces[1] = makeSamplePiece(2);
-        pieces[2] = makeSamplePiece(2);
+        uint256 pieceCount = 350;
+        Cids.Cid[] memory pieces = new Cids.Cid[](pieceCount);
+        uint256[] memory toRemove = new uint256[](pieceCount);
+        for (uint256 i = 0; i < pieceCount; i++) {
+            pieces[i] = makeSamplePiece(2);
+            toRemove[i] = i;
+        }
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
-        uint256[] memory toRemove = new uint256[](2);
-        toRemove[0] = 0;
-        toRemove[1] = 2;
-
-        vm.expectEmit(true, false, false, true);
-        emit IPDPEvents.PiecesScheduledForRemoval(setId, toRemove);
+        uint256 eventBatchSize = 100;
+        for (uint256 start = 0; start < pieceCount; start += eventBatchSize) {
+            uint256 end = start + eventBatchSize;
+            if (end > pieceCount) {
+                end = pieceCount;
+            }
+            uint256[] memory expectedPieceIds = new uint256[](end - start);
+            for (uint256 i = start; i < end; i++) {
+                expectedPieceIds[i - start] = i;
+            }
+            vm.expectEmit(true, false, false, true);
+            emit IPDPEvents.PiecesScheduledForRemoval(setId, expectedPieceIds);
+        }
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
     }
 

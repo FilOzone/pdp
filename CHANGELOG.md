@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 - `cleanupPieces()` now uses the same permission gate as `deleteDataSet()`, anchored to last proving activity instead of cleanup-mode entry. The abandonment path previously required two full `INACTIVITY_WINDOW` periods (~60 days); a permissionless deleter can now clean up and collect the deposit immediately. An SP deleting after exceeding the inactivity window no longer gets an exclusive cleanup period (the data set was already permissionlessly deletable). The unused `cleanupModeEpoch` storage is deprecated in place.
+- Chunked `PiecesScheduledForRemoval` events into batches of at most 100 piece IDs, preserving the 2,000-piece scheduling limit without exceeding Filecoin's 8 KiB event-data limit.
 
 ## [3.4.0] - 2026-05-28
 

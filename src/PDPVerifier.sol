@@ -46,6 +46,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
+    uint256 private constant PIECES_SCHEDULED_EVENT_BATCH_SIZE = 100;
 
     // Cleanup
     uint256 private constant CLEANUP_MODE_SENTINEL = type(uint256).max;
@@ -879,7 +880,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             PDPListener(listenerAddr).piecesScheduledRemove(setId, pieceIds, extraData);
         }
 
-        emit PiecesScheduledForRemoval(setId, pieceIds);
+        if (pieceIds.length == 0) {
+            emit PiecesScheduledForRemoval(setId, pieceIds);
+        }
+        for (uint256 start = 0; start < pieceIds.length; start += PIECES_SCHEDULED_EVENT_BATCH_SIZE) {
+            uint256 end = start + PIECES_SCHEDULED_EVENT_BATCH_SIZE;
+            if (end > pieceIds.length) {
+                end = pieceIds.length;
+            }
+            emit PiecesScheduledForRemoval(setId, pieceIds[start:end]);
+        }
     }
 
     // Verifies and records that the provider proved possession of the
