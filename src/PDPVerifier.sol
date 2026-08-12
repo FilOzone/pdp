@@ -849,6 +849,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
         require(dataSetLive(setId), DataSetNotLive());
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
+        require(pieceIds.length > 0, "Must schedule at least one piece");
         require(
             pieceIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS,
             "Too many removals wait for next proving period to schedule"
@@ -880,9 +881,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             PDPListener(listenerAddr).piecesScheduledRemove(setId, pieceIds, extraData);
         }
 
-        if (pieceIds.length == 0) {
-            emit PiecesScheduledForRemoval(setId, pieceIds);
-        }
         for (uint256 start = 0; start < pieceIds.length; start += PIECES_SCHEDULED_EVENT_BATCH_SIZE) {
             uint256 end = start + PIECES_SCHEDULED_EVENT_BATCH_SIZE;
             if (end > pieceIds.length) {
