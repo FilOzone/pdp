@@ -46,6 +46,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
+    uint256 private constant PIECES_SCHEDULED_EVENT_BATCH_SIZE = 100;
 
     // Cleanup
     uint256 private constant CLEANUP_MODE_SENTINEL = type(uint256).max;
@@ -816,6 +817,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DataSetAlreadyInCleanup();
     error OnlyStorageProviderCanDelete();
     error MaxPiecesMustBePositive();
+    error EmptyRemovalBatch();
     error DataSetNotInCleanupMode();
     error OnlyStorageProviderCanCleanupPieces();
     error DepositTransferFailed();
@@ -848,6 +850,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
         require(dataSetLive(setId), DataSetNotLive());
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
+        require(pieceIds.length > 0, EmptyRemovalBatch());
         require(
             pieceIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS,
             "Too many removals wait for next proving period to schedule"
@@ -879,7 +882,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             PDPListener(listenerAddr).piecesScheduledRemove(setId, pieceIds, extraData);
         }
 
-        emit PiecesScheduledForRemoval(setId, pieceIds);
+        for (uint256 start = 0; start < pieceIds.length; start += PIECES_SCHEDULED_EVENT_BATCH_SIZE) {
+            uint256 end = start + PIECES_SCHEDULED_EVENT_BATCH_SIZE;
+            if (end > pieceIds.length) {
+                end = pieceIds.length;
+            }
+            emit PiecesScheduledForRemoval(setId, pieceIds[start:end]);
+        }
     }
 
     // Verifies and records that the provider proved possession of the
