@@ -4,11 +4,12 @@ pragma solidity ^0.8.20;
 uint256 constant PADDING_MAX = (uint256(1) << 55) - 1;
 uint256 constant HEIGHT_MAX = (uint256(1) << 6) - 1;
 uint256 constant LEAF_COUNT_MAX = (uint256(1) << 51) - 1;
-uint256 constant SUM_TREE_MAX = (uint256(1) << 144) - 1;
+uint256 constant SUM_TREE_MAX = (uint256(1) << 143) - 1;
 
 uint256 constant HEIGHT_SHIFT = 55;
 uint256 constant LEAF_COUNT_SHIFT = 61;
 uint256 constant SUM_TREE_SHIFT = 112;
+uint256 constant REMOVAL_QUEUED_MASK = uint256(1) << 255;
 
 error PieceMetadataOverflow();
 
@@ -54,6 +55,14 @@ library PieceMetadataLibrary {
         if (newSum > SUM_TREE_MAX) revert PieceMetadataOverflow();
         uint256 rawMetadata = PieceMetadata.unwrap(metadata);
         return PieceMetadata.wrap((rawMetadata & ~(SUM_TREE_MAX << SUM_TREE_SHIFT)) | (newSum << SUM_TREE_SHIFT));
+    }
+
+    function removalQueued(PieceMetadata metadata) internal pure returns (bool) {
+        return PieceMetadata.unwrap(metadata) & REMOVAL_QUEUED_MASK != 0;
+    }
+
+    function withRemovalQueued(PieceMetadata metadata) internal pure returns (PieceMetadata) {
+        return PieceMetadata.wrap(PieceMetadata.unwrap(metadata) | REMOVAL_QUEUED_MASK);
     }
 
     function clearExceptSum(PieceMetadata metadata) internal pure returns (PieceMetadata) {

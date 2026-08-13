@@ -49,6 +49,14 @@ contract PDPVerifierMetadataHarness is PDPVerifier {
         return PieceMetadata.unwrap(PieceMetadata.wrap(metadata).withSum(sum));
     }
 
+    function pieceRemovalQueued(uint256 metadata) external pure returns (bool) {
+        return PieceMetadata.wrap(metadata).removalQueued();
+    }
+
+    function withPieceRemovalQueued(uint256 metadata) external pure returns (uint256) {
+        return PieceMetadata.unwrap(PieceMetadata.wrap(metadata).withRemovalQueued());
+    }
+
     function clearPieceMetadataExceptSum(uint256 metadata) external pure returns (uint256) {
         return PieceMetadata.unwrap(PieceMetadata.wrap(metadata).clearExceptSum());
     }
@@ -105,7 +113,7 @@ contract PDPVerifierMetadataTest is Test {
         _assertRoundTrip(0, 0, 1, 0);
         _assertRoundTrip(0, 0, uint256(1) << 50, 0);
         _assertRoundTrip(0, 0, 0, 1);
-        _assertRoundTrip(0, 0, 0, uint256(1) << 143);
+        _assertRoundTrip(0, 0, 0, uint256(1) << 142);
     }
 
     function testPackPieceMetadataFieldMaxima() public view {
@@ -117,8 +125,9 @@ contract PDPVerifierMetadataTest is Test {
 
     function testPackPieceMetadataCombinedMaximaDoNotOverlap() public view {
         uint256 metadata = harness.packPieceMetadata(PADDING_MAX, HEIGHT_MAX, LEAF_COUNT_MAX, SUM_TREE_MAX);
-        assertEq(metadata, type(uint256).max, "all metadata bits set");
+        assertEq(metadata, type(uint256).max >> 1, "numeric metadata bits set");
         _assertMetadata(metadata, PADDING_MAX, HEIGHT_MAX, LEAF_COUNT_MAX, SUM_TREE_MAX);
+        assertFalse(harness.pieceRemovalQueued(metadata), "new metadata is not queued");
     }
 
     function testPackPieceMetadataRejectsOverflowingFields() public {
@@ -144,10 +153,24 @@ contract PDPVerifierMetadataTest is Test {
         _assertMetadata(replaced, 7, 12, 17, SUM_TREE_MAX);
     }
 
-    function testClearPieceMetadataExceptSumPreservesSum() public view {
+    function testRemovalMarkerDoesNotChangeSumAndSurvivesSumUpdate() public view {
+        uint256 metadata = harness.packPieceMetadata(7, 12, 17, 23);
+        uint256 queued = harness.withPieceRemovalQueued(metadata);
+
+        assertTrue(harness.pieceRemovalQueued(queued), "removal marker set");
+        _assertMetadata(queued, 7, 12, 17, 23);
+
+        uint256 updated = harness.withPieceSum(queued, SUM_TREE_MAX);
+        assertTrue(harness.pieceRemovalQueued(updated), "sum update preserves removal marker");
+        _assertMetadata(updated, 7, 12, 17, SUM_TREE_MAX);
+    }
+
+    function testClearPieceMetadataExceptSumClearsRemovalMarker() public view {
         uint256 metadata = harness.packPieceMetadata(PADDING_MAX, HEIGHT_MAX, LEAF_COUNT_MAX, SUM_TREE_MAX);
+        metadata = harness.withPieceRemovalQueued(metadata);
         uint256 cleared = harness.clearPieceMetadataExceptSum(metadata);
         _assertMetadata(cleared, 0, 0, 0, SUM_TREE_MAX);
+        assertFalse(harness.pieceRemovalQueued(cleared), "removal marker cleared");
     }
 
     function testCompactPiecesLayoutUsesTwoContiguousSlots() public {

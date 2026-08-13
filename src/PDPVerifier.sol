@@ -55,16 +55,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     uint256 private constant PIECES_SCHEDULED_EVENT_BATCH_SIZE = 100;
 
-    uint256 internal constant PADDING_SHIFT = 0;
-    uint256 internal constant HEIGHT_SHIFT = 55;
-    uint256 internal constant LEAF_COUNT_SHIFT = 61;
-    uint256 internal constant SUM_TREE_SHIFT = 112;
-
-    uint256 internal constant PADDING_MAX = (uint256(1) << 55) - 1;
-    uint256 internal constant HEIGHT_MAX = (uint256(1) << 6) - 1;
-    uint256 internal constant LEAF_COUNT_MAX = (uint256(1) << 51) - 1;
-    uint256 internal constant SUM_TREE_MAX = (uint256(1) << 144) - 1;
-
     // Cleanup
     uint256 private constant CLEANUP_MODE_SENTINEL = type(uint256).max;
     uint256 public constant INACTIVITY_WINDOW = 86400;
@@ -161,7 +151,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(uint256 => uint256) challengeRange;
     // Enqueued piece ids for removal when starting the next proving period
     mapping(uint256 => uint256[]) scheduledRemovals;
-    // Track which pieces are scheduled for removal with a bitmap
+    // Legacy removal markers retained for upgrade compatibility. Compact pieces use a bit in PieceMetadata.
     mapping(uint256 dataSetId => mapping(uint256 slotIndex => uint256 bitmap)) scheduledRemovalsBitmap;
     // storage provider of data set is initialized upon creation to create message sender
     // storage provider has exclusive permission to add and remove pieces and delete the data set
@@ -732,7 +722,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bool legacy = _usesLegacyPieceStorage(setId);
         if (_pieceCount(setId, legacy) == 0) {
             // Zero-piece data set: finalize cleanup immediately and pay deposit to caller.
-            _finalizeCleanup(setId);
+            _finalizeCleanup(setId, legacy);
         } else {
             // Pieces remain: enter cleanup mode. storageProvider and dataSetLastProvenEpoch are kept
             // so cleanupPieces can apply the same permission gate; the latter cannot advance here
@@ -781,18 +771,20 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         if (_pieceCount(setId, legacy) == 0) {
-            _finalizeCleanup(setId);
+            _finalizeCleanup(setId, legacy);
             done = true;
         }
     }
 
     // Clears all remaining singleton state for a data set and transfers the cleanup deposit to msg.sender.
     // Must only be called when the selected piece representation's count is zero.
-    function _finalizeCleanup(uint256 setId) internal {
-        // Clear scheduled removal bitmap entries before deleting the array.
+    function _finalizeCleanup(uint256 setId, bool legacy) internal {
+        // Pending legacy removals may still have markers in the compatibility bitmap.
         uint256[] storage removals = scheduledRemovals[setId];
-        for (uint256 i = 0; i < removals.length; i++) {
-            delete scheduledRemovalsBitmap[setId][removals[i] >> 8];
+        if (legacy) {
+            for (uint256 i = 0; i < removals.length; i++) {
+                delete scheduledRemovalsBitmap[setId][removals[i] >> 8];
+            }
         }
         delete scheduledRemovals[setId];
 
@@ -964,17 +956,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             require(pieceId < pieceCount, "Can only schedule removal of existing pieces");
             require(_pieceLeafCount(setId, pieceId, legacy) > 0, "Can only schedule removal of live pieces");
 
-            // Check for duplicates using bitmap
-            uint256 slotIndex = pieceId >> 8;
-            uint256 bitPosition = pieceId & 255;
-            uint256 bitMask = 1 << bitPosition;
-
-            require(
-                (scheduledRemovalsBitmap[setId][slotIndex] & bitMask) == 0, "Piece ID already scheduled for removal"
-            );
-
-            // Mark as scheduled for removal in bitmap
-            scheduledRemovalsBitmap[setId][slotIndex] |= bitMask;
+            if (legacy) {
+                uint256 slotIndex = pieceId >> 8;
+                uint256 bitMask = 1 << (pieceId & 255);
+                require(
+                    (scheduledRemovalsBitmap[setId][slotIndex] & bitMask) == 0, "Piece ID already scheduled for removal"
+                );
+                scheduledRemovalsBitmap[setId][slotIndex] |= bitMask;
+            } else {
+                PieceV2 storage piece = compactPieces[setId][pieceId];
+                require(!piece.metadata.removalQueued(), "Piece ID already scheduled for removal");
+                piece.metadata = piece.metadata.withRemovalQueued();
+            }
 
             // Add to scheduled removals array
             scheduledRemovals[setId].push(pieceId);
@@ -1142,15 +1135,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (nRemovals > 0) {
             uint256[] memory removalsToProcess = new uint256[](nRemovals);
 
-            // Copy removals to a memory array so we can clear the storage one
+            // Copy removals to memory before clearing the storage queue.
             for (uint256 i = 0; i < nRemovals; i++) {
                 uint256 pieceId = removals[i];
                 removalsToProcess[i] = pieceId;
-
-                // Clear the bitmap, as bitmap and array are in sync and we are going to delete everything from the array,
-                // we can remove by 256bit chunk
-                uint256 slotIndex = pieceId >> 8;
-                delete scheduledRemovalsBitmap[setId][slotIndex];
             }
 
             delete scheduledRemovals[setId];
@@ -1190,6 +1178,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bool legacy = _usesLegacyPieceStorage(setId);
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < pieceIds.length; i++) {
+            if (legacy) {
+                delete scheduledRemovalsBitmap[setId][pieceIds[i] >> 8];
+            }
             totalDelta += removeOnePiece(setId, pieceIds[i], legacy);
         }
         dataSetLeafCount[setId] -= totalDelta;

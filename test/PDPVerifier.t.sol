@@ -689,7 +689,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(scheduledRemovals[2], 2, "Third scheduled removal should be piece 2");
     }
 
-    function testMappingClearedAfterRemoval() public {
+    function testRemovalQueueClearedAfterProcessing() public {
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
         );
@@ -716,8 +716,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
         assertEq(scheduledRemovals.length, 0, "Scheduled removals should be cleared");
 
-        // Now we should be able to schedule the same pieces again
-        // (This tests that the mapping was properly cleared)
+        // A fresh live piece can be queued after the prior queue was processed.
         uint256[] memory newPieceIds = new uint256[](1);
         newPieceIds[0] = 2; // Different piece ID
         pdpVerifier.schedulePieceDeletions(setId, newPieceIds, empty);
@@ -728,25 +727,25 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(scheduledRemovals[0], 2, "Scheduled removal should be piece 2");
     }
 
-    function testBitmapWithLargePieceIds() public {
-        // Setup: Create dataset and add many pieces
+    function testRemovalMarkersWithLargePieceIds() public {
+        // Create enough pieces to exercise markers at widely separated IDs.
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
         );
 
-        // Add pieces to get piece IDs 0-300 (testing multiple bitmap slots)
+        // Add pieces to get piece IDs 0-300.
         Cids.Cid[] memory pieces = new Cids.Cid[](301);
         for (uint256 i = 0; i < 301; i++) {
             pieces[i] = makeSamplePiece(2);
         }
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
-        // Test scheduling pieces from different bitmap slots
+        // Schedule widely separated piece IDs.
         uint256[] memory pieceIds = new uint256[](4);
-        pieceIds[0] = 0; // Slot 0, bit 0
-        pieceIds[1] = 255; // Slot 0, bit 255
-        pieceIds[2] = 256; // Slot 1, bit 0
-        pieceIds[3] = 300; // Slot 1, bit 44
+        pieceIds[0] = 0;
+        pieceIds[1] = 255;
+        pieceIds[2] = 256;
+        pieceIds[3] = 300;
 
         // Should work without issues
         pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
@@ -755,9 +754,9 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         uint256[] memory scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
         assertEq(scheduledRemovals.length, 4, "Should have 4 scheduled removals");
 
-        // Test duplicate detection across slots
+        // Duplicate detection is per compact piece.
         uint256[] memory duplicateIds = new uint256[](1);
-        duplicateIds[0] = 256; // Try to schedule 256 again
+        duplicateIds[0] = 256;
 
         vm.expectRevert("Piece ID already scheduled for removal");
         pdpVerifier.schedulePieceDeletions(setId, duplicateIds, empty);
