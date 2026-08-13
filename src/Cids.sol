@@ -19,6 +19,13 @@ library Cids {
         bytes data;
     }
 
+    // Compact, ABI-decodable representation of a CID with a 32-byte digest.
+    // `header` contains every CID byte before the digest, right-aligned and zero-padded on the left.
+    struct PackedCid {
+        bytes32 header;
+        bytes32 root;
+    }
+
     // Checks that CID is PieceCIDv2 and decomposes it into its components.
     // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
     function validateCommPv2(Cid calldata cid) internal pure returns (uint256 padding, uint8 height, bytes32 root) {

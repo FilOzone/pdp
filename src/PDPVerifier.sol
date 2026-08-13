@@ -54,6 +54,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     uint256 private constant PIECES_SCHEDULED_EVENT_BATCH_SIZE = 100;
+    uint256 private constant PIECES_ADDED_EVENT_BATCH_SIZE = 125;
 
     // Cleanup
     uint256 private constant CLEANUP_MODE_SENTINEL = type(uint256).max;
@@ -70,7 +71,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event DataSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event DataSetEmpty(uint256 indexed setId);
 
-    event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
+    event PiecesAddedV2(uint256 indexed setId, uint256 firstPieceId, Cids.PackedCid[] pieceCids);
     event PiecesScheduledForRemoval(uint256 indexed setId, uint256[] pieceIds);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
 
@@ -890,20 +891,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bool legacy = _usesLegacyPieceStorage(setId);
         firstAdded = _pieceCount(setId, legacy);
         uint256 newLeafCount = dataSetLeafCount[setId];
-        uint256[] memory pieceIds = new uint256[](nPieces);
-        Cids.Cid[] memory pieceCidsAdded = new Cids.Cid[](nPieces);
 
         for (uint256 i = 0; i < nPieces; i++) {
             uint256 leafCount = addOnePiece(setId, i, pieceData[i], legacy);
             if (!legacy && newLeafCount > SUM_TREE_MAX - leafCount) revert PieceMetadataOverflow();
             newLeafCount += leafCount;
-            pieceIds[i] = firstAdded + i;
-            pieceCidsAdded[i] = pieceData[i];
         }
 
         dataSetLeafCount[setId] = newLeafCount;
-
-        emit PiecesAdded(setId, pieceIds, pieceCidsAdded);
+        _emitPiecesAdded(setId, firstAdded, pieceData);
 
         address listenerAddr = dataSetListener[setId];
         if (listenerAddr != address(0)) {
@@ -929,6 +925,32 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function _pieceCid(bytes32 root, PieceMetadata metadata) internal pure returns (Cids.Cid memory) {
         return Cids.CommPv2FromDigest(metadata.padding(), uint8(metadata.height()), root);
+    }
+
+    function _emitPiecesAdded(uint256 setId, uint256 firstPieceId, Cids.Cid[] calldata pieceData) internal {
+        for (uint256 start = 0; start < pieceData.length; start += PIECES_ADDED_EVENT_BATCH_SIZE) {
+            uint256 remaining = pieceData.length - start;
+            uint256 batchLength = remaining < PIECES_ADDED_EVENT_BATCH_SIZE ? remaining : PIECES_ADDED_EVENT_BATCH_SIZE;
+            Cids.PackedCid[] memory packedCids = new Cids.PackedCid[](batchLength);
+            for (uint256 i = 0; i < batchLength; i++) {
+                packedCids[i] = _packCid(pieceData[start + i]);
+            }
+            emit PiecesAddedV2(setId, firstPieceId + start, packedCids);
+        }
+    }
+
+    function _packCid(Cids.Cid calldata cid) internal pure returns (Cids.PackedCid memory) {
+        uint256 headerLength = cid.data.length - 32;
+        assert(headerLength <= 32);
+
+        bytes calldata data = cid.data;
+        bytes32 header;
+        bytes32 root;
+        assembly {
+            header := shr(mul(sub(32, headerLength), 8), calldataload(data.offset))
+            root := calldataload(add(data.offset, headerLength))
+        }
+        return Cids.PackedCid({header: header, root: root});
     }
 
     function addOnePiece(uint256 setId, uint256 callIdx, Cids.Cid calldata piece, bool legacy)

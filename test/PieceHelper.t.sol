@@ -14,6 +14,36 @@ contract PieceHelper is Test {
         return Cids.validateCommPv2(cid);
     }
 
+    function packCid(Cids.Cid memory cid) internal pure returns (Cids.PackedCid memory) {
+        require(cid.data.length >= 32 && cid.data.length <= 64, "packCid: unsupported CID length");
+        uint256 headerLength = cid.data.length - 32;
+        uint256 header;
+        uint256 root;
+        for (uint256 i = 0; i < headerLength; i++) {
+            header = (header << 8) | uint8(cid.data[i]);
+        }
+        for (uint256 i = headerLength; i < cid.data.length; i++) {
+            root = (root << 8) | uint8(cid.data[i]);
+        }
+        return Cids.PackedCid({header: bytes32(header), root: bytes32(root)});
+    }
+
+    function packCids(Cids.Cid[] memory cids) internal pure returns (Cids.PackedCid[] memory) {
+        return packCids(cids, 0, cids.length);
+    }
+
+    function packCids(Cids.Cid[] memory cids, uint256 start, uint256 length)
+        internal
+        pure
+        returns (Cids.PackedCid[] memory packed)
+    {
+        require(start <= cids.length && length <= cids.length - start, "packCids: slice out of bounds");
+        packed = new Cids.PackedCid[](length);
+        for (uint256 i = 0; i < length; i++) {
+            packed[i] = packCid(cids[start + i]);
+        }
+    }
+
     // Constructs a PieceData structure for a Merkle tree.
     function makePiece(bytes32[][] memory tree, uint256 leafCount) internal pure returns (Cids.Cid memory) {
         if (leafCount == 0) {
