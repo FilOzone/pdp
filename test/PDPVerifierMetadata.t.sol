@@ -283,7 +283,7 @@ contract PDPVerifierMetadataTest is Test {
         pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
         pieces[1] = Cids.Cid(bytes(""));
 
-        vm.expectRevert("Cid data is too short");
+        vm.expectRevert(Cids.CidTooShort.selector);
         harness.addPiecesForTest(setId, pieces);
 
         assertEq(harness.compactPieceCount(setId), 0, "invalid batch leaves no compact pieces");

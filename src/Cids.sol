@@ -6,6 +6,14 @@ library Cids {
     // (cidv1)  (raw)  (fr32-sha2-256-trunc254-padded-binary-tree)
     bytes4 public constant COMMP_V2_PREFIX = hex"01559120";
 
+    error CidTooShort();
+    error InvalidCommPv2Prefix();
+    error NonMinimalUvarint();
+    error InvalidCommPv2MultihashLength();
+    error InvalidCommPv2DigestLength();
+    error UnterminatedUvarint();
+    error UvarintOverflow();
+
     // A helper struct for events + getter functions to display digests as PieceCIDv2 CIDs
     struct Cid {
         bytes data;
@@ -14,10 +22,10 @@ library Cids {
     // Checks that CID is PieceCIDv2 and decomposes it into its components.
     // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
     function validateCommPv2(Cid calldata cid) internal pure returns (uint256 padding, uint8 height, bytes32 root) {
-        require(cid.data.length >= 4, "Cid data is too short");
+        require(cid.data.length >= 4, CidTooShort());
         for (uint256 i = 0; i < 4; i++) {
             if (cid.data[i] != COMMP_V2_PREFIX[i]) {
-                revert("Cid must be CommPv2");
+                revert InvalidCommPv2Prefix();
             }
         }
 
@@ -25,22 +33,22 @@ library Cids {
         uint256 mhLength;
         uint256 multihashOffset;
         (mhLength, multihashOffset) = _readUvarint(cid.data, offset);
-        require(multihashOffset - offset == _uvarintLength(mhLength), "CommPv2 multihash length is not minimal");
-        require(mhLength >= 34, "CommPv2 multihash length must be at least 34");
+        require(multihashOffset - offset == _uvarintLength(mhLength), NonMinimalUvarint());
+        require(mhLength >= 34, InvalidCommPv2MultihashLength());
         if (mhLength != cid.data.length - multihashOffset) {
-            revert("CommPv2 multihash length does not match data length");
+            revert InvalidCommPv2MultihashLength();
         }
 
         offset = multihashOffset;
         uint256 paddingOffset;
         (padding, paddingOffset) = _readUvarint(cid.data, offset);
-        require(paddingOffset - offset == _uvarintLength(padding), "CommPv2 padding is not minimal");
+        require(paddingOffset - offset == _uvarintLength(padding), NonMinimalUvarint());
 
         offset = paddingOffset;
-        require(offset < cid.data.length, "CommPv2 digest is too short");
+        require(offset < cid.data.length, InvalidCommPv2DigestLength());
         height = uint8(cid.data[offset++]);
-        require(offset <= cid.data.length - 32, "CommPv2 digest is too short");
-        require(offset == cid.data.length - 32, "CommPv2 digest length is invalid");
+        require(offset <= cid.data.length - 32, InvalidCommPv2DigestLength());
+        require(offset == cid.data.length - 32, InvalidCommPv2DigestLength());
 
         bytes calldata data = cid.data;
         assembly {
@@ -155,11 +163,11 @@ library Cids {
     {
         uint256 i;
         while (true) {
-            require(offset + i < data.length, "Uvarint is unterminated");
+            require(offset + i < data.length, UnterminatedUvarint());
             uint8 byteValue = uint8(data[offset + i]);
             uint8 payload = byteValue & 0x7F;
             if (i == 36) {
-                require(payload <= 0x0F && byteValue < 0x80, "Uvarint overflows uint256");
+                require(payload <= 0x0F && byteValue < 0x80, UvarintOverflow());
             }
             value |= uint256(payload) << (i * 7);
             i++;

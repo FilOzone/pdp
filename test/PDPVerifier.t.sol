@@ -2773,7 +2773,7 @@ contract PDPVerifierCompactReaderTest is MockFVMTest, PieceHelper {
     }
 
     function testCidSearchRejectsMalformedQuery() public {
-        vm.expectRevert("Cid data is too short");
+        vm.expectRevert(Cids.CidTooShort.selector);
         pdpVerifier.findPieceIdsByCid(setId, Cids.Cid(hex""), 0, 1);
     }
 

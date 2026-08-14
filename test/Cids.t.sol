@@ -222,10 +222,10 @@ contract CidsTest is Test {
         Cids.Cid memory cid =
             Cids.Cid(hex"01559120220004496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605");
         cid.data[4] = 0x21;
-        vm.expectRevert("CommPv2 multihash length must be at least 34");
+        vm.expectRevert(Cids.InvalidCommPv2MultihashLength.selector);
         this.validateCommPv2(cid);
         cid.data[4] = 0x23;
-        vm.expectRevert("CommPv2 multihash length does not match data length");
+        vm.expectRevert(Cids.InvalidCommPv2MultihashLength.selector);
         this.validateCommPv2(cid);
     }
 
