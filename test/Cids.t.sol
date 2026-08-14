@@ -5,21 +5,27 @@ import {Test} from "forge-std/Test.sol";
 import {Cids} from "../src/Cids.sol";
 
 contract CidsTest is Test {
-    function testDigestRoundTrip() public pure {
+    function validateCommPv2(Cids.Cid calldata cid)
+        external
+        pure
+        returns (uint256 padding, uint8 height, bytes32 root)
+    {
+        return Cids.validateCommPv2(cid);
+    }
+
+    function readUvarint(bytes calldata data, uint256 offset) external pure returns (uint256 value, uint256 newOffset) {
+        return Cids._readUvarint(data, offset);
+    }
+
+    function testDigestRoundTrip() public view {
         bytes32 digest = 0xbeadcafefacedeedfeedbabedeadbeefbeadcafefacedeedfeedbabedeadbeef;
         Cids.Cid memory c = Cids.CommPv2FromDigest(0, 10, digest);
         assertEq(c.data.length, 39);
-        bytes32 foundDigest = Cids.digestFromCid(c);
-        assertEq(foundDigest, digest, "digest equal");
 
-        (uint256 padding, uint8 height, uint256 digestOffset) = Cids.validateCommPv2(c);
+        (uint256 padding, uint8 height, bytes32 root) = this.validateCommPv2(c);
         assertEq(padding, 0, "padding");
         assertEq(height, 10, "height");
-
-        // assert that digest is same at digestOffset
-        for (uint256 i = 0; i < 32; i++) {
-            assertEq(bytes1(digest[i]), c.data[digestOffset + i], "bytes");
-        }
+        assertEq(root, digest, "root");
     }
 
     function testPieceSize() public pure {
@@ -95,15 +101,11 @@ contract CidsTest is Test {
         assertEq(Cids.leafCount(1024 * 127 / 128 - 1, 5), 1);
     }
 
-    /// forge-config: default.allow_internal_expect_revert = true
-    function testDigestTooShort() public {
-        bytes memory byteArray = new bytes(31);
-        for (uint256 i = 0; i < 31; i++) {
-            byteArray[i] = bytes1(uint8(i));
-        }
-        Cids.Cid memory c = Cids.Cid(byteArray);
-        vm.expectRevert("Cid data is too short");
-        Cids.digestFromCid(c);
+    function testValidateCommPv2RejectsShortCid() public {
+        _expectInvalid(hex"");
+        _expectInvalid(hex"0155");
+        _expectInvalid(hex"01559120");
+        _expectInvalid(hex"0155912080");
     }
 
     function testUvarintLength() public pure {
@@ -118,7 +120,7 @@ contract CidsTest is Test {
         assertEq(Cids._uvarintLength(type(uint256).max), 37);
     }
 
-    function testUvarintRoundTrip() public pure {
+    function testUvarintRoundTrip() public view {
         uint256[] memory values = new uint256[](7);
         values[0] = 0;
         values[1] = 1;
@@ -143,64 +145,119 @@ contract CidsTest is Test {
         // Read all values and verify
         uint256 currentOffset = 0;
         for (uint256 i = 0; i < values.length; i++) {
-            (uint256 readValue, uint256 newOffset) = Cids._readUvarint(buffer, currentOffset);
+            (uint256 readValue, uint256 newOffset) = this.readUvarint(buffer, currentOffset);
             assertEq(readValue, values[i], "Uvarint round trip failed");
             currentOffset = newOffset;
         }
     }
 
-    /// forge-config: default.allow_internal_expect_revert = true
     function testReadUvarintIncomplete() public {
         // Test reading an incomplete uvarint that should revert
         bytes memory incompleteUvarint = hex"80"; // A single byte indicating more to come, but nothing follows
         vm.expectRevert(); // Expect any revert, specifically index out of bounds
-        Cids._readUvarint(incompleteUvarint, 0);
+        this.readUvarint(incompleteUvarint, 0);
     }
 
-    /// forge-config: default.allow_internal_expect_revert = true
     function testReadUvarintMSBSetOnLastByte() public {
         bytes memory incompleteUvarint2 = hex"ff81"; // MSB set on last byte.
         vm.expectRevert();
-        Cids._readUvarint(incompleteUvarint2, 0);
+        this.readUvarint(incompleteUvarint2, 0);
     }
 
-    function testReadUvarintWithOffset() public pure {
+    function testReadUvarintWithOffset() public view {
         // Test reading with an offset
         bytes memory bufferWithOffset = hex"00010203040506078001"; // Value 128 (8001) at offset 8
-        (uint256 readValue, uint256 newOffset) = Cids._readUvarint(bufferWithOffset, 8);
+        (uint256 readValue, uint256 newOffset) = this.readUvarint(bufferWithOffset, 8);
         assertEq(readValue, 128, "Read uvarint with offset failed");
         assertEq(newOffset, 10, "Offset after reading with offset incorrect");
     }
 
-    function testValidateCommPv2FRC0069() public pure {
-        // The values are taken from FRC-0069 specification
-        // Test vector 1: height=4, padding=0
-        bytes memory cidData1 = hex"01559120220004496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605";
-        Cids.Cid memory cid1 = Cids.Cid(cidData1);
-        (uint256 padding1, uint8 height1, uint256 digestOffset1) = Cids.validateCommPv2(cid1);
+    function testValidateCommPv2FRC0069() public view {
+        // The values are taken from FRC-0069 specification.
+        Cids.Cid memory cid1 =
+            Cids.Cid(hex"01559120220004496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605");
+        (uint256 padding1, uint8 height1, bytes32 root1) = this.validateCommPv2(cid1);
         assertEq(padding1, 0, "CID 1 padding");
         assertEq(height1, 4, "CID 1 height");
+        assertEq(root1, hex"496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605", "CID 1 root");
 
-        // Test vector 2: height=2, padding=0
-        bytes memory cidData2 = hex"015591202200023731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333";
-        Cids.Cid memory cid2 = Cids.Cid(cidData2);
-        (uint256 padding2, uint8 height2, uint256 digestOffset2) = Cids.validateCommPv2(cid2);
+        Cids.Cid memory cid2 =
+            Cids.Cid(hex"015591202200023731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333");
+        (uint256 padding2, uint8 height2, bytes32 root2) = this.validateCommPv2(cid2);
         assertEq(padding2, 0, "CID 2 padding");
         assertEq(height2, 2, "CID 2 height");
+        assertEq(root2, hex"3731bb99ac689f66eef5973e4a94da188f4ddcae580724fc6f3fd60dfd488333", "CID 2 root");
 
-        // Test vector 3: height=5, padding=504
-        bytes memory cidData3 = hex"0155912023f80305de6815dcb348843215a94de532954b60be550a4bec6e74555665e9a5ec4e0f3c";
-        Cids.Cid memory cid3 = Cids.Cid(cidData3);
-        (uint256 padding3, uint8 height3, uint256 digestOffset3) = Cids.validateCommPv2(cid3);
+        Cids.Cid memory cid3 =
+            Cids.Cid(hex"0155912023f80305de6815dcb348843215a94de532954b60be550a4bec6e74555665e9a5ec4e0f3c");
+        (uint256 padding3, uint8 height3, bytes32 root3) = this.validateCommPv2(cid3);
         assertEq(padding3, 504, "CID 3 padding");
         assertEq(height3, 5, "CID 3 height");
+        assertEq(root3, hex"de6815dcb348843215a94de532954b60be550a4bec6e74555665e9a5ec4e0f3c", "CID 3 root");
+    }
 
-        // Verify that digestOffset points to valid data by checking a few bytes from the digest
-        // For CID 1
-        assertEq(cid1.data[digestOffset1], bytes1(0x49), "CID 1 digest first byte");
-        // For CID 2
-        assertEq(cid2.data[digestOffset2], bytes1(0x37), "CID 2 digest first byte");
-        // For CID 3
-        assertEq(cid3.data[digestOffset3], bytes1(0xde), "CID 3 digest first byte");
+    function testValidateCommPv2PaddingUvarintBoundaries() public view {
+        uint256[] memory paddings = new uint256[](5);
+        paddings[0] = 127;
+        paddings[1] = 16383;
+        paddings[2] = 2097151;
+        paddings[3] = 268435455;
+        paddings[4] = 34359738367;
+        bytes32 root = hex"beadcafefacedeedfeedbabedeadbeefbeadcafefacedeedfeedbabedeadbeef";
+
+        for (uint256 i = 0; i < paddings.length; i++) {
+            Cids.Cid memory cid = Cids.CommPv2FromDigest(paddings[i], 10, root);
+            (uint256 padding, uint8 height, bytes32 decodedRoot) = this.validateCommPv2(cid);
+            assertEq(Cids._uvarintLength(padding), i + 1, "padding uvarint length");
+            assertEq(padding, paddings[i], "padding");
+            assertEq(height, 10, "height");
+            assertEq(decodedRoot, root, "root");
+        }
+    }
+
+    function testValidateCommPv2RejectsExtraDigestBytesAndLengthMismatch() public {
+        _expectInvalid(hex"0155912023000400496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605");
+        _expectInvalid(hex"01559120230004496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd60500");
+
+        Cids.Cid memory cid =
+            Cids.Cid(hex"01559120220004496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605");
+        cid.data[4] = 0x21;
+        vm.expectRevert(Cids.InvalidCommPv2MultihashLength.selector);
+        this.validateCommPv2(cid);
+        cid.data[4] = 0x23;
+        vm.expectRevert(Cids.InvalidCommPv2MultihashLength.selector);
+        this.validateCommPv2(cid);
+    }
+
+    function testValidateCommPv2RejectsNonCanonicalAndInvalidUvarints() public {
+        _expectInvalid(hex"015591208000");
+        _expectInvalid(hex"0155912023800004496dae0cc9e265efe5a006e80626a5dc5c409e5d3155c13984caf6c8d5cfd605");
+
+        bytes memory truncatedPadding = new bytes(39);
+        truncatedPadding[0] = 0x01;
+        truncatedPadding[1] = 0x55;
+        truncatedPadding[2] = 0x91;
+        truncatedPadding[3] = 0x20;
+        truncatedPadding[4] = 0x22;
+        for (uint256 i = 5; i < truncatedPadding.length; i++) {
+            truncatedPadding[i] = 0x80;
+        }
+        _expectInvalid(truncatedPadding);
+
+        bytes memory overflowingLength = new bytes(41);
+        overflowingLength[0] = 0x01;
+        overflowingLength[1] = 0x55;
+        overflowingLength[2] = 0x91;
+        overflowingLength[3] = 0x20;
+        for (uint256 i = 4; i < 40; i++) {
+            overflowingLength[i] = 0x80;
+        }
+        overflowingLength[40] = 0x10;
+        _expectInvalid(overflowingLength);
+    }
+
+    function _expectInvalid(bytes memory data) internal {
+        vm.expectRevert();
+        this.validateCommPv2(Cids.Cid(data));
     }
 }

@@ -6,52 +6,54 @@ library Cids {
     // (cidv1)  (raw)  (fr32-sha2-256-trunc254-padded-binary-tree)
     bytes4 public constant COMMP_V2_PREFIX = hex"01559120";
 
+    error CidTooShort();
+    error InvalidCommPv2Prefix();
+    error NonMinimalUvarint();
+    error InvalidCommPv2MultihashLength();
+    error InvalidCommPv2DigestLength();
+    error UnterminatedUvarint();
+    error UvarintOverflow();
+
     // A helper struct for events + getter functions to display digests as PieceCIDv2 CIDs
     struct Cid {
         bytes data;
     }
 
-    // Returns the last 32 bytes of a CID payload as a bytes32.
-    function digestFromCid(Cid memory cid) internal pure returns (bytes32) {
-        require(cid.data.length >= 32, "Cid data is too short");
-        bytes memory dataSlice = new bytes(32);
-        for (uint256 i = 0; i < 32; i++) {
-            dataSlice[i] = cid.data[cid.data.length - 32 + i];
-        }
-        return bytes32(dataSlice);
-    }
-
-    // Returns the height of the tree from the CID.
-    function heightFromCid(Cid memory cid) internal pure returns (uint8) {
-        require(cid.data.length >= 33, "Cid data is too short");
-        return uint8(cid.data[cid.data.length - 32 - 1]);
-    }
-
     // Checks that CID is PieceCIDv2 and decomposes it into its components.
     // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
-    function validateCommPv2(Cid memory cid)
-        internal
-        pure
-        returns (uint256 padding, uint8 height, uint256 digestOffset)
-    {
+    function validateCommPv2(Cid calldata cid) internal pure returns (uint256 padding, uint8 height, bytes32 root) {
+        require(cid.data.length >= 4, CidTooShort());
         for (uint256 i = 0; i < 4; i++) {
             if (cid.data[i] != COMMP_V2_PREFIX[i]) {
-                revert("Cid must be CommPv2");
+                revert InvalidCommPv2Prefix();
             }
         }
+
         uint256 offset = 4;
         uint256 mhLength;
-        (mhLength, offset) = _readUvarint(cid.data, offset);
-        require(mhLength >= 34, "CommPv2 multihash length must be at least 34");
-        if (mhLength + offset != cid.data.length) {
-            revert("CommPv2 multihash length does not match data length");
+        uint256 multihashOffset;
+        (mhLength, multihashOffset) = _readUvarint(cid.data, offset);
+        require(multihashOffset - offset == _uvarintLength(mhLength), NonMinimalUvarint());
+        require(mhLength >= 34, InvalidCommPv2MultihashLength());
+        if (mhLength != cid.data.length - multihashOffset) {
+            revert InvalidCommPv2MultihashLength();
         }
-        (padding, offset) = _readUvarint(cid.data, offset);
 
-        height = uint8(cid.data[offset]);
-        offset++;
+        offset = multihashOffset;
+        uint256 paddingOffset;
+        (padding, paddingOffset) = _readUvarint(cid.data, offset);
+        require(paddingOffset - offset == _uvarintLength(padding), NonMinimalUvarint());
 
-        return (padding, height, offset);
+        offset = paddingOffset;
+        require(offset < cid.data.length, InvalidCommPv2DigestLength());
+        height = uint8(cid.data[offset++]);
+        require(offset <= cid.data.length - 32, InvalidCommPv2DigestLength());
+        require(offset == cid.data.length - 32, InvalidCommPv2DigestLength());
+
+        bytes calldata data = cid.data;
+        assembly {
+            root := calldataload(add(data.offset, offset))
+        }
     }
 
     // isPaddingExcessive checks if the padding size exceeds the size of the tree
@@ -152,16 +154,27 @@ library Cids {
         return length;
     }
 
-    // Helper function reading uvarints <= 256 bits
-    // returns (value, offset) with offset advanced to the following byte
-    function _readUvarint(bytes memory data, uint256 offset) internal pure returns (uint256, uint256) {
-        uint256 i = 0;
-        uint256 value = uint256(uint8(data[offset])) & 0x7F;
-        while (data[offset + i] >= 0x80) {
+    // Helper function reading uvarints <= 256 bits.
+    // Returns (value, offset) with offset advanced to the following byte.
+    function _readUvarint(bytes calldata data, uint256 offset)
+        internal
+        pure
+        returns (uint256 value, uint256 newOffset)
+    {
+        uint256 i;
+        while (true) {
+            require(offset + i < data.length, UnterminatedUvarint());
+            uint8 byteValue = uint8(data[offset + i]);
+            uint8 payload = byteValue & 0x7F;
+            if (i == 36) {
+                require(payload <= 0x0F && byteValue < 0x80, UvarintOverflow());
+            }
+            value |= uint256(payload) << (i * 7);
             i++;
-            value = value | uint256(uint8(data[offset + i]) & 0x7F) << (i * 7);
+            if (byteValue < 0x80) {
+                newOffset = offset + i;
+                return (value, newOffset);
+            }
         }
-        i++;
-        return (value, offset + i);
     }
 }

@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Added
+- Added `legacyPieceStorageIdLimit()` to expose the permanent data-set ID boundary between legacy and compact piece storage. Upgrade deployments must call `migrate()` to initialize this boundary; until then, newly created data sets continue using legacy storage ([#292](https://github.com/FilOzone/pdp/pull/292)).
+
+### Changed
+- New data sets created after the migration cutover store each piece in a compact two-slot `PieceV2` representation instead of the five-slot legacy representation. Existing data sets remain fully supported on the legacy layout, including new piece additions, proofs, removals, deletion, and cleanup ([#292](https://github.com/FilOzone/pdp/pull/292)).
+- PieceCIDv2 validation now rejects non-minimal, unterminated, overflowing, length-mismatched, and otherwise malformed multihash encodings ([#292](https://github.com/FilOzone/pdp/pull/292)).
+
 ### Fixed
 - `cleanupPieces()` now uses the same permission gate as `deleteDataSet()`, anchored to last proving activity instead of cleanup-mode entry. The abandonment path previously required two full `INACTIVITY_WINDOW` periods (~60 days); a permissionless deleter can now clean up and collect the deposit immediately. An SP deleting after exceeding the inactivity window no longer gets an exclusive cleanup period (the data set was already permissionlessly deletable). The unused `cleanupModeEpoch` storage is deprecated in place.
 - Chunked `PiecesScheduledForRemoval` events into batches of at most 100 piece IDs, preserving the 2,000-piece scheduling limit without exceeding Filecoin's 8 KiB event-data limit, and reject empty removal schedules.
