@@ -19,8 +19,11 @@ library Cids {
         bytes data;
     }
 
-    // Compact, ABI-decodable representation of a CID with a 32-byte digest.
-    // `header` contains every CID byte before the digest, right-aligned and zero-padded on the left.
+    /// @notice Compact, ABI-decodable representation of a CID with a 32-byte digest.
+    /// @dev `header` contains every CID byte before the digest, right-aligned in the word. Every unused
+    /// leading byte MUST be zero, and the first nonzero byte is the first byte of the CID. To reconstruct
+    /// the CID, remove only those leading zero bytes and append `root`; zero bytes within the header are data
+    /// and MUST be preserved. This is unambiguous because a canonical binary CID begins with a nonzero byte.
     struct PackedCid {
         bytes32 header;
         bytes32 root;
