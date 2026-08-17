@@ -37,6 +37,11 @@ jobs:
           export PATH="/home/runner/.config/.foundry/bin:$PATH";
           make test;
 
+      - name: Run fast profile tests
+        run: |
+          export PATH="/home/runner/.config/.foundry/bin:$PATH";
+          make test-fast;
+
       - name: Check storage layout
         run: |
           export PATH="/home/runner/.config/.foundry/bin:$PATH";

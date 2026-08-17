@@ -6,6 +6,8 @@
 # Foundry
 cache/
 out/
+cache-fast/
+out-fast/
 
 # System files
 .DS_Store

@@ -25,12 +25,22 @@ install:
 # Build target
 .PHONY: build
 build:
-	forge build --via-ir
+	forge build
+
+# Fast local build target (non-IR, optimizer disabled)
+.PHONY: build-fast
+build-fast:
+	FOUNDRY_PROFILE=fast forge build
 
 # Test target
 .PHONY: test
 test:
-	forge test --via-ir -vv
+	forge test -vv
+
+# Fast local test target (non-IR, optimizer disabled)
+.PHONY: test-fast
+test-fast:
+	FOUNDRY_PROFILE=fast forge test -vv
 
 # Deployment targets
 .PHONY: deploy-calibnet

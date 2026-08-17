@@ -34,10 +34,24 @@ Depends on [Foundry](https://github.com/foundry-rs/foundry) for development.
 ```
 make build
 ```
+
+For faster local feedback, use the non-IR, unoptimized profile:
+```
+make build-fast
+```
+Fast-profile artifacts are written to `out-fast/` with compiler state in `cache-fast/`. Use the default build for deployment artifacts, gas measurements, and contract-size checks.
+
 ## Test
 ```
 make test
 ```
+
+For faster behavioral test feedback:
+```
+make test-fast
+```
+Run `make test` before submitting changes to verify the production compiler configuration.
+
 ## Deploy
 To deploy on devnet, run:
 ```
