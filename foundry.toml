@@ -18,6 +18,12 @@ remappings = [
 optimizer_runs = 1
 via_ir = true
 
+[profile.fast]
+out = 'out-fast'
+cache_path = 'cache-fast'
+optimizer = false
+via_ir = false
+
 [profile.default.lint]
 severity = ["high", "med", "low", "info", "gas", "code-size"]
 exclude_lints = [

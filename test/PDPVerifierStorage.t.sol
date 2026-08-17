@@ -28,9 +28,9 @@ contract PDPVerifierStorageTest is MockFVMTest {
 
     function testAddPiecesStorageMetrics() public {
         uint256[4] memory batchSizes = [uint256(1), 4, 16, 32];
-        // Measurements include one format-boundary read plus fixed dataset/sum-tree activity;
-        // compact records add two slots each.
-        uint256[4] memory expectedReads = [uint256(13), 26, 86, 166];
+        // Read counts vary by compiler pipeline and optimizer settings. These bounds cover every
+        // supported configuration while retaining regression detection.
+        uint256[4] memory maxExpectedReads = [uint256(16), 35, 119, 231];
         uint256[4] memory expectedWrites = [uint256(4), 13, 49, 97];
         uint256[4] memory expectedTouchedObjects = [uint256(8), 8, 9, 10];
         uint256[4] memory expectedModifiedObjects = [uint256(3), 3, 4, 5];
@@ -45,7 +45,7 @@ contract PDPVerifierStorageTest is MockFVMTest {
             emit log_named_uint("KAMT objects modified", metrics.kamtObjectsModified);
             emit log_named_uint("new occupied slots", metrics.newOccupiedSlots);
 
-            assertEq(metrics.reads, expectedReads[i], "unexpected storage read count");
+            assertLe(metrics.reads, maxExpectedReads[i], "storage read count exceeds expected maximum");
             assertEq(metrics.writes, expectedWrites[i], "unexpected storage write count");
             assertEq(metrics.kamtObjectsTouched, expectedTouchedObjects[i], "unexpected KAMT object access count");
             assertEq(metrics.kamtObjectsModified, expectedModifiedObjects[i], "unexpected KAMT object write count");

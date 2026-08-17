@@ -591,29 +591,50 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
 
-        bool legacy = _usesLegacyPieceStorage(setId);
-        bytes32 targetHash;
-        uint256 padding;
-        uint8 height;
-        bytes32 root;
-        if (legacy) {
-            targetHash = keccak256(pieceCid.data);
-        } else {
-            (padding, height, root) = Cids.validateCommPv2(pieceCid);
+        if (_usesLegacyPieceStorage(setId)) {
+            return _findLegacyPieceIdsByCid(setId, pieceCid, startPieceId, limit);
         }
-        uint256 maxPieceId = _pieceCount(setId, legacy);
+        return _findCompactPieceIdsByCid(setId, pieceCid, startPieceId, limit);
+    }
 
+    function _findLegacyPieceIdsByCid(uint256 setId, Cids.Cid calldata pieceCid, uint256 startPieceId, uint256 limit)
+        internal
+        view
+        returns (uint256[] memory pieceIds)
+    {
+        // forge-lint: disable-next-line(asm-keccak256)
+        bytes32 targetHash = keccak256(pieceCid.data);
+        uint256 maxPieceId = _pieceCount(setId, true);
         pieceIds = new uint256[](limit);
-        uint256 count = 0;
+        uint256 count;
         for (uint256 i = startPieceId; i < maxPieceId && count < limit; i++) {
-            if (_pieceLeafCount(setId, i, legacy) == 0) continue;
-            bool matches = legacy
-                ? keccak256(pieceCids[setId][i].data) == targetHash
-                : compactPieces[setId][i].root == root && compactPieces[setId][i].metadata.padding() == padding
-                    && compactPieces[setId][i].metadata.height() == height;
-            if (matches) pieceIds[count++] = i;
+            if (_pieceLeafCount(setId, i, true) > 0 && keccak256(pieceCids[setId][i].data) == targetHash) {
+                pieceIds[count++] = i;
+            }
         }
+        assembly ("memory-safe") {
+            mstore(pieceIds, count)
+        }
+    }
 
+    function _findCompactPieceIdsByCid(uint256 setId, Cids.Cid calldata pieceCid, uint256 startPieceId, uint256 limit)
+        internal
+        view
+        returns (uint256[] memory pieceIds)
+    {
+        (uint256 padding, uint8 height, bytes32 root) = Cids.validateCommPv2(pieceCid);
+        uint256 maxPieceId = _pieceCount(setId, false);
+        pieceIds = new uint256[](limit);
+        uint256 count;
+        for (uint256 i = startPieceId; i < maxPieceId && count < limit; i++) {
+            PieceV2 storage piece = compactPieces[setId][i];
+            if (
+                _pieceLeafCount(setId, i, false) > 0 && piece.root == root && piece.metadata.padding() == padding
+                    && piece.metadata.height() == height
+            ) {
+                pieceIds[count++] = i;
+            }
+        }
         assembly ("memory-safe") {
             mstore(pieceIds, count)
         }
@@ -1024,10 +1045,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 uint256 challengeIdx = uint256(keccak256(payload)) % leafCount;
 
                 // Find the piece that has this leaf, and the offset of the leaf within that piece.
-                challenges[i] = findOnePieceId(setId, challengeIdx, sumTreeTop, legacy);
-                (bytes32 root, uint256 height) = _proofRootAndHeight(setId, challenges[i].pieceId, legacy);
-                bool ok = MerkleVerify.verify(proofs[i].proof, root, proofs[i].leaf, challenges[i].offset, height);
-                require(ok, "proof did not verify");
+                challenges[i] = _findAndVerifyProof(setId, proofs[i], challengeIdx, sumTreeTop, legacy);
             }
         }
 
@@ -1054,6 +1072,18 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             bool success = FVMPay.pay(msg.sender, refund);
             require(success, "Transfer failed.");
         }
+    }
+
+    function _findAndVerifyProof(
+        uint256 setId,
+        IPDPTypes.Proof calldata proof,
+        uint256 challengeIdx,
+        uint256 sumTreeTop,
+        bool legacy
+    ) internal view returns (IPDPTypes.PieceIdAndOffset memory challenge) {
+        challenge = findOnePieceId(setId, challengeIdx, sumTreeTop, legacy);
+        (bytes32 root, uint256 height) = _proofRootAndHeight(setId, challenge.pieceId, legacy);
+        require(MerkleVerify.verify(proof.proof, root, proof.leaf, challenge.offset, height), "proof did not verify");
     }
 
     function calculateProofFee(uint256 setId) public view returns (uint256) {
