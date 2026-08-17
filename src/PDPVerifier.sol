@@ -586,7 +586,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function findPieceIdsByCid(uint256 setId, Cids.Cid calldata pieceCid, uint256 startPieceId, uint256 limit)
         public
         view
-        returns (uint256[] memory)
+        returns (uint256[] memory pieceIds)
     {
         require(dataSetLive(setId), DataSetNotLive());
         require(limit > 0, "Limit must be greater than 0");
