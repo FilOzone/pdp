@@ -476,13 +476,13 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         for (uint256 i = 0; i < pieces.length; i++) {
             pieces[i] = makeSamplePiece(64);
         }
-        Cids.PackedCid[] memory firstBatch = packCids(pieces, 0, 125);
-        Cids.PackedCid[] memory secondBatch = packCids(pieces, 125, 1);
+        Cids.PackedCid[] memory firstBatch = packCids(pieces, 0, 100);
+        Cids.PackedCid[] memory secondBatch = packCids(pieces, 100, 26);
 
         vm.expectEmit(true, false, false, true);
         emit IPDPEvents.PiecesAddedV2(setId, 0, firstBatch);
         vm.expectEmit(true, false, false, true);
-        emit IPDPEvents.PiecesAddedV2(setId, 125, secondBatch);
+        emit IPDPEvents.PiecesAddedV2(setId, 100, secondBatch);
 
         uint256 firstId = pdpVerifier.addPieces(setId, address(0), pieces, empty);
         assertEq(firstId, 0);

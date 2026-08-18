@@ -54,7 +54,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     uint256 private constant PIECES_SCHEDULED_EVENT_BATCH_SIZE = 100;
-    uint256 private constant PIECES_ADDED_EVENT_BATCH_SIZE = 125;
+    uint256 private constant PIECES_ADDED_EVENT_BATCH_SIZE = 100;
 
     // Cleanup
     uint256 private constant CLEANUP_MODE_SENTINEL = type(uint256).max;
