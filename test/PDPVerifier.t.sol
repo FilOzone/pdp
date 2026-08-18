@@ -771,8 +771,11 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getChallengeRange(setId), expectedChallengeRange);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), freshChallengeEpoch);
         assertEq(listener.getEventCount(setId), callbackCountBeforeNextProvingPeriod + 1);
-        PDPRecordKeeper.EventRecord memory nextProvingPeriodRecord = listener.getEvent(setId, listener.getEventCount(setId) - 1);
-        assertEq(uint256(nextProvingPeriodRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD));
+        PDPRecordKeeper.EventRecord memory nextProvingPeriodRecord =
+            listener.getEvent(setId, listener.getEventCount(setId) - 1);
+        assertEq(
+            uint256(nextProvingPeriodRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD)
+        );
     }
 
     function testProcessingRemovalInvalidatesActiveChallenge() public {
@@ -1203,8 +1206,11 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getChallengeRange(setId), 0);
         assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), block.number);
 
-        PDPRecordKeeper.EventRecord memory nextProvingPeriodRecord = listener.getEvent(setId, listener.getEventCount(setId) - 1);
-        assertEq(uint256(nextProvingPeriodRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD));
+        PDPRecordKeeper.EventRecord memory nextProvingPeriodRecord =
+            listener.getEvent(setId, listener.getEventCount(setId) - 1);
+        assertEq(
+            uint256(nextProvingPeriodRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD)
+        );
         (uint256 listenerChallengeEpoch, uint256 listenerLeafCount) =
             abi.decode(nextProvingPeriodRecord.extraData, (uint256, uint256));
         assertEq(listenerChallengeEpoch, NO_CHALLENGE_SCHEDULED);
