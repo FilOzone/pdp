@@ -1028,43 +1028,37 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             pieceIds[i] = removals[suffixStart + i];
         }
 
-        bool legacy = _usesLegacyPieceStorage(setId);
+        // Remove piece ids, queued removals and legacy queued removal metadata
         removePieces(setId, pieceIds);
-
-        _popProcessedRemovals(setId, pieceIds, legacy);
+        if (_usesLegacyPieceStorage(setId)) {
+            _popLegacyRemovalsBitmap(setId, pieceIds);
+        }
+        for (uint256 i = removalCount; i > 0; i--) {
+            removals.pop();
+        }
         nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED;
 
         _emitPiecesRemoved(setId, pieceIds);
     }
 
-    function _popProcessedRemovals(uint256 setId, uint256[] memory pieceIds, bool legacy) private {
-        uint256[] storage removals = scheduledRemovals[setId];
+    function _popLegacyRemovalsBitmap(uint256 setId, uint256[] memory pieceIds) private {
         uint256 removalCount = pieceIds.length;
-
-        if (legacy) {
-            uint256 currentSlotIndex = pieceIds[removalCount - 1] >> 8;
-            uint256 bitsToClear;
-            for (uint256 i = removalCount; i > 0; i--) {
-                uint256 pieceId = pieceIds[i - 1];
-                uint256 slotIndex = pieceId >> 8;
-                uint256 bitPosition = pieceId & 255;
-
-                if (slotIndex != currentSlotIndex) {
-                    scheduledRemovalsBitmap[setId][currentSlotIndex] &= ~bitsToClear;
-                    currentSlotIndex = slotIndex;
-                    bitsToClear = 0;
-                }
-
-                bitsToClear |= 1 << bitPosition;
-                removals.pop();
-            }
-            scheduledRemovalsBitmap[setId][currentSlotIndex] &= ~bitsToClear;
-            return;
-        }
-
+        uint256 currentSlotIndex = pieceIds[removalCount - 1] >> 8;
+        uint256 bitsToClear;
         for (uint256 i = removalCount; i > 0; i--) {
-            removals.pop();
+            uint256 pieceId = pieceIds[i - 1];
+            uint256 slotIndex = pieceId >> 8;
+            uint256 bitPosition = pieceId & 255;
+
+            if (slotIndex != currentSlotIndex) {
+                scheduledRemovalsBitmap[setId][currentSlotIndex] &= ~bitsToClear;
+                currentSlotIndex = slotIndex;
+                bitsToClear = 0;
+            }
+
+            bitsToClear |= 1 << bitPosition;
         }
+        scheduledRemovalsBitmap[setId][currentSlotIndex] &= ~bitsToClear;
     }
 
     function _emitPiecesRemoved(uint256 setId, uint256[] memory pieceIds) private {
