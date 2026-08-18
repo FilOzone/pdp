@@ -321,7 +321,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         removePieces[0] = newPieceId;
         pdpVerifier.schedulePieceDeletions(setId, removePieces, empty);
         pdpVerifier.processPieceDeletions(setId, removePieces.length);
-        // Roll over after removals have been processed.
+        // Start the next proving period after removals have been processed.
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         // Make a new proof that is valid with two pieces

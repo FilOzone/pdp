@@ -147,8 +147,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Each data set notifies a configurable listener to implement extensible applications managing data storage.
     mapping(uint256 => address) dataSetListener;
     // The first index that is not challenged in prove possession calls this proving period.
-    // Updated to include the latest added leaves when starting the next proving period. Retained as
-    // active-lifecycle history while a proving-period rollover is draining deletions.
+    // Updated to include the latest added leaves when starting the next proving period.
     mapping(uint256 => uint256) challengeRange;
     // Enqueued piece ids that must be removed before starting the next proving period
     mapping(uint256 => uint256[]) scheduledRemovals;
@@ -730,7 +729,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, DataSetAlreadyInCleanup());
 
         if (_withinActivityWindow(setId)) {
-            require(msg.sender == sp, OnlyStorageProviderCanDelete());
+            require(msg.sender == sp, OnlyStorageProvider());
         }
 
         uint256 deletedLeafCount = dataSetLeafCount[setId];
@@ -773,7 +772,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(isCleanupMode || isHistoricalLegacyDelete, DataSetNotInCleanupMode());
 
         if (isCleanupMode && _withinActivityWindow(setId)) {
-            require(msg.sender == storageProvider[setId], OnlyStorageProviderCanCleanupPieces());
+            require(msg.sender == storageProvider[setId], OnlyStorageProvider());
         }
 
         uint256 pieceCount = _pieceCount(setId, legacy);
@@ -918,11 +917,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DataSetNotFound();
     error DataSetNotLive();
     error DataSetAlreadyInCleanup();
-    error OnlyStorageProviderCanDelete();
     error MaxPiecesMustBePositive();
     error EmptyRemovalBatch();
     error DataSetNotInCleanupMode();
-    error OnlyStorageProviderCanCleanupPieces();
     error DepositTransferFailed();
     error TransferFailed();
     error OnlyStorageProvider();
@@ -1220,10 +1217,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return getRandomness(nextChallengeEpoch[setId]);
     }
 
-    // Roll over to the next proving period.
+    // Start the next proving period.
     //
     // This method updates the collection of provable pieces in the data set by updating the challenge range to
-    // include leaves added in the last proving period. Scheduled deletions must be processed before rollover.
+    // include leaves added in the last proving period. Scheduled deletions must be processed before this method
+    // is called.
     //
     // Additionally this method forces sampling of a new challenge.  It enforces that the new
     // challenge epoch is at least `CHALLENGE_FINALITY` epochs in the future.
@@ -1234,8 +1232,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(msg.sender == storageProvider[setId], "only the storage provider can move to next proving period");
         uint256 pendingDeletionCount = scheduledRemovals[setId].length;
         require(pendingDeletionCount == 0, PendingPieceDeletions(pendingDeletionCount));
-        // challengeRange remains nonzero while an active proving lifecycle is being drained. This permits
-        // one zero-leaf rollover to close it after the final piece has been removed.
+        // challengeRange stays nonzero while an active proving lifecycle is being drained, which permits
+        // one zero-leaf call to close it out after the final piece has been removed.
         require(dataSetLeafCount[setId] > 0 || (dataSetLive(setId) && challengeRange[setId] > 0), NoPiecesToProve());
 
         if (dataSetLastProvenEpoch[setId] == NO_PROVEN_EPOCH) {

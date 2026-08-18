@@ -92,7 +92,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         address nonStorageProvider = address(0x1234);
         // Expect revert when non-storage-provider tries to delete the data set
         vm.prank(nonStorageProvider);
-        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanDelete.selector);
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.deleteDataSet(setId, empty);
 
         // Now verify the storage provider can delete the data set
@@ -690,7 +690,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         pdpVerifier.processPieceDeletions(setId, toRemove.length);
     }
 
-    function testProcessPieceDeletionsDrainsSuffixAndBlocksRollover() public {
+    function testProcessPieceDeletionsDrainsSuffixAndBlocksNextProvingPeriod() public {
         uint256 setId = createDataSetWithPieces(5);
         uint256 firstChallengeEpoch = vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY;
         pdpVerifier.nextProvingPeriod(setId, firstChallengeEpoch, empty);
@@ -751,15 +751,15 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
         assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), lastProvenEpochBeforeDraining);
 
-        _completeRolloverAndAssertNoRemovalEvent(setId, freshChallengeEpoch, 4);
+        _completeNextProvingPeriodAndAssertNoRemovalEvent(setId, freshChallengeEpoch, 4);
     }
 
-    function _completeRolloverAndAssertNoRemovalEvent(
+    function _completeNextProvingPeriodAndAssertNoRemovalEvent(
         uint256 setId,
         uint256 freshChallengeEpoch,
         uint256 expectedChallengeRange
     ) internal {
-        uint256 callbackCountBeforeRollover = listener.getEventCount(setId);
+        uint256 callbackCountBeforeNextProvingPeriod = listener.getEventCount(setId);
         vm.recordLogs();
         pdpVerifier.nextProvingPeriod(setId, freshChallengeEpoch, empty);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -770,9 +770,9 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         assertEq(pdpVerifier.getChallengeRange(setId), expectedChallengeRange);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), freshChallengeEpoch);
-        assertEq(listener.getEventCount(setId), callbackCountBeforeRollover + 1);
-        PDPRecordKeeper.EventRecord memory rolloverRecord = listener.getEvent(setId, listener.getEventCount(setId) - 1);
-        assertEq(uint256(rolloverRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD));
+        assertEq(listener.getEventCount(setId), callbackCountBeforeNextProvingPeriod + 1);
+        PDPRecordKeeper.EventRecord memory nextProvingPeriodRecord = listener.getEvent(setId, listener.getEventCount(setId) - 1);
+        assertEq(uint256(nextProvingPeriodRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD));
     }
 
     function testProcessingRemovalInvalidatesActiveChallenge() public {
@@ -1055,7 +1055,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         // Try to delete data set as non-storage-provider
         vm.prank(nonStorageProvider);
-        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanDelete.selector);
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.deleteDataSet(setId, empty);
 
         // Try to schedule removals as non-storage-provider
@@ -1203,10 +1203,10 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getChallengeRange(setId), 0);
         assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), block.number);
 
-        PDPRecordKeeper.EventRecord memory rolloverRecord = listener.getEvent(setId, listener.getEventCount(setId) - 1);
-        assertEq(uint256(rolloverRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD));
+        PDPRecordKeeper.EventRecord memory nextProvingPeriodRecord = listener.getEvent(setId, listener.getEventCount(setId) - 1);
+        assertEq(uint256(nextProvingPeriodRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD));
         (uint256 listenerChallengeEpoch, uint256 listenerLeafCount) =
-            abi.decode(rolloverRecord.extraData, (uint256, uint256));
+            abi.decode(nextProvingPeriodRecord.extraData, (uint256, uint256));
         assertEq(listenerChallengeEpoch, NO_CHALLENGE_SCHEDULED);
         assertEq(listenerLeafCount, 0);
     }
@@ -2431,7 +2431,7 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
             "Verifier balance unchanged: deposit held, fee burned, overpay refunded"
         );
 
-        _processProvenPeriodRemovalsAndRollover(setId, piecesToRemove.length);
+        _processProvenPeriodRemovalsAndStartNextProvingPeriod(setId, piecesToRemove.length);
         // CHECK: leaf counts
         assertEq(
             pdpVerifier.getPieceLeafCount(setId, 0),
@@ -2467,7 +2467,7 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         );
     }
 
-    function _processProvenPeriodRemovalsAndRollover(uint256 setId, uint256 removalCount) internal {
+    function _processProvenPeriodRemovalsAndStartNextProvingPeriod(uint256 setId, uint256 removalCount) internal {
         pdpVerifier.processPieceDeletions(setId, removalCount);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
         assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), block.number);
