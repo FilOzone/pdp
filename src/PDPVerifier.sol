@@ -1226,8 +1226,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(msg.sender == storageProvider[setId], "only the storage provider can move to next proving period");
         uint256 pendingDeletionCount = scheduledRemovals[setId].length;
         require(pendingDeletionCount == 0, PendingPieceDeletions(pendingDeletionCount));
-        // challengeRange stays nonzero while an active proving lifecycle is being drained, which permits
-        // one zero-leaf call to close it out after the final piece has been removed.
+        // nextProvingPeriod cannot be called on an empty dataset, unless the dataset
+        // became newly empty through processPieceDeletions, thus having challangeRange > 0
         require(dataSetLeafCount[setId] > 0 || (dataSetLive(setId) && challengeRange[setId] > 0), NoPiecesToProve());
 
         if (dataSetLastProvenEpoch[setId] == NO_PROVEN_EPOCH) {
