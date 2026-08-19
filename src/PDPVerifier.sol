@@ -54,6 +54,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     uint256 private constant PIECE_ID_EVENT_BATCH_SIZE = 100;
+    // Conservative cap below the 125-piece FEVM event-value limit.
     uint256 private constant PIECES_ADDED_EVENT_BATCH_SIZE = 100;
 
     // Cleanup
@@ -956,7 +957,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bytes32 header;
         bytes32 root;
         assembly {
-            header := shr(mul(sub(32, headerLength), 8), calldataload(data.offset))
+            header := shr(shl(3, sub(32, headerLength)), calldataload(data.offset))
             root := calldataload(add(data.offset, headerLength))
         }
         return Cids.PackedCid({header: header, root: root});

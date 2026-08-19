@@ -479,17 +479,17 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(pdpVerifier.getNextPieceId(setId), 2);
     }
 
-    function testPiecesAddedEventSplitsAtFevmLimit() public {
+    function testPiecesAddedEventSplitsAtConfiguredBatchSize() public {
         uint256 setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
         );
 
-        Cids.Cid[] memory pieces = new Cids.Cid[](126);
+        Cids.Cid[] memory pieces = new Cids.Cid[](101);
         for (uint256 i = 0; i < pieces.length; i++) {
             pieces[i] = makeSamplePiece(64);
         }
         Cids.PackedCid[] memory firstBatch = packCids(pieces, 0, 100);
-        Cids.PackedCid[] memory secondBatch = packCids(pieces, 100, 26);
+        Cids.PackedCid[] memory secondBatch = packCids(pieces, 100, 1);
 
         vm.expectEmit(true, false, false, true);
         emit IPDPEvents.PiecesAddedV2(setId, 0, firstBatch);
@@ -498,7 +498,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         uint256 firstId = pdpVerifier.addPieces(setId, address(0), pieces, empty);
         assertEq(firstId, 0);
-        assertEq(pdpVerifier.getNextPieceId(setId), 126);
+        assertEq(pdpVerifier.getNextPieceId(setId), 101);
     }
 
     function expectIndexedError(uint256 index, string memory expectedMessage) internal {
