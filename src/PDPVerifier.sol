@@ -53,7 +53,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
     uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
-    uint256 private constant PIECES_SCHEDULED_EVENT_BATCH_SIZE = 100;
+    uint256 private constant PIECE_ID_EVENT_BATCH_SIZE = 100;
     uint256 private constant PIECES_ADDED_EVENT_BATCH_SIZE = 100;
 
     // Cleanup
@@ -156,7 +156,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // The first index that is not challenged in prove possession calls this proving period.
     // Updated to include the latest added leaves when starting the next proving period.
     mapping(uint256 => uint256) challengeRange;
-    // Enqueued piece ids for removal when starting the next proving period
+    // Enqueued piece ids that must be removed before starting the next proving period
     mapping(uint256 => uint256[]) scheduledRemovals;
     // Legacy removal markers retained for upgrade compatibility. Compact pieces use a bit in PieceMetadata.
     mapping(uint256 dataSetId => mapping(uint256 slotIndex => uint256 bitmap)) scheduledRemovalsBitmap;
@@ -382,7 +382,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return _pieceCount(setId, _usesLegacyPieceStorage(setId));
     }
 
-    // Returns the next challenge epoch for a data set. Returns type(uint256).max during cleanup mode.
+    // Returns the next challenge epoch for a data set. Returns zero after a processed deletion invalidates
+    // the current challenge and until the next proving period; returns type(uint256).max during cleanup mode.
     function getNextChallengeEpoch(uint256 setId) public view returns (uint256) {
         require(dataSetExists(setId), DataSetNotFound());
         return nextChallengeEpoch[setId];
@@ -423,7 +424,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return challengeRange[setId];
     }
 
-    // Returns the piece ids of the pieces scheduled for removal at the start of the next proving period
+    // Returns the piece ids scheduled for removal before the next proving period
     function getScheduledRemovals(uint256 setId) public view returns (uint256[] memory) {
         require(dataSetLive(setId), DataSetNotLive());
         uint256[] storage removals = scheduledRemovals[setId];
@@ -735,7 +736,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, DataSetAlreadyInCleanup());
 
         if (_withinActivityWindow(setId)) {
-            require(msg.sender == sp, OnlyStorageProviderCanDelete());
+            require(msg.sender == sp, OnlyStorageProvider());
         }
 
         uint256 deletedLeafCount = dataSetLeafCount[setId];
@@ -778,7 +779,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(isCleanupMode || isHistoricalLegacyDelete, DataSetNotInCleanupMode());
 
         if (isCleanupMode && _withinActivityWindow(setId)) {
-            require(msg.sender == storageProvider[setId], OnlyStorageProviderCanCleanupPieces());
+            require(msg.sender == storageProvider[setId], OnlyStorageProvider());
         }
 
         uint256 pieceCount = _pieceCount(setId, legacy);
@@ -918,13 +919,15 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DataSetNotFound();
     error DataSetNotLive();
     error DataSetAlreadyInCleanup();
-    error OnlyStorageProviderCanDelete();
     error MaxPiecesMustBePositive();
     error EmptyRemovalBatch();
     error DataSetNotInCleanupMode();
-    error OnlyStorageProviderCanCleanupPieces();
     error DepositTransferFailed();
     error TransferFailed();
+    error OnlyStorageProvider();
+    error InvalidPieceDeletionBatch();
+    error PendingPieceDeletions(uint256 count);
+    error NoPiecesToProve();
     error InsufficientChallengeDelay(uint256 epochs, uint256 minDelay);
     error ExcessiveChallengeDelay(uint256 epochs, uint256 maxDelay);
     error InvalidImplementation(address implementation);
@@ -987,8 +990,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    // schedulePieceDeletions schedules deletion of a batch of pieces from a data set for the start of the next
-    // proving period. It must be called by the storage provider.
+    // schedulePieceDeletions schedules deletion of a batch of pieces from a data set before the next proving period.
+    // It must be called by the storage provider.
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
         require(dataSetLive(setId), DataSetNotLive());
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
@@ -1027,12 +1030,82 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             PDPListener(listenerAddr).piecesScheduledRemove(setId, pieceIds, extraData);
         }
 
-        for (uint256 start = 0; start < pieceIds.length; start += PIECES_SCHEDULED_EVENT_BATCH_SIZE) {
-            uint256 end = start + PIECES_SCHEDULED_EVENT_BATCH_SIZE;
+        for (uint256 start = 0; start < pieceIds.length; start += PIECE_ID_EVENT_BATCH_SIZE) {
+            uint256 end = start + PIECE_ID_EVENT_BATCH_SIZE;
             if (end > pieceIds.length) {
                 end = pieceIds.length;
             }
             emit PiecesScheduledForRemoval(setId, pieceIds[start:end]);
+        }
+    }
+
+    // Executes deletions from the end of the data set's scheduled-removal queue and invalidates its challenge.
+    function processPieceDeletions(uint256 setId, uint256 removalCount) external {
+        require(dataSetLive(setId), DataSetNotLive());
+        require(storageProvider[setId] == msg.sender, OnlyStorageProvider());
+
+        require(removalCount > 0, EmptyRemovalBatch());
+
+        uint256[] storage removals = scheduledRemovals[setId];
+        uint256 queueLength = removals.length;
+        require(removalCount <= queueLength, InvalidPieceDeletionBatch());
+
+        uint256[] memory pieceIds = new uint256[](removalCount);
+        uint256 suffixStart = queueLength - removalCount;
+        for (uint256 i = 0; i < removalCount; i++) {
+            pieceIds[i] = removals[suffixStart + i];
+        }
+
+        // Remove piece ids, queued removals and legacy queued removal metadata
+        removePieces(setId, pieceIds);
+        if (_usesLegacyPieceStorage(setId)) {
+            _popLegacyRemovalsBitmap(setId, pieceIds);
+        }
+        for (uint256 i = removalCount; i > 0; i--) {
+            removals.pop();
+        }
+        nextChallengeEpoch[setId] = NO_CHALLENGE_SCHEDULED;
+
+        _emitPiecesRemoved(setId, pieceIds);
+    }
+
+    function _popLegacyRemovalsBitmap(uint256 setId, uint256[] memory pieceIds) private {
+        uint256 removalCount = pieceIds.length;
+        uint256 currentSlotIndex = pieceIds[removalCount - 1] >> 8;
+        uint256 bitsToClear;
+        for (uint256 i = removalCount; i > 0; i--) {
+            uint256 pieceId = pieceIds[i - 1];
+            uint256 slotIndex = pieceId >> 8;
+            uint256 bitPosition = pieceId & 255;
+
+            if (slotIndex != currentSlotIndex) {
+                scheduledRemovalsBitmap[setId][currentSlotIndex] &= ~bitsToClear;
+                currentSlotIndex = slotIndex;
+                bitsToClear = 0;
+            }
+
+            bitsToClear |= 1 << bitPosition;
+        }
+        scheduledRemovalsBitmap[setId][currentSlotIndex] &= ~bitsToClear;
+    }
+
+    function _emitPiecesRemoved(uint256 setId, uint256[] memory pieceIds) private {
+        if (pieceIds.length <= PIECE_ID_EVENT_BATCH_SIZE) {
+            emit PiecesRemoved(setId, pieceIds);
+            return;
+        }
+
+        for (uint256 start = 0; start < pieceIds.length; start += PIECE_ID_EVENT_BATCH_SIZE) {
+            uint256 chunkLength = PIECE_ID_EVENT_BATCH_SIZE;
+            if (start + chunkLength > pieceIds.length) {
+                chunkLength = pieceIds.length - start;
+            }
+
+            uint256[] memory chunk = new uint256[](chunkLength);
+            for (uint256 i = 0; i < chunkLength; i++) {
+                chunk[i] = pieceIds[start + i];
+            }
+            emit PiecesRemoved(setId, chunk);
         }
     }
 
@@ -1166,13 +1239,11 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return getRandomness(nextChallengeEpoch[setId]);
     }
 
-    // Roll over to the next proving period
+    // Start the next proving period.
     //
-    // This method updates the collection of provable pieces in the data set by
-    // 1. Actually removing the pieces that have been scheduled for removal
-    // 2. Updating the challenge range to now include leaves added in the last proving period
-    // So after this method is called pieces scheduled for removal are no longer eligible for challenging
-    // and can be deleted.  And pieces added in the last proving period must be available for challenging.
+    // This method updates the collection of provable pieces in the data set by updating the challenge range to
+    // include leaves added in the last proving period. Scheduled deletions must be processed before this method
+    // is called.
     //
     // Additionally this method forces sampling of a new challenge.  It enforces that the new
     // challenge epoch is at least `CHALLENGE_FINALITY` epochs in the future.
@@ -1181,28 +1252,14 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // a "fault" or other penalizeable behavior to call this method before calling provePossesion.
     function nextProvingPeriod(uint256 setId, uint256 challengeEpoch, bytes calldata extraData) public {
         require(msg.sender == storageProvider[setId], "only the storage provider can move to next proving period");
-        require(dataSetLeafCount[setId] > 0, "can only start proving once leaves are added");
+        uint256 pendingDeletionCount = scheduledRemovals[setId].length;
+        require(pendingDeletionCount == 0, PendingPieceDeletions(pendingDeletionCount));
+        // nextProvingPeriod cannot be called on an empty dataset, unless the dataset
+        // became newly empty through processPieceDeletions, thus having challengeRange > 0
+        require(dataSetLeafCount[setId] > 0 || (dataSetLive(setId) && challengeRange[setId] > 0), NoPiecesToProve());
 
         if (dataSetLastProvenEpoch[setId] == NO_PROVEN_EPOCH) {
             dataSetLastProvenEpoch[setId] = block.number;
-        }
-
-        // Take removed pieces out of proving set
-        uint256[] storage removals = scheduledRemovals[setId];
-        uint256 nRemovals = removals.length;
-        if (nRemovals > 0) {
-            uint256[] memory removalsToProcess = new uint256[](nRemovals);
-
-            // Copy removals to memory before clearing the storage queue.
-            for (uint256 i = 0; i < nRemovals; i++) {
-                uint256 pieceId = removals[i];
-                removalsToProcess[i] = pieceId;
-            }
-
-            delete scheduledRemovals[setId];
-
-            removePieces(setId, removalsToProcess);
-            emit PiecesRemoved(setId, removalsToProcess);
         }
 
         // Bring added pieces into proving set
@@ -1236,9 +1293,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bool legacy = _usesLegacyPieceStorage(setId);
         uint256 totalDelta = 0;
         for (uint256 i = 0; i < pieceIds.length; i++) {
-            if (legacy) {
-                delete scheduledRemovalsBitmap[setId][pieceIds[i] >> 8];
-            }
             totalDelta += removeOnePiece(setId, pieceIds[i], legacy);
         }
         dataSetLeafCount[setId] -= totalDelta;

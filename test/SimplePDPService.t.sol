@@ -2,9 +2,13 @@
 pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
+import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {SimplePDPService} from "../src/SimplePDPService.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {Cids} from "../src/Cids.sol";
+import {PDPVerifier, NEW_DATA_SET_SENTINEL, NO_CHALLENGE_SCHEDULED} from "../src/PDPVerifier.sol";
+import {PDPFees} from "../src/Fees.sol";
+import {PieceHelper} from "./PieceHelper.t.sol";
 
 contract SimplePDPServiceTest is Test {
     SimplePDPService public pdpService;
@@ -99,6 +103,92 @@ contract SimplePDPServiceTest is Test {
             "Proving deadline should be set to NO_PROVING_DEADLINE"
         );
         assertEq(pdpService.provenThisPeriod(dataSetId), false, "Proven this period should now be false");
+    }
+}
+
+contract PDPVerifierSimplePDPServiceIntegrationTest is MockFVMTest, PieceHelper {
+    uint256 private constant CHALLENGE_FINALITY = 2;
+
+    PDPVerifier private pdpVerifier;
+    SimplePDPService private pdpService;
+    bytes private empty = new bytes(0);
+
+    function setUp() public override {
+        super.setUp();
+
+        PDPVerifier verifierImplementation = new PDPVerifier(1, CHALLENGE_FINALITY);
+        pdpVerifier = PDPVerifier(
+            address(
+                new MyERC1967Proxy(
+                    address(verifierImplementation), abi.encodeWithSelector(PDPVerifier.initialize.selector)
+                )
+            )
+        );
+
+        SimplePDPService serviceImplementation = new SimplePDPService(1);
+        pdpService = SimplePDPService(
+            address(
+                new MyERC1967Proxy(
+                    address(serviceImplementation),
+                    abi.encodeWithSelector(SimplePDPService.initialize.selector, address(pdpVerifier))
+                )
+            )
+        );
+    }
+
+    function testDeletionInvalidatesChallengeAndFaultsOnNextPeriod() public {
+        uint256 setId = _createDataSetWithTwoPieces();
+        uint256 challengeEpoch = pdpService.initChallengeWindowStart();
+        pdpVerifier.nextProvingPeriod(setId, challengeEpoch, empty);
+        uint256 originalDeadline = pdpService.provingDeadlines(setId);
+
+        uint256[] memory removals = new uint256[](1);
+        removals[0] = 1;
+        pdpVerifier.schedulePieceDeletions(setId, removals, empty);
+        pdpVerifier.processPieceDeletions(setId, 1);
+
+        assertFalse(pdpVerifier.pieceLive(setId, 1));
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        assertEq(pdpService.provingDeadlines(setId), originalDeadline);
+        assertFalse(pdpService.provenThisPeriod(setId));
+
+        vm.roll(block.number + 1);
+        uint256 nextChallengeEpoch = pdpService.nextChallengeWindowStart(setId);
+        vm.expectEmit(true, true, true, true);
+        emit SimplePDPService.FaultRecord(setId, 1, originalDeadline);
+        pdpVerifier.nextProvingPeriod(setId, nextChallengeEpoch, empty);
+
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), nextChallengeEpoch);
+        assertEq(pdpService.provingDeadlines(setId), originalDeadline + pdpService.getMaxProvingPeriod());
+    }
+
+    function testDeletionOfFinalPiecesInactivatesOnNextPeriod() public {
+        uint256 setId = _createDataSetWithTwoPieces();
+        pdpVerifier.nextProvingPeriod(setId, pdpService.initChallengeWindowStart(), empty);
+
+        uint256[] memory removals = new uint256[](2);
+        removals[0] = 0;
+        removals[1] = 1;
+        pdpVerifier.schedulePieceDeletions(setId, removals, empty);
+
+        vm.roll(block.number + 1);
+        pdpVerifier.processPieceDeletions(setId, removals.length);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY, empty);
+
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 0);
+        assertEq(pdpVerifier.getChallengeRange(setId), 0);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        assertEq(pdpService.provingDeadlines(setId), pdpService.NO_PROVING_DEADLINE());
+    }
+
+    function _createDataSetWithTwoPieces() internal returns (uint256 setId) {
+        Cids.Cid[] memory pieces = new Cids.Cid[](2);
+        pieces[0] = makeSamplePiece(2);
+        pieces[1] = makeSamplePiece(2);
+        setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
+            NEW_DATA_SET_SENTINEL, address(pdpService), pieces, abi.encode(empty, empty)
+        );
     }
 }
 

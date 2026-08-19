@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {BURN_ADDRESS} from "fvm-solidity/FVMActors.sol";
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {Cids} from "../src/Cids.sol";
@@ -91,7 +92,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         address nonStorageProvider = address(0x1234);
         // Expect revert when non-storage-provider tries to delete the data set
         vm.prank(nonStorageProvider);
-        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanDelete.selector);
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.deleteDataSet(setId, empty);
 
         // Now verify the storage provider can delete the data set
@@ -357,6 +358,17 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         listener = new TestingRecordKeeperService();
     }
 
+    function createDataSetWithPieces(uint256 pieceCount) internal returns (uint256 setId) {
+        setId = pdpVerifier.addPieces{value: PDPFees.cleanupDeposit()}(
+            NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
+        );
+        Cids.Cid[] memory pieces = new Cids.Cid[](pieceCount);
+        for (uint256 i = 0; i < pieceCount; i++) {
+            pieces[i] = makeSamplePiece(2);
+        }
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+    }
+
     function testAddPiece() public {
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.DataSetCreated(1, address(this));
@@ -561,7 +573,9 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.PiecesRemoved(setId, toRemove);
-        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); // flush
+        pdpVerifier.processPieceDeletions(setId, toRemove.length);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
         assertEq(pdpVerifier.pieceLive(setId, 0), false);
@@ -611,7 +625,8 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         vm.expectEmit(true, true, false, false);
         emit IPDPEvents.PiecesRemoved(setId, toRemove);
-        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); // flush
+        pdpVerifier.processPieceDeletions(setId, toRemove.length);
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         assertEq(pdpVerifier.pieceLive(setId, 0), false);
         assertEq(pdpVerifier.pieceLive(setId, 1), true);
@@ -661,6 +676,212 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         vm.expectRevert(PDPVerifier.EmptyRemovalBatch.selector);
         pdpVerifier.schedulePieceDeletions(setId, new uint256[](0), empty);
+    }
+
+    function testProcessPieceDeletionsEmitsChunkedEvents() public {
+        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.cleanupDeposit()}(address(0), empty);
+        uint256 pieceCount = 257;
+        Cids.Cid[] memory pieces = new Cids.Cid[](pieceCount);
+        uint256[] memory toRemove = new uint256[](pieceCount);
+        for (uint256 i = 0; i < pieceCount; i++) {
+            pieces[i] = makeSamplePiece(2);
+            toRemove[i] = i;
+        }
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+
+        uint256 eventBatchSize = 100;
+        for (uint256 start = 0; start < pieceCount; start += eventBatchSize) {
+            uint256 end = start + eventBatchSize;
+            if (end > pieceCount) {
+                end = pieceCount;
+            }
+            uint256[] memory expectedPieceIds = new uint256[](end - start);
+            for (uint256 i = start; i < end; i++) {
+                expectedPieceIds[i - start] = i;
+            }
+            vm.expectEmit(true, false, false, true);
+            emit IPDPEvents.PiecesRemoved(setId, expectedPieceIds);
+        }
+        pdpVerifier.processPieceDeletions(setId, toRemove.length);
+    }
+
+    function testProcessPieceDeletionsDrainsSuffixAndBlocksNextProvingPeriod() public {
+        uint256 setId = createDataSetWithPieces(5);
+        uint256 firstChallengeEpoch = vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY;
+        pdpVerifier.nextProvingPeriod(setId, firstChallengeEpoch, empty);
+
+        Cids.Cid[] memory addedDuringPeriod = new Cids.Cid[](1);
+        addedDuringPeriod[0] = makeSamplePiece(2);
+        pdpVerifier.addPieces(setId, address(0), addedDuringPeriod, empty);
+
+        uint256[] memory scheduled = new uint256[](4);
+        scheduled[0] = 0;
+        scheduled[1] = 1;
+        scheduled[2] = 2;
+        scheduled[3] = 3;
+        pdpVerifier.schedulePieceDeletions(setId, scheduled, empty);
+
+        uint256 challengeRangeBeforeDraining = pdpVerifier.getChallengeRange(setId);
+        uint256 nextChallengeEpochBeforeDraining = pdpVerifier.getNextChallengeEpoch(setId);
+        uint256 lastProvenEpochBeforeDraining = pdpVerifier.getDataSetLastProvenEpoch(setId);
+
+        uint256[] memory suffix = new uint256[](2);
+        suffix[0] = 2;
+        suffix[1] = 3;
+        vm.expectEmit(true, false, false, true);
+        emit IPDPEvents.PiecesRemoved(setId, suffix);
+        pdpVerifier.processPieceDeletions(setId, suffix.length);
+
+        assertTrue(pdpVerifier.pieceLive(setId, 0));
+        assertTrue(pdpVerifier.pieceLive(setId, 1));
+        assertFalse(pdpVerifier.pieceLive(setId, 2));
+        assertFalse(pdpVerifier.pieceLive(setId, 3));
+        assertTrue(pdpVerifier.pieceLive(setId, 4));
+        assertTrue(pdpVerifier.pieceLive(setId, 5));
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 8);
+        assertEq(pdpVerifier.getChallengeRange(setId), challengeRangeBeforeDraining);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+
+        IPDPTypes.Proof[] memory staleProof = new IPDPTypes.Proof[](1);
+        staleProof[0] = IPDPTypes.Proof(bytes32(0), new bytes32[](0));
+        vm.expectRevert("no challenge scheduled");
+        pdpVerifier.provePossession(setId, staleProof);
+
+        uint256[] memory remaining = pdpVerifier.getScheduledRemovals(setId);
+        assertEq(remaining.length, 2);
+        assertEq(remaining[0], 0);
+        assertEq(remaining[1], 1);
+
+        uint256 freshChallengeEpoch = nextChallengeEpochBeforeDraining + 1;
+        vm.expectRevert(abi.encodeWithSelector(PDPVerifier.PendingPieceDeletions.selector, 2));
+        pdpVerifier.nextProvingPeriod(setId, freshChallengeEpoch, empty);
+        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), lastProvenEpochBeforeDraining);
+        assertEq(pdpVerifier.getChallengeRange(setId), challengeRangeBeforeDraining);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+
+        pdpVerifier.processPieceDeletions(setId, remaining.length);
+        assertEq(pdpVerifier.getScheduledRemovals(setId).length, 0);
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 4);
+        assertEq(pdpVerifier.getChallengeRange(setId), challengeRangeBeforeDraining);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), lastProvenEpochBeforeDraining);
+
+        _completeNextProvingPeriodAndAssertNoRemovalEvent(setId, freshChallengeEpoch, 4);
+    }
+
+    function _completeNextProvingPeriodAndAssertNoRemovalEvent(
+        uint256 setId,
+        uint256 freshChallengeEpoch,
+        uint256 expectedChallengeRange
+    ) internal {
+        uint256 callbackCountBeforeNextProvingPeriod = listener.getEventCount(setId);
+        vm.recordLogs();
+        pdpVerifier.nextProvingPeriod(setId, freshChallengeEpoch, empty);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 piecesRemovedSignature = keccak256("PiecesRemoved(uint256,uint256[])");
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics.length == 0 || logs[i].topics[0] != piecesRemovedSignature);
+        }
+
+        assertEq(pdpVerifier.getChallengeRange(setId), expectedChallengeRange);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), freshChallengeEpoch);
+        assertEq(listener.getEventCount(setId), callbackCountBeforeNextProvingPeriod + 1);
+        PDPRecordKeeper.EventRecord memory nextProvingPeriodRecord =
+            listener.getEvent(setId, listener.getEventCount(setId) - 1);
+        assertEq(
+            uint256(nextProvingPeriodRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD)
+        );
+    }
+
+    function testProcessingRemovalInvalidatesActiveChallenge() public {
+        uint256 setId = createDataSetWithPieces(2);
+        uint256 challengeEpoch = block.number + CHALLENGE_FINALITY_DELAY;
+        pdpVerifier.nextProvingPeriod(setId, challengeEpoch, empty);
+        uint256 rangeBefore = pdpVerifier.getChallengeRange(setId);
+        uint256 lastProvenBefore = pdpVerifier.getDataSetLastProvenEpoch(setId);
+
+        uint256[] memory removal = new uint256[](1);
+        removal[0] = 0;
+        pdpVerifier.schedulePieceDeletions(setId, removal, empty);
+        pdpVerifier.processPieceDeletions(setId, 1);
+
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        assertEq(pdpVerifier.getChallengeRange(setId), rangeBefore);
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 2);
+        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), lastProvenBefore);
+        assertEq(pdpVerifier.getScheduledRemovals(setId).length, 0);
+
+        IPDPTypes.Proof[] memory staleProof = new IPDPTypes.Proof[](1);
+        staleProof[0] = IPDPTypes.Proof(bytes32(0), new bytes32[](0));
+        vm.expectRevert("no challenge scheduled");
+        pdpVerifier.provePossession(setId, staleProof);
+    }
+
+    function testProcessPieceDeletionsValidatesCallerAndCount() public {
+        uint256 setId = createDataSetWithPieces(4);
+        uint256 challengeEpoch = block.number + CHALLENGE_FINALITY_DELAY;
+        pdpVerifier.nextProvingPeriod(setId, challengeEpoch, empty);
+        uint256[] memory scheduled = new uint256[](3);
+        scheduled[0] = 0;
+        scheduled[1] = 1;
+        scheduled[2] = 2;
+        pdpVerifier.schedulePieceDeletions(setId, scheduled, empty);
+
+        vm.prank(address(0xC0FFEE));
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
+        pdpVerifier.processPieceDeletions(setId, 1);
+
+        vm.expectRevert(PDPVerifier.EmptyRemovalBatch.selector);
+        pdpVerifier.processPieceDeletions(setId, 0);
+
+        vm.expectRevert(PDPVerifier.InvalidPieceDeletionBatch.selector);
+        pdpVerifier.processPieceDeletions(setId, 4);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), challengeEpoch);
+
+        uint256[] memory expectedRemoved = new uint256[](1);
+        expectedRemoved[0] = 2;
+        vm.expectEmit(true, false, false, true);
+        emit IPDPEvents.PiecesRemoved(setId, expectedRemoved);
+        pdpVerifier.processPieceDeletions(setId, 1);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+
+        uint256[] memory expectedPending = new uint256[](2);
+        expectedPending[0] = 0;
+        expectedPending[1] = 1;
+        assertEq(pdpVerifier.getScheduledRemovals(setId), expectedPending);
+        assertTrue(pdpVerifier.pieceLive(setId, 0));
+        assertTrue(pdpVerifier.pieceLive(setId, 1));
+        assertFalse(pdpVerifier.pieceLive(setId, 2));
+        assertTrue(pdpVerifier.pieceLive(setId, 3));
+
+        pdpVerifier.deleteDataSet(setId, empty);
+        vm.expectRevert(PDPVerifier.DataSetNotLive.selector);
+        pdpVerifier.processPieceDeletions(setId, 1);
+    }
+
+    function testPartialDeletionPreservesCompactRemovalMarker() public {
+        uint256 setId = createDataSetWithPieces(3);
+        uint256[] memory scheduled = new uint256[](3);
+        scheduled[0] = 0;
+        scheduled[1] = 1;
+        scheduled[2] = 2;
+        pdpVerifier.schedulePieceDeletions(setId, scheduled, empty);
+
+        uint256[] memory suffix = new uint256[](2);
+        suffix[0] = 1;
+        suffix[1] = 2;
+        pdpVerifier.processPieceDeletions(setId, suffix.length);
+
+        uint256[] memory pendingId = new uint256[](1);
+        pendingId[0] = 0;
+        vm.expectRevert("Piece ID already scheduled for removal");
+        pdpVerifier.schedulePieceDeletions(setId, pendingId, empty);
+
+        assertEq(pdpVerifier.getScheduledRemovals(setId), pendingId);
+        assertTrue(pdpVerifier.pieceLive(setId, 0));
+        assertFalse(pdpVerifier.pieceLive(setId, 1));
+        assertFalse(pdpVerifier.pieceLive(setId, 2));
     }
 
     function testSchedulePieceDeletionsDuplicatePrevention() public {
@@ -725,7 +946,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         uint256[] memory scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
         assertEq(scheduledRemovals.length, 2, "Should have 2 scheduled removals");
 
-        // Call nextProvingPeriod to process removals
+        pdpVerifier.processPieceDeletions(setId, pieceIds.length);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         // Verify scheduled removals are cleared
@@ -756,24 +977,41 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         }
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
-        // Schedule widely separated piece IDs.
-        uint256[] memory pieceIds = new uint256[](4);
-        pieceIds[0] = 0;
-        pieceIds[1] = 255;
-        pieceIds[2] = 256;
-        pieceIds[3] = 300;
+        // Test scheduling pieces with widely separated IDs.
+        uint256[] memory pieceIds = new uint256[](6);
+        pieceIds[0] = 0; // Slot 0, bit 0
+        pieceIds[1] = 256; // Slot 1, bit 0
+        pieceIds[2] = 1; // Slot 0, bit 1
+        pieceIds[3] = 257; // Slot 1, bit 1
+        pieceIds[4] = 2; // Slot 0, bit 2
+        pieceIds[5] = 258; // Slot 1, bit 2
 
         // Should work without issues
         pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
 
         // Verify they were scheduled
         uint256[] memory scheduledRemovals = pdpVerifier.getScheduledRemovals(setId);
-        assertEq(scheduledRemovals.length, 4, "Should have 4 scheduled removals");
+        assertEq(scheduledRemovals.length, 6, "Should have 6 scheduled removals");
 
-        // Duplicate detection is per compact piece.
+        // Process an alternating-ID suffix, leaving two removal markers pending.
+        uint256[] memory suffix = new uint256[](4);
+        suffix[0] = 1;
+        suffix[1] = 257;
+        suffix[2] = 2;
+        suffix[3] = 258;
+        pdpVerifier.processPieceDeletions(setId, suffix.length);
+
+        uint256[] memory expectedPending = new uint256[](2);
+        expectedPending[0] = 0;
+        expectedPending[1] = 256;
+        assertEq(pdpVerifier.getScheduledRemovals(setId), expectedPending);
+
         uint256[] memory duplicateIds = new uint256[](1);
-        duplicateIds[0] = 256;
+        duplicateIds[0] = 0;
+        vm.expectRevert("Piece ID already scheduled for removal");
+        pdpVerifier.schedulePieceDeletions(setId, duplicateIds, empty);
 
+        duplicateIds[0] = 256;
         vm.expectRevert("Piece ID already scheduled for removal");
         pdpVerifier.schedulePieceDeletions(setId, duplicateIds, empty);
     }
@@ -810,6 +1048,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         assertEq(true, pdpVerifier.pieceChallengable(setId, 0));
         assertEq(false, pdpVerifier.pieceChallengable(setId, 1));
         pdpVerifier.schedulePieceDeletions(setId, toRemove2, empty);
+        pdpVerifier.processPieceDeletions(setId, toRemove2.length);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         assertEq(false, pdpVerifier.pieceLive(setId, 0));
@@ -835,7 +1074,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         // Try to delete data set as non-storage-provider
         vm.prank(nonStorageProvider);
-        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanDelete.selector);
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.deleteDataSet(setId, empty);
 
         // Try to schedule removals as non-storage-provider
@@ -927,13 +1166,13 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         );
 
         // Try to set next proving period with various values
-        vm.expectRevert("can only start proving once leaves are added");
+        vm.expectRevert(PDPVerifier.NoPiecesToProve.selector);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + 100, empty);
 
-        vm.expectRevert("can only start proving once leaves are added");
+        vm.expectRevert(PDPVerifier.NoPiecesToProve.selector);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
-        vm.expectRevert("can only start proving once leaves are added");
+        vm.expectRevert(PDPVerifier.NoPiecesToProve.selector);
         pdpVerifier.nextProvingPeriod(setId, type(uint256).max, empty);
     }
 
@@ -945,7 +1184,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
         // Try to call nextProvingPeriod on the empty data set
         // Should revert because no leaves have been added yet
-        vm.expectRevert("can only start proving once leaves are added");
+        vm.expectRevert(PDPVerifier.NoPiecesToProve.selector);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
     }
 
@@ -958,23 +1197,40 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
         pieces[0] = makeSamplePiece(2);
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
+        uint256 activeChallengeEpoch = vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY;
+        pdpVerifier.nextProvingPeriod(setId, activeChallengeEpoch, empty);
 
         // Schedule piece for removal
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 0;
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+        pdpVerifier.processPieceDeletions(setId, toRemove.length);
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 0);
+        assertEq(pdpVerifier.getChallengeRange(setId), 2);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
 
         // Expect DataSetEmpty event when calling nextProvingPeriod
         vm.expectEmit(true, false, false, false);
         emit IPDPEvents.DataSetEmpty(setId);
 
-        // Call nextProvingPeriod which should remove the piece and emit the event
+        // Call nextProvingPeriod to close the active proving lifecycle.
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         // Verify the data set is indeed empty
         assertEq(pdpVerifier.getDataSetLeafCount(setId), 0);
         assertEq(pdpVerifier.getNextChallengeEpoch(setId), 0);
+        assertEq(pdpVerifier.getChallengeRange(setId), 0);
         assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), block.number);
+
+        PDPRecordKeeper.EventRecord memory nextProvingPeriodRecord =
+            listener.getEvent(setId, listener.getEventCount(setId) - 1);
+        assertEq(
+            uint256(nextProvingPeriodRecord.operationType), uint256(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD)
+        );
+        (uint256 listenerChallengeEpoch, uint256 listenerLeafCount) =
+            abi.decode(nextProvingPeriodRecord.extraData, (uint256, uint256));
+        assertEq(listenerChallengeEpoch, NO_CHALLENGE_SCHEDULED);
+        assertEq(listenerLeafCount, 0);
     }
 }
 
@@ -1078,7 +1334,9 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         toRemove[2] = firstPieceId + 5; // Piece at index 5
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
 
-        // Move to next proving period to make removals effective
+        pdpVerifier.processPieceDeletions(setId, toRemove.length);
+
+        // Move to the next proving period after removals are effective.
         uint256 challengeFinality = pdpVerifier.getChallengeFinality();
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + challengeFinality, empty);
 
@@ -1266,6 +1524,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         toRemove[1] = 4;
         toRemove[2] = 6;
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+        pdpVerifier.processPieceDeletions(setId, toRemove.length);
         uint256 challengeFinality = pdpVerifier.getChallengeFinality();
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + challengeFinality, empty);
 
@@ -1636,7 +1895,8 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
         // Delete some
         // Remove pieces in batch
         pdpVerifier.schedulePieceDeletions(testSetId, pieceIdsToRemove, empty);
-        // flush adds and removals
+        pdpVerifier.processPieceDeletions(testSetId, pieceIdsToRemove.length);
+        // Flush additions after removals have been processed.
         pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
         for (uint256 i = 0; i < pieceIdsToRemove.length; i++) {
             bytes memory zeroBytes;
@@ -1695,6 +1955,7 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
                 toRemove[i] = round * piecesPerRound + (i * 2);
             }
             pdpVerifier.schedulePieceDeletions(testSetId, toRemove, empty);
+            pdpVerifier.processPieceDeletions(testSetId, toRemove.length);
 
             pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
@@ -1714,6 +1975,7 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
                 uint256[] memory toRemove = new uint256[](1);
                 toRemove[0] = i - 1;
                 pdpVerifier.schedulePieceDeletions(testSetId, toRemove, empty);
+                pdpVerifier.processPieceDeletions(testSetId, toRemove.length);
             }
 
             pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
@@ -1846,7 +2108,8 @@ contract SumTreeAddTest is MockFVMTest, PieceHelper {
             pdpVerifier.addPieces(testSetId, address(0), pieceDataArray, empty);
         }
         pdpVerifier.schedulePieceDeletions(testSetId, pieceIdsToRemove, empty);
-        pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty); //flush removals
+        pdpVerifier.processPieceDeletions(testSetId, pieceIdsToRemove.length);
+        pdpVerifier.nextProvingPeriod(testSetId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         assertFindPieceAndOffset(testSetId, 0, 3, 0);
         assertFindPieceAndOffset(testSetId, 1, 4, 0);
@@ -1950,6 +2213,8 @@ contract PDPListenerIntegrationTest is MockFVMTest, PieceHelper {
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NONE);
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
+        uint256 activeChallengeRange = pdpVerifier.getChallengeRange(setId);
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.REMOVE_SCHEDULED);
         uint256[] memory pieceIds = new uint256[](1);
@@ -1960,12 +2225,26 @@ contract PDPListenerIntegrationTest is MockFVMTest, PieceHelper {
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NONE);
         pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
 
+        // Processing removals does not call the listener.
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NEXT_PROVING_PERIOD);
+        pdpVerifier.processPieceDeletions(setId, pieceIds.length);
+
+        assertFalse(pdpVerifier.pieceLive(setId, 0));
+        assertEq(pdpVerifier.getPieceLeafCount(setId, 0), 0);
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 0);
+        assertEq(pdpVerifier.getScheduledRemovals(setId).length, 0);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        assertEq(pdpVerifier.getChallengeRange(setId), activeChallengeRange);
+
         vm.expectRevert("Failing operation");
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        assertEq(pdpVerifier.getChallengeRange(setId), activeChallengeRange);
 
         badListener.setBadOperation(PDPRecordKeeper.OperationType.NONE);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        assertEq(pdpVerifier.getChallengeRange(setId), 0);
     }
 }
 
@@ -2032,8 +2311,9 @@ contract PDPVerifierExtraDataTest is MockFVMTest, PieceHelper {
         );
 
         // Test ADD operation
-        Cids.Cid[] memory pieces = new Cids.Cid[](1);
+        Cids.Cid[] memory pieces = new Cids.Cid[](2);
         pieces[0] = makeSamplePiece(1);
+        pieces[1] = makeSamplePiece(1);
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
         assertEq(
             extraDataListener.getExtraData(setId, PDPRecordKeeper.OperationType.ADD),
@@ -2050,6 +2330,7 @@ contract PDPVerifierExtraDataTest is MockFVMTest, PieceHelper {
             empty,
             "Extra data not propagated for REMOVE_SCHEDULED"
         );
+        pdpVerifier.processPieceDeletions(setId, pieceIds.length);
 
         // Test NEXT_PROVING_PERIOD operation
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
@@ -2172,7 +2453,7 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
             "Verifier balance unchanged: deposit held, fee burned, overpay refunded"
         );
 
-        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
+        _processProvenPeriodRemovalsAndStartNextProvingPeriod(setId, piecesToRemove.length);
         // CHECK: leaf counts
         assertEq(
             pdpVerifier.getPieceLeafCount(setId, 0),
@@ -2206,6 +2487,13 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
             vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY,
             "Next challenge epoch should be updated"
         );
+    }
+
+    function _processProvenPeriodRemovalsAndStartNextProvingPeriod(uint256 setId, uint256 removalCount) internal {
+        pdpVerifier.processPieceDeletions(setId, removalCount);
+        assertEq(pdpVerifier.getNextChallengeEpoch(setId), NO_CHALLENGE_SCHEDULED);
+        assertEq(pdpVerifier.getDataSetLastProvenEpoch(setId), block.number);
+        pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
     }
 }
 
@@ -2630,6 +2918,7 @@ contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
         uint256[] memory toRemove = new uint256[](1);
         toRemove[0] = 0;
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+        pdpVerifier.processPieceDeletions(setId, toRemove.length);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + 10, empty);
 
         uint256[] memory resultsAfter = pdpVerifier.findPieceIdsByCid(setId, pieces[0], 0, 10);
@@ -2702,6 +2991,7 @@ contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
             toRemove[i] = i;
         }
         pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+        pdpVerifier.processPieceDeletions(setId, toRemove.length);
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + 10, empty);
 
         uint256[] memory results = pdpVerifier.findPieceIdsByCid(setId, target, 0, 10);

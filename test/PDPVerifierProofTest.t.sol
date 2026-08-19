@@ -167,6 +167,8 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         piecesToRemove[0] = 0;
         pdpVerifier.schedulePieceDeletions(setId, piecesToRemove, empty);
 
+        pdpVerifier.processPieceDeletions(setId, piecesToRemove.length);
+
         // Call nextProvingPeriod and verify lastProvenEpoch is set to current block after removing last piece
         pdpVerifier.nextProvingPeriod(setId, blockNumber + CHALLENGE_FINALITY_DELAY, empty);
         assertEq(
@@ -318,7 +320,8 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         uint256[] memory removePieces = new uint256[](1);
         removePieces[0] = newPieceId;
         pdpVerifier.schedulePieceDeletions(setId, removePieces, empty);
-        // flush removes
+        pdpVerifier.processPieceDeletions(setId, removePieces.length);
+        // Start the next proving period after removals have been processed.
         pdpVerifier.nextProvingPeriod(setId, vm.getBlockNumber() + CHALLENGE_FINALITY_DELAY, empty);
 
         // Make a new proof that is valid with two pieces

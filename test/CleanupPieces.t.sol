@@ -209,7 +209,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         // block.number (1) <= lastProvenEpoch + INACTIVITY_WINDOW, so only SP can call
         address notSp = address(0xBEEF);
         vm.prank(notSp);
-        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanCleanupPieces.selector);
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.cleanupPieces(setId, 10);
 
         // SP succeeds
@@ -298,7 +298,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         // Still within the activity window: third party blocked
         address anyone = address(0xBEEF);
         vm.prank(anyone);
-        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanCleanupPieces.selector);
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.cleanupPieces(setId, 10);
 
         // Just past the activity window, well before deleteEpoch + window: the gate
@@ -338,7 +338,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         // Gate falls back to LEGACY_ACTIVITY_EPOCH (implementation deployment block)
         address notSp = address(0xBEEF);
         vm.prank(notSp);
-        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanCleanupPieces.selector);
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.cleanupPieces(setId, 10);
 
         vm.roll(pdpVerifier.LEGACY_ACTIVITY_EPOCH() + pdpVerifier.INACTIVITY_WINDOW() + 1);
@@ -377,7 +377,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         // block.number (1) <= lastProvenEpoch(0) + INACTIVITY_WINDOW, so only SP can delete
         address notSp = address(0xBEEF);
         vm.prank(notSp);
-        vm.expectRevert(PDPVerifier.OnlyStorageProviderCanDelete.selector);
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.deleteDataSet(setId, empty);
     }
 
