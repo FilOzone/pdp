@@ -37,6 +37,8 @@ interface IPDPVerifier is IPDPEvents {
         payable
         returns (uint256);
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) external;
+    /// @notice Processes `removalCount` entries from the end of the scheduled-removal queue.
+    function processPieceDeletions(uint256 setId, uint256 removalCount) external;
     function provePossession(uint256 setId, IPDPTypes.Proof[] calldata proofs) external payable;
     function nextProvingPeriod(uint256 setId, uint256 challengeEpoch, bytes calldata extraData) external;
     function findPieceIds(uint256 setId, uint256[] calldata leafIndexs)
