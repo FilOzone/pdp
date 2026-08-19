@@ -13,7 +13,13 @@ interface IPDPEvents {
     );
     event DataSetDeleted(uint256 indexed setId, uint256 deletedLeafCount);
     event DataSetEmpty(uint256 indexed setId);
+    /// @notice Deprecated. This event is no longer emitted; use {PiecesAddedV2} instead.
+    /// @custom:deprecated Use {PiecesAddedV2} instead.
     event PiecesAdded(uint256 indexed setId, uint256[] pieceIds, Cids.Cid[] pieceCids);
+    /// @notice Emitted for contiguous additions; piece ID at index `i` is `firstPieceId + i`.
+    /// @dev Each packed CID header is right-aligned and zero-padded on the left. Reconstruct it by removing
+    /// only the leading zero bytes from `header`, preserving any internal zeros, then appending `root`.
+    event PiecesAddedV2(uint256 indexed setId, uint256 firstPieceId, Cids.PackedCid[] pieceCids);
     event PiecesScheduledForRemoval(uint256 indexed setId, uint256[] pieceIds);
     event PiecesRemoved(uint256 indexed setId, uint256[] pieceIds);
     event ProofFeePaid(uint256 indexed setId, uint256 fee);

@@ -19,6 +19,16 @@ library Cids {
         bytes data;
     }
 
+    /// @notice Compact, ABI-decodable representation of a CID with a 32-byte digest.
+    /// @dev `header` contains every CID byte before the digest, right-aligned in the word. Every unused
+    /// leading byte MUST be zero, and the first nonzero byte is the first byte of the CID. To reconstruct
+    /// the CID, remove only those leading zero bytes and append `root`; zero bytes within the header are data
+    /// and MUST be preserved. This is unambiguous because a canonical binary CID begins with a nonzero byte.
+    struct PackedCid {
+        bytes32 header;
+        bytes32 root;
+    }
+
     // Checks that CID is PieceCIDv2 and decomposes it into its components.
     // See: https://github.com/filecoin-project/FIPs/blob/master/FRCs/frc-0069.md
     function validateCommPv2(Cid calldata cid) internal pure returns (uint256 padding, uint8 height, bytes32 root) {
