@@ -5,6 +5,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [3.5.0] - TBD
+
+This release upgrades the deployed PDPVerifier contract with compact piece storage, resumable piece deletion processing, compact `PiecesAddedV2` events, scheduled-removal events, and delay-based upgrade announcements.
+
+Storage-provider integrations must process pending piece deletions before advancing a proving period. Event consumers must support `PiecesAddedV2`; the legacy `PiecesAdded` event remains in the ABI but is no longer emitted.
+
+### Deployed
+
+The implementation contracts will be deployed from commit `TBD`. The `v3.5.0` release tag may point to a later documentation-only commit that finalizes these release notes.
+
+**Mainnet:**
+- PDPVerifier Implementation: TBD
+- PDPVerifier Proxy: [0xBADd0B92C1c71d02E7d520f64c0876538fa2557F](https://filecoin.blockscout.com/address/0xBADd0B92C1c71d02E7d520f64c0876538fa2557F?tab=contract)
+- Implementation Deployment Transaction: TBD
+- Proxy Upgrade Transaction: TBD
+
+**Calibnet:**
+- PDPVerifier Implementation: TBD
+- PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://filecoin-testnet.blockscout.com/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C?tab=contract)
+- Implementation Deployment Transaction: TBD
+- Proxy Upgrade Transaction: TBD
+
+Deployment constructor values are `initializerVersion = 4` on both networks, with `challengeFinality = 10` on Calibration and `challengeFinality = 150` on Mainnet.
+
 ### Breaking Changes
 - Scheduled piece removals are no longer applied automatically by `nextProvingPeriod()`. Storage providers must drain the pending queue with the new resumable `processPieceDeletions(setId, removalCount)` method before advancing the proving period; `nextProvingPeriod()` now reverts with `PendingPieceDeletions(count)` while removals remain. Processing removals invalidates the active challenge, and `PiecesRemoved` events are emitted in batches of at most 100 piece IDs. Storage-provider integrations must add this explicit processing step ([#297](https://github.com/FilOzone/pdp/pull/297)).
 - The legacy `PiecesAdded` event remains declared in the ABI but is no longer emitted. Event consumers must support `PiecesAddedV2` before this contract version is deployed ([#300](https://github.com/FilOzone/pdp/pull/300)).
@@ -378,7 +402,8 @@ For the set of changes since the last tag:
 ### Performance
 - Performance-related improvements
 
-[Unreleased]: https://github.com/filozone/pdp/compare/v3.4.0...HEAD
+[Unreleased]: https://github.com/filozone/pdp/compare/v3.5.0...HEAD
+[3.5.0]: https://github.com/filozone/pdp/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/filozone/pdp/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/filozone/pdp/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/filozone/pdp/compare/v3.1.0...v3.2.0
