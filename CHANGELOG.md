@@ -5,17 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Breaking Changes
+- Scheduled piece removals are no longer applied automatically by `nextProvingPeriod()`. Storage providers must drain the pending queue with the new resumable `processPieceDeletions(setId, removalCount)` method before advancing the proving period; `nextProvingPeriod()` now reverts with `PendingPieceDeletions(count)` while removals remain. Processing removals invalidates the active challenge, and `PiecesRemoved` events are emitted in batches of at most 100 piece IDs. Storage-provider integrations must add this explicit processing step ([#297](https://github.com/FilOzone/pdp/pull/297)).
+- The legacy `PiecesAdded` event remains declared in the ABI but is no longer emitted. Event consumers must support `PiecesAddedV2` before this contract version is deployed ([#300](https://github.com/FilOzone/pdp/pull/300)).
+
 ### Added
 - Added `legacyPieceStorageIdLimit()` to expose the permanent data-set ID boundary between legacy and compact piece storage. Upgrade deployments must call `migrate()` to initialize this boundary; until then, newly created data sets continue using legacy storage ([#292](https://github.com/FilOzone/pdp/pull/292)).
+- Added ABI-decodable `PiecesAddedV2` events containing the first contiguous piece ID and two-word packed CIDs. Additions larger than 100 pieces emit multiple events so each remains within Filecoin's 8 KiB event-value limit ([#300](https://github.com/FilOzone/pdp/pull/300)).
+- Added `PiecesScheduledForRemoval` events so indexers can observe scheduled removals immediately. Piece IDs are emitted in batches of at most 100 to preserve the 2,000-piece scheduling limit without exceeding Filecoin's 8 KiB event-data limit; empty removal schedules are rejected ([#287](https://github.com/FilOzone/pdp/pull/287), [#299](https://github.com/FilOzone/pdp/pull/299)).
+- Added `announceUpgradePlan(nextImplementation, delayEpochs)` for announcing upgrades using a relative delay ([#285](https://github.com/FilOzone/pdp/pull/285)).
 
 ### Changed
 - New data sets created after the migration cutover store each piece in a compact two-slot `PieceV2` representation instead of the five-slot legacy representation. Existing data sets remain fully supported on the legacy layout, including new piece additions, proofs, removals, deletion, and cleanup ([#292](https://github.com/FilOzone/pdp/pull/292)).
 - PieceCIDv2 validation now rejects non-minimal, unterminated, overflowing, length-mismatched, and otherwise malformed multihash encodings ([#292](https://github.com/FilOzone/pdp/pull/292)).
-- New additions emit ABI-decodable `PiecesAddedV2` events containing the first contiguous piece ID and two-word packed CIDs. The legacy `PiecesAdded` declaration remains in the ABI for compatibility but is no longer emitted. Additions larger than 100 pieces emit multiple events so each remains within Filecoin's 8 KiB event-value limit ([#295](https://github.com/FilOzone/pdp/issues/295)).
+- Deprecated `announcePlannedUpgrade()` in favor of `announceUpgradePlan()`. Calls that specify the current or a past epoch now schedule the upgrade for the next epoch instead of reverting ([#285](https://github.com/FilOzone/pdp/pull/285)).
 
 ### Fixed
-- `cleanupPieces()` now uses the same permission gate as `deleteDataSet()`, anchored to last proving activity instead of cleanup-mode entry. The abandonment path previously required two full `INACTIVITY_WINDOW` periods (~60 days); a permissionless deleter can now clean up and collect the deposit immediately. An SP deleting after exceeding the inactivity window no longer gets an exclusive cleanup period (the data set was already permissionlessly deletable). The unused `cleanupModeEpoch` storage is deprecated in place.
-- Chunked `PiecesScheduledForRemoval` events into batches of at most 100 piece IDs, preserving the 2,000-piece scheduling limit without exceeding Filecoin's 8 KiB event-data limit, and reject empty removal schedules.
+- `cleanupPieces()` now uses the same permission gate as `deleteDataSet()`, anchored to last proving activity instead of cleanup-mode entry. The abandonment path previously required two full `INACTIVITY_WINDOW` periods (~60 days); a permissionless deleter can now clean up and collect the deposit immediately. An SP deleting after exceeding the inactivity window no longer gets an exclusive cleanup period (the data set was already permissionlessly deletable). The unused `cleanupModeEpoch` storage is deprecated in place ([#279](https://github.com/FilOzone/pdp/pull/279)).
 
 ## [3.4.0] - 2026-05-28
 
