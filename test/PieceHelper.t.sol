@@ -4,8 +4,17 @@ pragma solidity ^0.8.13;
 import {Test, console} from "forge-std/Test.sol";
 import {Cids} from "../src/Cids.sol";
 import {BitOps} from "../src/BitOps.sol";
+import {PDPVerifier} from "../src/PDPVerifier.sol";
+import {LEGACY_PIECE_STORAGE_ID_LIMIT_SLOT} from "../src/PDPVerifierLayout.sol";
 
 contract PieceHelper is Test {
+    function _configurePieceStorage(PDPVerifier verifier) internal {
+        if (vm.envOr("PDP_TEST_LEGACY_STORAGE", false)) {
+            vm.store(address(verifier), LEGACY_PIECE_STORAGE_ID_LIMIT_SLOT, bytes32(0));
+            assertEq(verifier.legacyPieceStorageIdLimit(), 0, "legacy piece storage not enabled");
+        }
+    }
+
     function validateCommPv2(Cids.Cid calldata cid)
         external
         pure

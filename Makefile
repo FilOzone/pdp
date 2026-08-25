@@ -36,11 +36,13 @@ build-fast:
 .PHONY: test
 test:
 	forge test -vv
+	PDP_TEST_LEGACY_STORAGE=true forge test -vv
 
 # Fast local test target (non-IR, optimizer disabled)
 .PHONY: test-fast
 test-fast:
 	FOUNDRY_PROFILE=fast forge test -vv
+	PDP_TEST_LEGACY_STORAGE=true FOUNDRY_PROFILE=fast forge test -vv
 
 # Deployment targets
 .PHONY: deploy-calibnet

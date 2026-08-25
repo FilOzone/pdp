@@ -124,6 +124,7 @@ contract PDPVerifierSimplePDPServiceIntegrationTest is MockFVMTest, PieceHelper 
                 )
             )
         );
+        _configurePieceStorage(pdpVerifier);
 
         SimplePDPService serviceImplementation = new SimplePDPService(1);
         pdpService = SimplePDPService(
