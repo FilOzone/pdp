@@ -63,10 +63,6 @@ contract PieceHelper is Test {
         uint256 paddingLeaves = (1 << height) - leafCount;
         uint256 padding = (paddingLeaves * 32 * 127 + 127) / 128;
 
-        console.log("leafCount", leafCount);
-        console.log("height", height);
-        console.log("paddingLeaves", paddingLeaves);
-        console.log("padding", padding);
         assertEq(Cids.leafCount(padding, height), leafCount, "makePiece: leaf count mismatch");
         return Cids.CommPv2FromDigest(padding, height, tree[0][0]);
     }
