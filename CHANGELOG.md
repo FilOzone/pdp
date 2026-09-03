@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-## [3.5.0] - TBD
+## [3.5.0] - 2026-09-03
 
 This release upgrades the deployed PDPVerifier contract with compact piece storage, resumable piece deletion processing, compact `PiecesAddedV2` events, scheduled-removal events, and delay-based upgrade announcements.
 
@@ -13,19 +13,19 @@ Storage-provider integrations must process pending piece deletions before advanc
 
 ### Deployed
 
-The implementation contracts will be deployed from commit `TBD`. The `v3.5.0` release tag may point to a later documentation-only commit that finalizes these release notes.
+The implementation contracts were deployed from commit [`cc3f5eaffee7df80471b671a4e35a42b000685b8`](https://github.com/FilOzone/pdp/commit/cc3f5eaffee7df80471b671a4e35a42b000685b8). The `v3.5.0` release tag points to the later documentation-only commit that finalizes these release notes.
 
 **Mainnet:**
-- PDPVerifier Implementation: TBD
+- PDPVerifier Implementation: [0x04D4CdB99E34D7e9a366E7eba7A835e034bc41b1](https://filecoin.blockscout.com/address/0x04D4CdB99E34D7e9a366E7eba7A835e034bc41b1?tab=contract)
 - PDPVerifier Proxy: [0xBADd0B92C1c71d02E7d520f64c0876538fa2557F](https://filecoin.blockscout.com/address/0xBADd0B92C1c71d02E7d520f64c0876538fa2557F?tab=contract)
-- Implementation Deployment Transaction: TBD
-- Proxy Upgrade Transaction: TBD
+- Implementation Deployment Transaction: [0xf39ea3a831d2b60035fbe894157f0ce78e0b13fff1ffed2e6cf77d462f0292cc](https://filecoin.blockscout.com/tx/0xf39ea3a831d2b60035fbe894157f0ce78e0b13fff1ffed2e6cf77d462f0292cc)
+- Proxy Upgrade Transaction: [0x2a9f9d3807b4d904a36f02021022e5cbbed5a5ff17e465422b71abdf201cbcbc](https://filecoin.blockscout.com/tx/0x2a9f9d3807b4d904a36f02021022e5cbbed5a5ff17e465422b71abdf201cbcbc)
 
 **Calibnet:**
-- PDPVerifier Implementation: TBD
+- PDPVerifier Implementation: [0x04D4CdB99E34D7e9a366E7eba7A835e034bc41b1](https://filecoin-testnet.blockscout.com/address/0x04D4CdB99E34D7e9a366E7eba7A835e034bc41b1?tab=contract)
 - PDPVerifier Proxy: [0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C](https://filecoin-testnet.blockscout.com/address/0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C?tab=contract)
-- Implementation Deployment Transaction: TBD
-- Proxy Upgrade Transaction: TBD
+- Implementation Deployment Transaction: [0x824aec5fd5694c7894985cea1b05545a01d8e09cf114300cf882c3ca79a3a27d](https://filecoin-testnet.blockscout.com/tx/0x824aec5fd5694c7894985cea1b05545a01d8e09cf114300cf882c3ca79a3a27d)
+- Proxy Upgrade Transaction: [0x1168d152d58f861ced999d01f70987306eb666965f4d2e26c414510403e700d8](https://filecoin-testnet.blockscout.com/tx/0x1168d152d58f861ced999d01f70987306eb666965f4d2e26c414510403e700d8)
 
 Deployment constructor values are `initializerVersion = 4` on both networks, with `challengeFinality = 10` on Calibration and `challengeFinality = 150` on Mainnet.
 
