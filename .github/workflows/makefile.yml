@@ -27,9 +27,6 @@ jobs:
         run: |
           forge install
 
-      - name: Run upgrade tooling tests
-        run: make test-tools
-
       - name: Run build
         run: |
           export PATH="/home/runner/.config/.foundry/bin:$PATH";

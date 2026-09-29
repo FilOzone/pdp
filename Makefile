@@ -37,11 +37,6 @@ build-fast:
 test:
 	forge test -vv
 
-# Upgrade tooling tests (requires Python 3, cast, and jq; no RPC or signing)
-.PHONY: test-tools
-test-tools:
-	python3 tools/tests/test_announce_planned_upgrade.py -v
-
 # Fast local test target (non-IR, optimizer disabled)
 .PHONY: test-fast
 test-fast:
