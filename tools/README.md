@@ -34,11 +34,11 @@ Deploys, upgrades, and transfers ownership of PDPVerifier on Calibration testnet
 Upgrades a PDPVerifier proxy to a new implementation. For legacy deployments such as `v3.1.0`, this uses the one-step upgrade flow. For newer deployments, it validates the announced upgrade first. The script accepts either `RPC_URL` or `ETH_RPC_URL`. If the proxy owner is a contract such as a SAFE multisig, the script prints the transaction target and calldata instead of broadcasting directly.
 
 ### announce-planned-upgrade.sh
-Announces a planned PDPVerifier upgrade on deployments that support the two-step flow. The script accepts either `RPC_URL` or `ETH_RPC_URL`. If the proxy owner is a contract such as a SAFE multisig, the script prints the transaction target and calldata instead of broadcasting directly.
+Announces a planned PDPVerifier upgrade on v3.5.0 or later using `announceUpgradePlan(address,uint96)`. The script accepts either `RPC_URL` or `ETH_RPC_URL`. If the proxy owner is a contract such as a SAFE multisig, the script prints the transaction target and calldata instead of broadcasting directly.
 
-Set exactly one of:
-- `UPGRADE_DELAY_EPOCHS` (preferred): a relative delay, passed to `announceUpgradePlan()`. The delay starts when the announcement transaction executes, so Safe signing time does not consume the requested notice window; read `nextUpgrade()` afterward to record the exact `afterEpoch`.
-- `AFTER_EPOCH` (deprecated): an absolute target epoch, passed to `announcePlannedUpgrade()`, for deployments predating `announceUpgradePlan()`. A past or near-term `AFTER_EPOCH` is clamped up to the next epoch rather than reverting.
+Set `UPGRADE_DELAY_EPOCHS` to the relative delay in epochs. The delay starts when the announcement transaction executes, so Safe signing time does not consume the requested notice window. After execution, read `nextUpgrade()` to record the observed `afterEpoch` and use that value for readiness checks. A zero delay is clamped to one epoch by the contract.
+
+The v3.5.0 rollout completed on [Calibration](https://github.com/FilOzone/pdp/issues/304#issuecomment-5485047396) and [Mainnet](https://github.com/FilOzone/pdp/issues/304#issuecomment-5528533949). Both networks have compact writes, so rollback to v3.4.0 or earlier is unsafe; mitigation must be a forward fix.
 
 ## PDP Interaction Scripts
 We have some scripts for interacting with the PDP service contract through ETH RPC API: 

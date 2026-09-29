@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Breaking Changes
+- Removed the legacy `AFTER_EPOCH` announcement mode from `tools/announce-planned-upgrade.sh`. Set `UPGRADE_DELAY_EPOCHS` to announce through `announceUpgradePlan(address,uint96)` on v3.5.0 or later; the script rejects the retired input. This is a tooling change; the deprecated Solidity entrypoint remains available.
+
+### Maintenance
+- Removed the completed v3.4.0 bootstrap flow from the PDPVerifier upgrade checklist and tooling documentation. Both networks run v3.5.0 and have compact writes, making rollback to v3.4.0 unsafe ([#304](https://github.com/FilOzone/pdp/issues/304)). Read the observed `nextUpgrade.afterEpoch` after each announcement for readiness checks.
+- Added explicit GitHub Release publication and ABI-asset verification to the release closeout checklist.
+
 ## [3.5.0] - 2026-09-03
 
 This release upgrades the deployed PDPVerifier contract with compact piece storage, resumable piece deletion processing, compact `PiecesAddedV2` events, scheduled-removal events, and delay-based upgrade announcements.
