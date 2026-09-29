@@ -6,6 +6,7 @@ import {BURN_ADDRESS} from "fvm-solidity/FVMActors.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {UUPSUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
@@ -2658,7 +2659,7 @@ contract PDPVerifierMigrateTest is Test {
         vm.roll(plan2.afterEpoch);
 
         // Second call should fail because reinitializer(2) can only be called once
-        vm.expectRevert("InvalidInitialization()");
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
         UUPSUpgradeable(address(proxy)).upgradeToAndCall(address(newImplementation), migrationCall);
     }
 }
