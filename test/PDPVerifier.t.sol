@@ -679,6 +679,36 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         pdpVerifier.schedulePieceDeletions(setId, new uint256[](0), empty);
     }
 
+    function testRemovalQueueExceedsFormerLimit() public {
+        uint256 setId = pdpVerifier.createDataSet{value: PDPFees.cleanupDeposit()}(address(0), empty);
+        Cids.Cid memory piece = makeSamplePiece(2);
+        Cids.Cid[] memory pieces = new Cids.Cid[](2002);
+        uint256[] memory toRemove = new uint256[](2001);
+        for (uint256 i = 0; i < pieces.length; i++) {
+            pieces[i] = piece;
+            if (i < toRemove.length) {
+                toRemove[i] = i;
+            }
+        }
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+        pdpVerifier.schedulePieceDeletions(setId, toRemove, empty);
+        assertEq(pdpVerifier.getScheduledRemovals(setId), toRemove);
+
+        pdpVerifier.processPieceDeletions(setId, 2000);
+        uint256[] memory remaining = pdpVerifier.getScheduledRemovals(setId);
+        assertEq(remaining.length, 1);
+        assertEq(remaining[0], 0);
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 4);
+
+        pdpVerifier.processPieceDeletions(setId, 1);
+        assertEq(pdpVerifier.getScheduledRemovals(setId).length, 0);
+        assertFalse(pdpVerifier.pieceLive(setId, 0));
+        assertTrue(pdpVerifier.pieceLive(setId, 2001));
+        assertEq(pdpVerifier.getDataSetLeafCount(setId), 2);
+        pdpVerifier.nextProvingPeriod(setId, block.number + CHALLENGE_FINALITY_DELAY, empty);
+        assertEq(pdpVerifier.getChallengeRange(setId), 2);
+    }
+
     function testProcessPieceDeletionsEmitsChunkedEvents() public {
         uint256 setId = pdpVerifier.createDataSet{value: PDPFees.cleanupDeposit()}(address(0), empty);
         uint256 pieceCount = 257;

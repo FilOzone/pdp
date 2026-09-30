@@ -52,7 +52,6 @@ uint256 constant NO_PROVEN_EPOCH = 0;
 contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Constants
     uint256 public constant MAX_PIECE_SIZE_LOG2 = 50;
-    uint256 public constant MAX_ENQUEUED_REMOVALS = 2000;
     uint256 private constant PIECE_ID_EVENT_BATCH_SIZE = 100;
     // Conservative cap below the 125-piece FEVM event-value limit.
     uint256 private constant PIECES_ADDED_EVENT_BATCH_SIZE = 100;
@@ -800,6 +799,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
         }
 
+        // Drain pending removals alongside piece storage so an unbounded queue cannot make
+        // the final cleanup transaction unbounded. Unique queued IDs cannot outnumber pieces
+        // when cleanup starts, so cleaning the same number of each empties the queue in time.
+        uint256[] storage removals = scheduledRemovals[setId];
+        uint256 removalsToClean = removals.length < toClean ? removals.length : toClean;
+        for (uint256 i = 0; i < removalsToClean; i++) {
+            if (legacy) {
+                uint256 pieceId = removals[removals.length - 1];
+                delete scheduledRemovalsBitmap[setId][pieceId >> 8];
+            }
+            removals.pop();
+        }
+
         if (_pieceCount(setId, legacy) == 0) {
             _finalizeCleanup(setId, legacy);
             done = true;
@@ -809,6 +821,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Clears all remaining singleton state for a data set and transfers the cleanup deposit to msg.sender.
     // Must only be called when the selected piece representation's count is zero.
     function _finalizeCleanup(uint256 setId, bool legacy) internal {
+        // Cleanup started before bounded queue draining may still have pending removals,
+        // limited by the former scheduling cap. Retain their finalization for upgrades.
         // Pending legacy removals may still have markers in the compatibility bitmap.
         uint256[] storage removals = scheduledRemovals[setId];
         if (legacy) {
@@ -997,10 +1011,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(dataSetLive(setId), DataSetNotLive());
         require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
         require(pieceIds.length > 0, EmptyRemovalBatch());
-        require(
-            pieceIds.length + scheduledRemovals[setId].length <= MAX_ENQUEUED_REMOVALS,
-            "Too many removals wait for next proving period to schedule"
-        );
 
         bool legacy = _usesLegacyPieceStorage(setId);
         uint256 pieceCount = _pieceCount(setId, legacy);
