@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Changed
+- Removed the 2,000-piece pending-removal limit from `schedulePieceDeletions()`. Storage providers can queue larger batches or accumulate removals across calls, then drain the queue with `processPieceDeletions()` before starting the next proving period ([#310](https://github.com/FilOzone/pdp/issues/310)). The obsolete `MAX_ENQUEUED_REMOVALS()` getter has been removed from the ABI; contract storage layout is unchanged.
+
+### Fixed
+- Data-set cleanup now drains pending removals incrementally alongside piece cleanup, so an unbounded removal queue does not accumulate for the final cleanup transaction.
+
 ### Maintenance
 - Simplified `tools/announce-planned-upgrade.sh` to use `UPGRADE_DELAY_EPOCHS` with `announceUpgradePlan(address,uint96)`, retiring the temporary `AFTER_EPOCH` bootstrap mode.
 - Removed the completed v3.4.0 bootstrap flow from the PDPVerifier upgrade checklist and tooling documentation. Both networks run v3.5.0 and have compact writes, making rollback to v3.4.0 unsafe ([#304](https://github.com/FilOzone/pdp/issues/304)). Read the observed `nextUpgrade.afterEpoch` after each announcement for readiness checks.

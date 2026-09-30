@@ -13,6 +13,9 @@ import {
     COMPACT_PIECES_SLOT,
     DATA_SET_LAST_PROVEN_EPOCH_SLOT,
     DEPRECATED_CLEANUP_MODE_EPOCH_SLOT,
+    LEGACY_PIECE_STORAGE_ID_LIMIT_SLOT,
+    SCHEDULED_REMOVALS_SLOT,
+    SCHEDULED_REMOVALS_BITMAP_SLOT,
     STORAGE_PROVIDER_SLOT
 } from "../src/PDPVerifierLayout.sol";
 
@@ -420,6 +423,90 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
     }
 
     // --- scheduled removals cleanup ---
+
+    function testCleanupDrainsLargeCompactRemovalQueueInBatches() public {
+        _testCleanupDrainsLargeRemovalQueueInBatches(false);
+    }
+
+    function testCleanupDrainsLargeLegacyRemovalQueueInBatches() public {
+        _testCleanupDrainsLargeRemovalQueueInBatches(true);
+    }
+
+    function _testCleanupDrainsLargeRemovalQueueInBatches(bool legacy) internal {
+        if (legacy) {
+            vm.store(address(pdpVerifier), LEGACY_PIECE_STORAGE_ID_LIMIT_SLOT, bytes32(0));
+        }
+        uint256 pieceCount = 2002;
+        uint256 removalCount = pieceCount - 1;
+        uint256 setId = _createAndPopulate(pieceCount);
+        uint256[] memory pieceIds = new uint256[](removalCount);
+        for (uint256 i = 0; i < removalCount; i++) {
+            // Queue order differs from piece cleanup order, and one piece is not queued.
+            pieceIds[i] = pieceCount - 1 - i;
+        }
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
+        pdpVerifier.deleteDataSet(setId, empty);
+
+        bytes32 queueHeader = keccak256(abi.encode(setId, SCHEDULED_REMOVALS_SLOT));
+        uint256 queueStart = uint256(keccak256(abi.encode(queueHeader)));
+        uint256 balanceBefore = address(this).balance;
+        for (uint256 batch = 1; batch <= 2; batch++) {
+            assertFalse(pdpVerifier.cleanupPieces(setId, 1000));
+            assertEq(pdpVerifier.getNextPieceId(setId), pieceCount - batch * 1000);
+            assertEq(uint256(vm.load(address(pdpVerifier), queueHeader)), removalCount - batch * 1000);
+            assertEq(address(this).balance, balanceBefore, "partial cleanup must retain deposit");
+        }
+
+        assertTrue(pdpVerifier.cleanupPieces(setId, 2));
+        assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "deposit returned on completion");
+        vm.expectRevert(PDPVerifier.DataSetNotFound.selector);
+        pdpVerifier.getNextPieceId(setId);
+        assertEq(vm.load(address(pdpVerifier), queueHeader), bytes32(0), "queue length cleared");
+        for (uint256 i = 0; i < removalCount; i++) {
+            assertEq(vm.load(address(pdpVerifier), bytes32(queueStart + i)), bytes32(0), "queue entry cleared");
+        }
+        if (legacy) {
+            bytes32 bitmap = keccak256(abi.encode(setId, SCHEDULED_REMOVALS_BITMAP_SLOT));
+            for (uint256 slotIndex = 0; slotIndex <= (pieceCount - 1) >> 8; slotIndex++) {
+                assertEq(
+                    vm.load(address(pdpVerifier), keccak256(abi.encode(slotIndex, bitmap))),
+                    bytes32(0),
+                    "legacy removal markers cleared"
+                );
+            }
+        }
+    }
+
+    function testCleanupFinalizesLegacyQueueFromBeforeUpgrade() public {
+        vm.store(address(pdpVerifier), LEGACY_PIECE_STORAGE_ID_LIMIT_SLOT, bytes32(0));
+        uint256 setId = _createAndPopulate(3);
+        uint256[] memory pieceIds = new uint256[](3);
+        pieceIds[1] = 1;
+        pieceIds[2] = 2;
+        pdpVerifier.schedulePieceDeletions(setId, pieceIds, empty);
+        pdpVerifier.deleteDataSet(setId, empty);
+        assertFalse(pdpVerifier.cleanupPieces(setId, 2));
+
+        // Previous implementations cleaned pieces without draining pending removals.
+        // Restore that queue state to model an upgrade partway through cleanup.
+        bytes32 queueHeader = keccak256(abi.encode(setId, SCHEDULED_REMOVALS_SLOT));
+        uint256 queueStart = uint256(keccak256(abi.encode(queueHeader)));
+        vm.store(address(pdpVerifier), queueHeader, bytes32(uint256(3)));
+        vm.store(address(pdpVerifier), bytes32(queueStart + 1), bytes32(uint256(1)));
+        vm.store(address(pdpVerifier), bytes32(queueStart + 2), bytes32(uint256(2)));
+        bytes32 bitmap = keccak256(abi.encode(setId, SCHEDULED_REMOVALS_BITMAP_SLOT));
+        bytes32 bitmapSlot = keccak256(abi.encode(uint256(0), bitmap));
+        vm.store(address(pdpVerifier), bitmapSlot, bytes32(uint256(7)));
+
+        uint256 balanceBefore = address(this).balance;
+        assertTrue(pdpVerifier.cleanupPieces(setId, 1));
+        assertEq(address(this).balance - balanceBefore, PDPFees.cleanupDeposit(), "deposit returned on completion");
+        assertEq(vm.load(address(pdpVerifier), queueHeader), bytes32(0));
+        assertEq(vm.load(address(pdpVerifier), bitmapSlot), bytes32(0));
+        for (uint256 i = 0; i < pieceIds.length; i++) {
+            assertEq(vm.load(address(pdpVerifier), bytes32(queueStart + i)), bytes32(0));
+        }
+    }
 
     function testCleanupWithUnprocessedScheduledRemovals() public {
         uint256 setId = _createAndPopulate(2);
