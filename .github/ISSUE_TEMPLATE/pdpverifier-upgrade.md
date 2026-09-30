@@ -24,7 +24,7 @@ This issue is the full operational checklist for the rollout and release closeou
 - Use this single issue to track the full rollout across both networks.
 - Confirm the live proxy `VERSION()` separately; it may lag the release baseline if recent releases did not include a PDPVerifier deployment.
 - Record major steps as issue comments as you go rather than editing every detail into the top post.
-- Use `UPGRADE_DELAY_EPOCHS` for the normal planned-upgrade flow once the live proxy exposes `announceUpgradePlan()`. Use the temporary `AFTER_EPOCH` bootstrap path only when upgrading from an implementation that predates that method; removal is tracked in #288.
+- Use `UPGRADE_DELAY_EPOCHS` with `announceUpgradePlan(address,uint96)` for planned-upgrade announcements. This checklist requires a live proxy running v3.5.0 or later.
 - After an announcement executes, read and record the observed `nextUpgrade.afterEpoch`. Use that observed value for all subsequent readiness checks.
 - Do not deploy until all bytecode-affecting PRs are merged to `main`.
 - If the release tag must match the exact on-chain bytecode, tag the deploy commit before changelog-only closeout changes. Otherwise, tag the finalized release-notes commit and record the implementation deploy commit separately.
@@ -150,6 +150,8 @@ If the owner is a SAFE or other contract owner, use `tools/upgrade.sh` to genera
 
 ### 6. Record PDP Rollback Safety
 
+Rollback to v3.4.0 or earlier is unsafe on Calibration and Mainnet because both networks have compact writes. Use a forward fix for those deployments; see the [v3.5.0 rollout evidence](https://github.com/FilOzone/pdp/issues/304). Assess compatibility separately for any later rollback target.
+
 - [ ] Rollback decision recorded as `safe` or `unsafe`, with rationale
 - [ ] Applicable PDP rollback procedure/script linked, or a reason recorded for why rollback is not the mitigation
 
@@ -223,13 +225,10 @@ filfox-verifier forge \
 
 - [ ] Calibration planned-upgrade announcement payload generated
 
-Choose exactly one announcement mode below. The default notice window is `2880` Filecoin epochs (~1 day); adjust intentionally if the release needs a longer window.
-
-For the normal delay-based flow, once the live proxy exposes `announceUpgradePlan()`:
+The default notice window is `2880` Filecoin epochs (~1 day), starting when the announcement executes; adjust intentionally if the release needs a longer window.
 
 ```bash
 NOTICE_EPOCHS=2880
-unset AFTER_EPOCH
 
 RPC_URL="$RPC_URL" \
 SAFE_ADDRESS="0x3569b2600877a9F42d9Ebdd205386F3F3788F3E5" \
@@ -239,30 +238,13 @@ UPGRADE_DELAY_EPOCHS="$NOTICE_EPOCHS" \
 ./tools/announce-planned-upgrade.sh
 ```
 
-> **Temporary bootstrap compatibility:** The currently deployed PDPVerifier v3.4.0 implementation does not expose `announceUpgradePlan()`. Use the following legacy flow only while the live proxy predates that method—normally for the first bootstrap, or for separately documented rollback recovery. Remove this section only after the full removal criteria in #288 are satisfied.
-
-```bash
-NOTICE_EPOCHS=2880
-SAFE_SIGNING_BUFFER_EPOCHS=2880
-CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL")
-AFTER_EPOCH=$((CURRENT_EPOCH + SAFE_SIGNING_BUFFER_EPOCHS + NOTICE_EPOCHS))
-unset UPGRADE_DELAY_EPOCHS
-
-RPC_URL="$RPC_URL" \
-SAFE_ADDRESS="0x3569b2600877a9F42d9Ebdd205386F3F3788F3E5" \
-PDP_VERIFIER_PROXY_ADDRESS="0x85e366Cf9DD2c0aE37E963d9556F5f4718d6417C" \
-NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS="<IMPL>" \
-AFTER_EPOCH="$AFTER_EPOCH" \
-./tools/announce-planned-upgrade.sh
-```
-
 If the Safe UI asks whether to use the implementation ABI for the proxy, use the implementation ABI, but keep the transaction target as the proxy.
 
 - [ ] Stage the Calibration planned-upgrade SAFE transaction
 - [ ] Execute the Calibration planned-upgrade SAFE transaction
 - [ ] Record the Calibration planned-upgrade announcement transaction hash and update the rollout status table
 
-Read the actual plan after the Safe transaction executes. This verifies that the requested notice window starts at execution and catches a legacy announcement that no longer preserves the full notice period.
+Read the actual plan after the Safe transaction executes. This verifies the announced implementation and confirms that the full requested notice window starts at execution.
 
 ```bash
 ANNOUNCE_TX_HASH="<TX_HASH>"
@@ -334,7 +316,7 @@ fi
 ```
 
 - [ ] Confirm the observed implementation and notice-window checks pass
-- [ ] If the announcement reverted or a check failed, stop the rollout. For the legacy bootstrap, recompute a fresh `AFTER_EPOCH`, execute a superseding announcement, record the superseded transaction/plan, and repeat verification.
+- [ ] If the announcement reverted or a check failed, stop the rollout. Correct the cause, execute a replacement delay-based announcement, record any superseded transaction/plan, and repeat verification.
 - [ ] Do not stage or execute the upgrade transaction until the observed checks pass
 - [ ] Record `OBSERVED_AFTER_EPOCH` in the rollout status table
 - [ ] Wait until the chain reaches `OBSERVED_AFTER_EPOCH`
@@ -509,13 +491,10 @@ filfox-verifier forge \
 
 - [ ] Mainnet planned-upgrade announcement payload generated
 
-Choose exactly one announcement mode below. The default notice window is `2880` Filecoin epochs (~1 day); adjust intentionally if the release needs a longer window.
-
-For the normal delay-based flow, once the live proxy exposes `announceUpgradePlan()`:
+The default notice window is `2880` Filecoin epochs (~1 day), starting when the announcement executes; adjust intentionally if the release needs a longer window.
 
 ```bash
 NOTICE_EPOCHS=2880
-unset AFTER_EPOCH
 
 RPC_URL="$RPC_URL" \
 SAFE_ADDRESS="0x3569b2600877a9F42d9Ebdd205386F3F3788F3E5" \
@@ -525,30 +504,13 @@ UPGRADE_DELAY_EPOCHS="$NOTICE_EPOCHS" \
 ./tools/announce-planned-upgrade.sh
 ```
 
-> **Temporary bootstrap compatibility:** The currently deployed PDPVerifier v3.4.0 implementation does not expose `announceUpgradePlan()`. Use the following legacy flow only while the live proxy predates that method—normally for the first bootstrap, or for separately documented rollback recovery. Remove this section only after the full removal criteria in #288 are satisfied.
-
-```bash
-NOTICE_EPOCHS=2880
-SAFE_SIGNING_BUFFER_EPOCHS=2880
-CURRENT_EPOCH=$(cast block-number --rpc-url "$RPC_URL")
-AFTER_EPOCH=$((CURRENT_EPOCH + SAFE_SIGNING_BUFFER_EPOCHS + NOTICE_EPOCHS))
-unset UPGRADE_DELAY_EPOCHS
-
-RPC_URL="$RPC_URL" \
-SAFE_ADDRESS="0x3569b2600877a9F42d9Ebdd205386F3F3788F3E5" \
-PDP_VERIFIER_PROXY_ADDRESS="0xBADd0B92C1c71d02E7d520f64c0876538fa2557F" \
-NEW_PDP_VERIFIER_IMPLEMENTATION_ADDRESS="<IMPL>" \
-AFTER_EPOCH="$AFTER_EPOCH" \
-./tools/announce-planned-upgrade.sh
-```
-
 If the Safe UI asks whether to use the implementation ABI for the proxy, use the implementation ABI, but keep the transaction target as the proxy.
 
 - [ ] Stage the Mainnet planned-upgrade SAFE transaction
 - [ ] Execute the Mainnet planned-upgrade SAFE transaction
 - [ ] Record the Mainnet planned-upgrade announcement transaction hash and update the rollout status table
 
-Read the actual plan after the Safe transaction executes. This verifies that the requested notice window starts at execution and catches a legacy announcement that no longer preserves the full notice period.
+Read the actual plan after the Safe transaction executes. This verifies the announced implementation and confirms that the full requested notice window starts at execution.
 
 ```bash
 ANNOUNCE_TX_HASH="<TX_HASH>"
@@ -620,7 +582,7 @@ fi
 ```
 
 - [ ] Confirm the observed implementation and notice-window checks pass
-- [ ] If the announcement reverted or a check failed, stop the rollout. For the legacy bootstrap, recompute a fresh `AFTER_EPOCH`, execute a superseding announcement, record the superseded transaction/plan, and repeat verification.
+- [ ] If the announcement reverted or a check failed, stop the rollout. Correct the cause, execute a replacement delay-based announcement, record any superseded transaction/plan, and repeat verification.
 - [ ] Do not stage or execute the upgrade transaction until the observed checks pass
 - [ ] Record `OBSERVED_AFTER_EPOCH` in the rollout status table
 - [ ] Wait until the chain reaches `OBSERVED_AFTER_EPOCH`
@@ -688,6 +650,10 @@ cast call --rpc-url https://api.node.glif.io/rpc/v1 \
 git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z
 ```
+
+- [ ] Publish a GitHub Release for `vX.Y.Z` with the finalized changelog entry
+  - A pushed tag alone does not publish a GitHub Release.
+  - Confirm the Publish ABIs workflow succeeds and the release includes the generated ABI assets.
 
 - Prefer Blockscout links in the deployed-address section because they give a better verification view than Filfox.
 - [ ] Sync PDPVerifier source, ABI, and deployments in `filecoin-services`
