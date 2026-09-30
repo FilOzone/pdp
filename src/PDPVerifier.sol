@@ -807,7 +807,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         for (uint256 i = 0; i < removalsToClean; i++) {
             if (legacy) {
                 uint256 pieceId = removals[removals.length - 1];
-                scheduledRemovalsBitmap[setId][pieceId >> 8] &= ~(1 << (pieceId & 255));
+                delete scheduledRemovalsBitmap[setId][pieceId >> 8];
             }
             removals.pop();
         }
@@ -1006,7 +1006,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // schedulePieceDeletions schedules deletion of a batch of pieces from a data set before the next proving period.
-    // The queue has no fixed size limit; processPieceDeletions drains it in caller-sized batches.
     // It must be called by the storage provider.
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
         require(dataSetLive(setId), DataSetNotLive());

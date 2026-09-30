@@ -477,6 +477,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
         }
     }
 
+    // Remove this test when the pre-upgrade pending-removal fallback in _finalizeCleanup is removed.
     function testCleanupFinalizesLegacyQueueFromBeforeUpgrade() public {
         vm.store(address(pdpVerifier), LEGACY_PIECE_STORAGE_ID_LIMIT_SLOT, bytes32(0));
         uint256 setId = _createAndPopulate(3);
