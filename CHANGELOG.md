@@ -8,7 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Maintenance
 - Simplified `tools/announce-planned-upgrade.sh` to use `UPGRADE_DELAY_EPOCHS` with `announceUpgradePlan(address,uint96)`, retiring the temporary `AFTER_EPOCH` bootstrap mode.
 - Removed the completed v3.4.0 bootstrap flow from the PDPVerifier upgrade checklist and tooling documentation. Both networks run v3.5.0 and have compact writes, making rollback to v3.4.0 unsafe ([#304](https://github.com/FilOzone/pdp/issues/304)). Read the observed `nextUpgrade.afterEpoch` after each announcement for readiness checks.
-- Added explicit GitHub Release publication and ABI-asset verification to the release closeout checklist.
 
 ## [3.5.0] - 2026-09-03
 
