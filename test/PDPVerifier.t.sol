@@ -32,6 +32,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         listener = new TestingRecordKeeperService();
     }
 
@@ -256,6 +257,7 @@ contract PDPVerifierStorageProviderTest is MockFVMTest, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         listener = new TestingRecordKeeperService();
 
         storageProvider = address(this);
@@ -356,6 +358,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         listener = new TestingRecordKeeperService();
     }
 
@@ -1277,6 +1280,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         listener = new TestingRecordKeeperService();
     }
 
@@ -2221,6 +2225,7 @@ contract PDPListenerIntegrationTest is MockFVMTest, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         badListener = new BadListener();
     }
 
@@ -2327,6 +2332,7 @@ contract PDPVerifierExtraDataTest is MockFVMTest, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         extraDataListener = new ExtraDataListener();
     }
 
@@ -2385,6 +2391,7 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         listener = new TestingRecordKeeperService();
         vm.fee(1 gwei);
         vm.deal(address(pdpVerifierImpl), 100 ether);
@@ -2706,6 +2713,7 @@ contract PDPVerifierFeeTest is MockFVMTest, PieceHelper, ProofBuilderHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         vm.fee(1 gwei);
         listener = new TestingRecordKeeperService();
     }
@@ -2830,7 +2838,7 @@ contract MockStorageProviderChangedListener is PDPListener {
     function nextProvingPeriod(uint256, uint256, uint256, bytes calldata) external override {}
 }
 
-contract PDPVerifierStorageProviderListenerTest is MockFVMTest {
+contract PDPVerifierStorageProviderListenerTest is MockFVMTest, PieceHelper {
     PDPVerifier pdpVerifier;
     MockStorageProviderChangedListener listener;
     address public storageProvider;
@@ -2844,6 +2852,7 @@ contract PDPVerifierStorageProviderListenerTest is MockFVMTest {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         listener = new MockStorageProviderChangedListener();
         storageProvider = address(this);
         nextStorageProvider = address(0x1234);
@@ -2886,6 +2895,7 @@ contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         listener = new TestingRecordKeeperService();
 
         setId = pdpVerifier.createDataSet{value: PDPFees.cleanupDeposit()}(address(listener), empty);

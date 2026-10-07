@@ -27,6 +27,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
+        _configurePieceStorage(pdpVerifier);
         listener = new TestingRecordKeeperService();
         vm.fee(1 wei);
         vm.deal(address(pdpVerifierImpl), 100 ether);
