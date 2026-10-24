@@ -34,7 +34,7 @@ contract PDPModelHandler is Test {
     uint256 constant FINALITY = 2;
     uint256 constant MAX_LEAVES = 40;
 
-    PDPVerifier public immutable verifier;
+    PDPVerifier public verifier;
     uint256 public compactSet;
     uint256 public legacySet;
 
