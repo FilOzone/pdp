@@ -982,11 +982,19 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         returns (uint256 leafCount)
     {
         (uint256 padding, uint8 height, bytes32 root) = Cids.validateCommPv2(piece);
+        if (height > MAX_PIECE_SIZE_LOG2) {
+            revert IndexedError(callIdx, "Piece size must be less than 2^50");
+        }
+        if (height < Cids.MIN_HEIGHT) {
+            revert IndexedError(callIdx, "Piece size must be at least 128 bytes");
+        }
+        // A piece needs at least one data leaf to be challenged, so the empty piece FRC-0069 allows (padding 127
+        // at height 2) is rejected along with padding beyond the tree
         if (Cids.isPaddingExcessive(padding, height)) {
             revert IndexedError(callIdx, "Padding is too large");
         }
-        if (height > MAX_PIECE_SIZE_LOG2) {
-            revert IndexedError(callIdx, "Piece size must be less than 2^50");
+        if (!Cids.isMinimalHeight(padding, height)) {
+            revert IndexedError(callIdx, "Piece size must be the smallest that holds its data");
         }
 
         leafCount = Cids.leafCount(padding, height);

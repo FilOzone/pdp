@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 - Removed the 2,000-piece pending-removal limit from `schedulePieceDeletions()`. Storage providers can queue larger batches or accumulate removals across calls, then drain the queue with `processPieceDeletions()` before starting the next proving period ([#310](https://github.com/FilOzone/pdp/issues/310)). The obsolete `MAX_ENQUEUED_REMOVALS()` getter has been removed from the ABI; contract storage layout is unchanged.
+- `addPieces()` now applies the FRC-0069 PieceCIDv2 sizing rules: a piece must be at least height 2 (a 128 byte piece) and use the smallest tree that holds its data, and its padding uvarint is limited to 9 bytes. Each piece now has a single valid CID on chain. Curio and the FOC SDKs already produce only these forms, and pieces already added are unaffected ([#314](https://github.com/FilOzone/pdp/issues/314)).
 
 ### Fixed
 - Data-set cleanup now drains pending removals incrementally alongside piece cleanup, so an unbounded removal queue does not accumulate for the final cleanup transaction.

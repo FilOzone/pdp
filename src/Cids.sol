@@ -5,6 +5,10 @@ library Cids {
     //  0x01    0x55                0x9120
     // (cidv1)  (raw)  (fr32-sha2-256-trunc254-padded-binary-tree)
     bytes4 public constant COMMP_V2_PREFIX = hex"01559120";
+    // The smallest PieceCIDv2 tree: 4 leaves, a 128 byte piece holding up to 127 bytes of data
+    uint8 internal constant MIN_HEIGHT = 2;
+    // The unsigned-varint limit FRC-0069 applies to padding, holding values below 2^63
+    uint256 internal constant MAX_PADDING_UVARINT_LENGTH = 9;
 
     error CidTooShort();
     error InvalidCommPv2Prefix();
@@ -53,6 +57,7 @@ library Cids {
         uint256 paddingOffset;
         (padding, paddingOffset) = _readUvarint(cid.data, offset);
         require(paddingOffset - offset == _uvarintLength(padding), NonMinimalUvarint());
+        require(paddingOffset - offset <= MAX_PADDING_UVARINT_LENGTH, UvarintOverflow());
 
         offset = paddingOffset;
         require(offset < cid.data.length, InvalidCommPv2DigestLength());
@@ -70,6 +75,16 @@ library Cids {
     // When this is false, leafCount will never return zero
     function isPaddingExcessive(uint256 padding, uint8 height) internal pure returns (bool) {
         return (128 * padding) / 127 >= 1 << (height + 5);
+    }
+
+    // isMinimalHeight checks that the tree is the smallest that holds the data, as FRC-0069 requires: the
+    // smallest tree holds 0 to 127 bytes, and any larger tree must be more than half full.
+    // Expects MIN_HEIGHT <= height <= 249, above which the shift truncates.
+    function isMinimalHeight(uint256 padding, uint8 height) internal pure returns (bool) {
+        if (height == MIN_HEIGHT) {
+            return padding <= 127;
+        }
+        return padding < 127 << (height - 3);
     }
 
     // pieceSize returns the size of the data defined by amount of padding and height of the tree
