@@ -59,6 +59,9 @@ contract PieceHelper is Test {
             return Cids.CommPv2FromDigest(127, 2, tree[0][0]);
         }
         uint8 height = uint8(256 - BitOps.clz(leafCount - 1));
+        if (height < Cids.MIN_HEIGHT) {
+            height = Cids.MIN_HEIGHT;
+        }
         require(1 << height >= leafCount, "makePiece: height not enough to hold leaf count");
         uint256 paddingLeaves = (1 << height) - leafCount;
         uint256 padding = (paddingLeaves * 32 * 127 + 127) / 128;

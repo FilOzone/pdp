@@ -524,6 +524,16 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
         expectIndexedError(0, "Piece size must be less than 2^50");
         pdpVerifier.addPieces(setId, address(0), pieces, empty);
 
+        // Fail below the smallest piece, 4 leaves at height 2
+        pieces[0] = Cids.CommPv2FromDigest(0, 1, bytes32(uint256(1)));
+        expectIndexedError(0, "Piece size must be at least 128 bytes");
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
+        // Fail when a smaller piece holds the data: 127 bytes at height 3 fits height 2
+        pieces[0] = Cids.CommPv2FromDigest(127, 3, bytes32(uint256(1)));
+        expectIndexedError(0, "Piece size must be the smallest that holds its data");
+        pdpVerifier.addPieces(setId, address(0), pieces, empty);
+
         // Fail when not adding any pieces;
         Cids.Cid[] memory emptyPieces = new Cids.Cid[](0);
         vm.expectRevert("Must add at least one piece");
@@ -2406,7 +2416,7 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
         // Step 2: Add data `A` in scope for the first proving period
         // Note that the data in the first addPieces call is added to the first proving period
         uint256[] memory leafCountsA = new uint256[](2);
-        leafCountsA[0] = 2;
+        leafCountsA[0] = 6;
         leafCountsA[1] = 3;
         bytes32[][][] memory treesA = new bytes32[][][](2);
         for (uint256 i = 0; i < leafCountsA.length; i++) {

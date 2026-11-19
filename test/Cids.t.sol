@@ -101,6 +101,35 @@ contract CidsTest is Test {
         assertEq(Cids.leafCount(1024 * 127 / 128 - 1, 5), 1);
     }
 
+    function testIsMinimalHeight() public pure {
+        // The smallest tree holds 0 to 127 bytes
+        assertEq(Cids.isMinimalHeight(0, 2), true);
+        assertEq(Cids.isMinimalHeight(127, 2), true);
+        assertEq(Cids.isMinimalHeight(128, 2), false);
+
+        // Larger trees must be more than half full: 128 to 254 bytes at height 3
+        assertEq(Cids.isMinimalHeight(126, 3), true);
+        assertEq(Cids.isMinimalHeight(127, 3), false);
+
+        // FRC-0069 vectors: 512 and 513 bytes at height 5, and 508 bytes at height 5, which fits height 4
+        assertEq(Cids.isMinimalHeight(504, 5), true);
+        assertEq(Cids.isMinimalHeight(503, 5), true);
+        assertEq(Cids.isMinimalHeight(508, 5), false);
+
+        assertEq(Cids.isMinimalHeight(0, 50), true);
+        assertEq(Cids.isMinimalHeight((uint256(127) << 47) - 1, 50), true);
+        assertEq(Cids.isMinimalHeight(uint256(127) << 47, 50), false);
+    }
+
+    function testValidateCommPv2RejectsPaddingUvarintOverNineBytes() public {
+        bytes32 root = hex"beadcafefacedeedfeedbabedeadbeefbeadcafefacedeedfeedbabedeadbeef";
+        (uint256 padding,,) = this.validateCommPv2(Cids.CommPv2FromDigest(type(uint64).max >> 1, 10, root));
+        assertEq(padding, type(uint64).max >> 1, "nine byte padding");
+
+        vm.expectRevert(Cids.UvarintOverflow.selector);
+        this.validateCommPv2(Cids.CommPv2FromDigest(uint256(1) << 63, 10, root));
+    }
+
     function testValidateCommPv2RejectsShortCid() public {
         _expectInvalid(hex"");
         _expectInvalid(hex"0155");

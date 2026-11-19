@@ -15,13 +15,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: configure
-        run: ./configure
-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: v1.7.1
 
       - name: Install Dependencies
         run: |
@@ -29,20 +26,16 @@ jobs:
 
       - name: Run build
         run: |
-          export PATH="/home/runner/.config/.foundry/bin:$PATH";
           make build;
 
       - name: Run tests
         run: |
-          export PATH="/home/runner/.config/.foundry/bin:$PATH";
           make test;
 
       - name: Run fast profile tests
         run: |
-          export PATH="/home/runner/.config/.foundry/bin:$PATH";
           make test-fast;
 
       - name: Check storage layout
         run: |
-          export PATH="/home/runner/.config/.foundry/bin:$PATH";
           make check-layout;

@@ -190,8 +190,8 @@ contract PDPVerifierMetadataTest is Test {
     function testCompactAdditionAppendsRootsMetadataAndSumTreeCounts() public {
         uint256 setId = 9;
         Cids.Cid[] memory firstBatch = new Cids.Cid[](3);
-        firstBatch[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
-        firstBatch[1] = Cids.CommPv2FromDigest(0, 1, bytes32(uint256(2)));
+        firstBatch[0] = _smallPiece(1, bytes32(uint256(1)));
+        firstBatch[1] = _smallPiece(2, bytes32(uint256(2)));
         firstBatch[2] = Cids.CommPv2FromDigest(0, 2, bytes32(uint256(3)));
 
         assertEq(harness.addPiecesForTest(setId, firstBatch), 0, "first batch starts at zero");
@@ -205,13 +205,15 @@ contract PDPVerifierMetadataTest is Test {
         assertEq(harness.compactPieceCount(setId), 5, "array length grows monotonically");
         assertEq(harness.dataSetLeafCountForTest(setId), 31, "batch leaf counts accumulate once");
 
+        uint256[5] memory expectedPaddings = [uint256(96), 64, 0, 0, 0];
+        uint256[5] memory expectedHeights = [uint256(2), 2, 2, 3, 4];
         uint256[5] memory expectedLeafCounts = [uint256(1), 2, 4, 8, 16];
         uint256[5] memory expectedSums = [uint256(1), 3, 4, 15, 16];
         for (uint256 pieceId; pieceId < 5; ++pieceId) {
             (bytes32 root, uint256 metadata) = harness.compactPiece(setId, pieceId);
             assertEq(root, bytes32(pieceId + 1), "root");
-            assertEq(harness.piecePadding(metadata), 0, "padding");
-            assertEq(harness.pieceHeight(metadata), pieceId, "height");
+            assertEq(harness.piecePadding(metadata), expectedPaddings[pieceId], "padding");
+            assertEq(harness.pieceHeight(metadata), expectedHeights[pieceId], "height");
             assertEq(harness.pieceLeafCount(metadata), expectedLeafCounts[pieceId], "leaf count");
             assertEq(harness.pieceSum(metadata), expectedSums[pieceId], "sum tree count");
         }
@@ -220,8 +222,8 @@ contract PDPVerifierMetadataTest is Test {
     function testCompactRemovalOfLeafNodePreservesAncestorSumAndLookup() public {
         uint256 setId = 9;
         Cids.Cid[] memory pieces = new Cids.Cid[](3);
-        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
-        pieces[1] = Cids.CommPv2FromDigest(0, 1, bytes32(uint256(2)));
+        pieces[0] = _smallPiece(1, bytes32(uint256(1)));
+        pieces[1] = _smallPiece(2, bytes32(uint256(2)));
         pieces[2] = Cids.CommPv2FromDigest(0, 2, bytes32(uint256(3)));
         harness.addPiecesForTest(setId, pieces);
 
@@ -233,7 +235,7 @@ contract PDPVerifierMetadataTest is Test {
         assertEq(root, bytes32(0), "removed root cleared");
         _assertMetadata(metadata, 0, 0, 0, 0);
         (, uint256 ancestorMetadata) = harness.compactPiece(setId, 1);
-        _assertMetadata(ancestorMetadata, 0, 1, 2, 2);
+        _assertMetadata(ancestorMetadata, 64, 2, 2, 2);
         assertEq(harness.compactPieceCount(setId), 3, "ordinary removal keeps stable IDs");
 
         uint256[] memory leaves = new uint256[](2);
@@ -249,8 +251,8 @@ contract PDPVerifierMetadataTest is Test {
     function testCompactRemovalOfInternalNodeRetainsPartialSumAndAppendsAtTail() public {
         uint256 setId = 10;
         Cids.Cid[] memory pieces = new Cids.Cid[](3);
-        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
-        pieces[1] = Cids.CommPv2FromDigest(0, 1, bytes32(uint256(2)));
+        pieces[0] = _smallPiece(1, bytes32(uint256(1)));
+        pieces[1] = _smallPiece(2, bytes32(uint256(2)));
         pieces[2] = Cids.CommPv2FromDigest(0, 2, bytes32(uint256(3)));
         harness.addPiecesForTest(setId, pieces);
 
@@ -272,7 +274,7 @@ contract PDPVerifierMetadataTest is Test {
         assertEq(found[1].pieceId, 2, "lookup crosses removed internal boundary");
 
         Cids.Cid[] memory append = new Cids.Cid[](1);
-        append[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(4)));
+        append[0] = _smallPiece(1, bytes32(uint256(4)));
         assertEq(harness.addPiecesForTest(setId, append), 3, "append does not fill removed hole");
         assertEq(harness.compactPieceCount(setId), 4, "append grows compact array tail");
     }
@@ -280,7 +282,7 @@ contract PDPVerifierMetadataTest is Test {
     function testCompactAdditionRevertsEntireInvalidBatch() public {
         uint256 setId = 10;
         Cids.Cid[] memory pieces = new Cids.Cid[](2);
-        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
+        pieces[0] = _smallPiece(1, bytes32(uint256(1)));
         pieces[1] = Cids.Cid(bytes(""));
 
         vm.expectRevert(Cids.CidTooShort.selector);
@@ -294,7 +296,7 @@ contract PDPVerifierMetadataTest is Test {
         uint256 setId = 11;
         harness.setDataSetLeafCount(setId, SUM_TREE_MAX);
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
-        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(1)));
+        pieces[0] = _smallPiece(1, bytes32(uint256(1)));
 
         vm.expectRevert(PieceMetadataOverflow.selector);
         harness.addPiecesForTest(setId, pieces);
@@ -307,12 +309,17 @@ contract PDPVerifierMetadataTest is Test {
         uint256 setId = 12;
         harness.appendCompactPiece(setId, bytes32(uint256(1)), harness.packPieceMetadata(0, 0, 1, SUM_TREE_MAX));
         Cids.Cid[] memory pieces = new Cids.Cid[](1);
-        pieces[0] = Cids.CommPv2FromDigest(0, 0, bytes32(uint256(2)));
+        pieces[0] = _smallPiece(1, bytes32(uint256(2)));
 
         vm.expectRevert(PieceMetadataOverflow.selector);
         harness.addPiecesForTest(setId, pieces);
 
         assertEq(harness.compactPieceCount(setId), 1, "sum overflow adds no compact piece");
+    }
+
+    // A piece at the smallest height whose data fills `leafCount` of its 4 leaves
+    function _smallPiece(uint256 leafCount, bytes32 root) private pure returns (Cids.Cid memory) {
+        return Cids.CommPv2FromDigest((4 - leafCount) * 32, Cids.MIN_HEIGHT, root);
     }
 
     function _assertRoundTrip(uint256 padding, uint256 height, uint256 leafCount, uint256 sum) private view {
