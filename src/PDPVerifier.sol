@@ -12,6 +12,7 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {FVMPay} from "fvm-solidity/FVMPay.sol";
 import {FVMRandom} from "fvm-solidity/FVMRandom.sol";
 import {IPDPTypes} from "./interfaces/IPDPTypes.sol";
+import {IServiceProviderWorkerRegistry} from "./interfaces/IServiceProviderWorkerRegistry.sol";
 import {
     PieceMetadata,
     PieceMetadataLibrary,
@@ -201,6 +202,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Zero means the compact-storage cutover has not been initialized, so all data sets remain legacy.
     uint64 public legacyPieceStorageIdLimit;
 
+    /// @notice Optional registry used to resolve the current worker from a former worker address.
+    /// @dev When unset, authorization remains `msg.sender == storageProvider[setId]`.
+    address public serviceProviderRegistry;
+
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -220,16 +225,46 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         feeStatus.nextFeePerTiB = PDPFees.DEFAULT_FEE_PER_TIB;
     }
 
-    string public constant VERSION = "3.5.0";
+    string public constant VERSION = "3.6.0";
 
     event ContractUpgraded(string version, address implementation);
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
+    event ServiceProviderRegistrySet(address indexed registry);
 
     function migrate() external onlyProxy onlyOwner reinitializer(REINITIALIZER_VERSION) {
         if (legacyPieceStorageIdLimit == 0) {
             legacyPieceStorageIdLimit = nextDataSetId;
         }
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
+    }
+
+    /// @notice Set or clear the registry used to resolve the current worker for existing data sets
+    /// @dev Only the contract owner. Setting address(0) restores snapshotted-address authorization.
+    ///      For worker wallet rotation, set this to the live ServiceProviderRegistry in the same
+    ///      upgrade window that enables `changeServiceProvider`. Until it is set, proving still
+    ///      authorizes the snapshotted `storageProvider` address, so a rotated-away key keeps PDP
+    ///      power. After it is set, only `registry.currentWorker(recorded)` may prove or mutate.
+    function setServiceProviderRegistry(address registry) external onlyOwner {
+        serviceProviderRegistry = registry;
+        emit ServiceProviderRegistrySet(registry);
+    }
+
+    /// @notice Whether msg.sender is authorized to operate `setId` as its storage provider
+    /// @dev When the registry is unset, authorization is the recorded storageProvider. When set,
+    ///      only the registry's current worker is authorized, so a former worker is rejected.
+    ///      Unknown recorded addresses (currentWorker == 0) keep the snapshotted fallback so
+    ///      pre-registry data sets remain operable until mapped.
+    function _isAuthorizedStorageProvider(uint256 setId) internal view returns (bool) {
+        address recorded = storageProvider[setId];
+        address registry = serviceProviderRegistry;
+        if (registry == address(0)) {
+            return msg.sender == recorded;
+        }
+        address current = IServiceProviderWorkerRegistry(registry).currentWorker(recorded);
+        if (current == address(0)) {
+            return msg.sender == recorded;
+        }
+        return msg.sender == current;
     }
 
     /// @notice Announce a planned upgrade
@@ -651,10 +686,8 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // storage provider proposes new storage provider.  If the storage provider proposes themself delete any outstanding proposed storage provider
     function proposeDataSetStorageProvider(uint256 setId, address newStorageProvider) public {
         require(dataSetLive(setId), DataSetNotLive());
+        require(_isAuthorizedStorageProvider(setId), OnlyStorageProvider());
         address currentStorageProvider = storageProvider[setId];
-        require(
-            currentStorageProvider == msg.sender, "Only the current storage provider can propose a new storage provider"
-        );
         if (currentStorageProvider == newStorageProvider) {
             // If the storage provider proposes themself delete any outstanding proposed storage provider
             delete dataSetProposedStorageProvider[setId];
@@ -736,7 +769,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(nextChallengeEpoch[setId] != CLEANUP_MODE_SENTINEL, DataSetAlreadyInCleanup());
 
         if (_withinActivityWindow(setId)) {
-            require(msg.sender == sp, OnlyStorageProvider());
+            require(_isAuthorizedStorageProvider(setId), OnlyStorageProvider());
         }
 
         uint256 deletedLeafCount = dataSetLeafCount[setId];
@@ -779,7 +812,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(isCleanupMode || isHistoricalLegacyDelete, DataSetNotInCleanupMode());
 
         if (isCleanupMode && _withinActivityWindow(setId)) {
-            require(msg.sender == storageProvider[setId], OnlyStorageProvider());
+            require(_isAuthorizedStorageProvider(setId), OnlyStorageProvider());
         }
 
         uint256 pieceCount = _pieceCount(setId, legacy);
@@ -896,7 +929,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             require(msg.value == 0, "no fee on add to existing dataset");
 
             require(dataSetLive(setId), DataSetNotLive());
-            require(storageProvider[setId] == msg.sender, "Only the storage provider can add pieces");
+            require(_isAuthorizedStorageProvider(setId), "Only the storage provider can add pieces");
 
             return _addPiecesToDataSet(setId, pieceData, extraData);
         }
@@ -1017,7 +1050,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // It must be called by the storage provider.
     function schedulePieceDeletions(uint256 setId, uint256[] calldata pieceIds, bytes calldata extraData) public {
         require(dataSetLive(setId), DataSetNotLive());
-        require(storageProvider[setId] == msg.sender, "Only the storage provider can schedule removal of pieces");
+        require(_isAuthorizedStorageProvider(setId), "Only the storage provider can schedule removal of pieces");
         require(pieceIds.length > 0, EmptyRemovalBatch());
 
         bool legacy = _usesLegacyPieceStorage(setId);
@@ -1061,7 +1094,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Executes deletions from the end of the data set's scheduled-removal queue and invalidates its challenge.
     function processPieceDeletions(uint256 setId, uint256 removalCount) external {
         require(dataSetLive(setId), DataSetNotLive());
-        require(storageProvider[setId] == msg.sender, OnlyStorageProvider());
+        require(_isAuthorizedStorageProvider(setId), OnlyStorageProvider());
 
         require(removalCount > 0, EmptyRemovalBatch());
 
@@ -1133,7 +1166,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // by the epoch of the previous proof of possession.
     function provePossession(uint256 setId, IPDPTypes.Proof[] calldata proofs) public payable {
         uint256 nProofs = proofs.length;
-        require(msg.sender == storageProvider[setId], "Only the storage provider can prove possession");
+        require(_isAuthorizedStorageProvider(setId), "Only the storage provider can prove possession");
         require(nProofs > 0, "empty proof");
         {
             uint256 challengeEpoch = nextChallengeEpoch[setId];
@@ -1270,7 +1303,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Note that this method can be called at any time but the pdpListener will likely consider it
     // a "fault" or other penalizeable behavior to call this method before calling provePossesion.
     function nextProvingPeriod(uint256 setId, uint256 challengeEpoch, bytes calldata extraData) public {
-        require(msg.sender == storageProvider[setId], "only the storage provider can move to next proving period");
+        require(_isAuthorizedStorageProvider(setId), "only the storage provider can move to next proving period");
         uint256 pendingDeletionCount = scheduledRemovals[setId].length;
         require(pendingDeletionCount == 0, PendingPieceDeletions(pendingDeletionCount));
         // nextProvingPeriod cannot be called on an empty dataset, unless the dataset
