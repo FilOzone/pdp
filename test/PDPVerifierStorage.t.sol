@@ -21,7 +21,7 @@ contract PDPVerifierStorageTest is MockFVMTest {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier implementation = new PDPVerifier(1, 2);
+        PDPVerifier implementation = new PDPVerifier(1, 2, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         verifier = PDPVerifier(address(new MyERC1967Proxy(address(implementation), initializeData)));
     }

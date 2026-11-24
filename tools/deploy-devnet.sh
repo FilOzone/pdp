@@ -28,9 +28,10 @@ NONCE="$(cast nonce --rpc-url "$RPC_URL" "$clientAddr")"
 VERIFIER_INIT_COUNTER=1
 # Devnet uses 10 epochs (same as Calibration testnet)
 CHALLENGE_FINALITY=10
+SERVICE_PROVIDER_REGISTRY="${SERVICE_PROVIDER_REGISTRY:-0x0000000000000000000000000000000000000000}"
 echo "Deploying PDP verifier"
 # Parse the output of forge create to extract the contract address
-VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --nonce $NONCE --broadcast  src/PDPVerifier.sol:PDPVerifier --constructor-args $VERIFIER_INIT_COUNTER $CHALLENGE_FINALITY | grep "Deployed to" | awk '{print $3}')
+VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --nonce $NONCE --broadcast  src/PDPVerifier.sol:PDPVerifier --constructor-args $VERIFIER_INIT_COUNTER $CHALLENGE_FINALITY $SERVICE_PROVIDER_REGISTRY | grep "Deployed to" | awk '{print $3}')
 if [ -z "$VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP verifier contract address"
     exit 1

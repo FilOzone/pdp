@@ -81,6 +81,7 @@ rg -n 'string public constant VERSION' src/PDPVerifier.sol
 - [ ] Calibration constructor values confirmed
   - [ ] `initializerVersion`
   - [ ] `challengeFinality`
+  - [ ] `serviceProviderRegistry`
 - [ ] Current Calibration proxy initializer counter read
 
 ```bash
@@ -91,6 +92,7 @@ RPC_URL="https://api.calibration.node.glif.io/rpc/v1" \
 - [ ] Mainnet constructor values confirmed
   - [ ] `initializerVersion`
   - [ ] `challengeFinality`
+  - [ ] `serviceProviderRegistry`
 - [ ] Current Mainnet proxy initializer counter read
 
 ```bash
@@ -179,7 +181,8 @@ forge create \
   src/PDPVerifier.sol:PDPVerifier \
   --constructor-args \
   <initializerVersion> \
-  10
+  10 \
+  <serviceProviderRegistry>
 ```
 
 - [ ] Sanity-check `VERSION()` and immutable values on the Calibration implementation
@@ -187,6 +190,7 @@ forge create \
 ```bash
 cast call --rpc-url "$RPC_URL" <IMPL> "VERSION()(string)"
 cast call --rpc-url "$RPC_URL" <IMPL> "getChallengeFinality()(uint256)"
+cast call --rpc-url "$RPC_URL" <IMPL> "serviceProviderRegistry()(address)"
 ```
 
 - [ ] Verify the Calibration implementation on Sourcify
@@ -194,9 +198,10 @@ cast call --rpc-url "$RPC_URL" <IMPL> "getChallengeFinality()(uint256)"
 - [ ] Verify the Calibration implementation on Filfox (optional)
 
 ```bash
-CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(uint64,uint256)" \
+CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(uint64,uint256,address)" \
   <initializerVersion> \
-  10 | sed 's/^0x//')
+  10 \
+  <serviceProviderRegistry> | sed 's/^0x//')
 
 forge verify-contract \
   --chain 314159 \
@@ -445,7 +450,8 @@ forge create \
   src/PDPVerifier.sol:PDPVerifier \
   --constructor-args \
   <initializerVersion> \
-  150
+  150 \
+  <serviceProviderRegistry>
 ```
 
 - [ ] Sanity-check `VERSION()` and immutable values on the Mainnet implementation
@@ -453,6 +459,7 @@ forge create \
 ```bash
 cast call --rpc-url "$RPC_URL" <IMPL> "VERSION()(string)"
 cast call --rpc-url "$RPC_URL" <IMPL> "getChallengeFinality()(uint256)"
+cast call --rpc-url "$RPC_URL" <IMPL> "serviceProviderRegistry()(address)"
 ```
 
 - [ ] Verify the Mainnet implementation on Sourcify
@@ -460,9 +467,10 @@ cast call --rpc-url "$RPC_URL" <IMPL> "getChallengeFinality()(uint256)"
 - [ ] Verify the Mainnet implementation on Filfox (optional)
 
 ```bash
-CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(uint64,uint256)" \
+CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(uint64,uint256,address)" \
   <initializerVersion> \
-  150 | sed 's/^0x//')
+  150 \
+  <serviceProviderRegistry> | sed 's/^0x//')
 
 forge verify-contract \
   --chain 314 \
@@ -682,6 +690,7 @@ Fill these in as comments or update them here once known.
 - Constructor values:
   - `initializerVersion`:
   - `challengeFinality`:
+  - `serviceProviderRegistry`:
 - Verification links:
   - Sourcify:
   - Blockscout:
@@ -700,6 +709,7 @@ Fill these in as comments or update them here once known.
 - Constructor values:
   - `initializerVersion`:
   - `challengeFinality`:
+  - `serviceProviderRegistry`:
 - Verification links:
   - Sourcify:
   - Blockscout:

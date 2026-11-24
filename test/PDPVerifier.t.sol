@@ -28,7 +28,7 @@ contract PDPVerifierDataSetCreateDeleteTest is MockFVMTest, PieceHelper {
     function setUp() public override {
         super.setUp();
         uint256 challengeFinality = 2;
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, challengeFinality);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, challengeFinality, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -253,7 +253,7 @@ contract PDPVerifierStorageProviderTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, 2);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, 2, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -312,7 +312,7 @@ contract PDPVerifierStorageProviderTest is MockFVMTest, PieceHelper {
             NEW_DATA_SET_SENTINEL, address(listener), new Cids.Cid[](0), abi.encode(empty, empty)
         );
         vm.prank(nonStorageProvider);
-        vm.expectRevert("Only the current storage provider can propose a new storage provider");
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.proposeDataSetStorageProvider(setId, nextStorageProvider);
 
         // Now send proposal from actual storage provider
@@ -320,7 +320,7 @@ contract PDPVerifierStorageProviderTest is MockFVMTest, PieceHelper {
 
         // Proposed storage provider has no extra permissions
         vm.prank(nextStorageProvider);
-        vm.expectRevert("Only the current storage provider can propose a new storage provider");
+        vm.expectRevert(PDPVerifier.OnlyStorageProvider.selector);
         pdpVerifier.proposeDataSetStorageProvider(setId, nonStorageProvider);
 
         vm.prank(nonStorageProvider);
@@ -354,7 +354,7 @@ contract PDPVerifierDataSetMutateTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -1286,7 +1286,7 @@ contract PDPVerifierPaginationTest is MockFVMTest, PieceHelper {
     function setUp() public override {
         super.setUp();
         uint256 challengeFinality = 2;
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, challengeFinality);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, challengeFinality, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -1682,7 +1682,7 @@ contract TestingRecordKeeperService is PDPListener, PDPRecordKeeper {
 }
 
 contract SumTreeInternalTestPDPVerifier is PDPVerifier {
-    constructor(uint256 _challengeFinality) PDPVerifier(1, _challengeFinality) {}
+    constructor(uint256 _challengeFinality) PDPVerifier(1, _challengeFinality, address(0)) {}
 
     function getTestHeightFromIndex(uint256 index) public pure returns (uint256) {
         return heightFromIndex(index);
@@ -2231,7 +2231,7 @@ contract PDPListenerIntegrationTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -2338,7 +2338,7 @@ contract PDPVerifierExtraDataTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -2397,7 +2397,7 @@ contract PDPVerifierE2ETest is MockFVMTest, ProofBuilderHelper, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -2553,8 +2553,8 @@ contract PDPVerifierMigrateTest is Test {
 
     function setUp() public {
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
-        implementation = new PDPVerifier(1, 2);
-        newImplementation = new PDPVerifier(2, 2);
+        implementation = new PDPVerifier(1, 2, address(0));
+        newImplementation = new PDPVerifier(2, 2, address(0));
         proxy = new MyERC1967Proxy(address(implementation), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
     }
@@ -2719,7 +2719,7 @@ contract PDPVerifierFeeTest is MockFVMTest, PieceHelper, ProofBuilderHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -2858,7 +2858,7 @@ contract PDPVerifierStorageProviderListenerTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, 2);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, 2, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -2901,7 +2901,7 @@ contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, 2);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, 2, address(0));
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));
@@ -3052,7 +3052,7 @@ contract PDPVerifierCIDSearchTest is MockFVMTest, PieceHelper {
 }
 
 contract CompactReaderHarness is PDPVerifier {
-    constructor(uint256 challengeFinality) PDPVerifier(1, challengeFinality) {}
+    constructor(uint256 challengeFinality) PDPVerifier(1, challengeFinality, address(0)) {}
 
     function clearCompactPieceForTest(uint256 setId, uint256 pieceId) external {
         PieceV2 storage piece = compactPieces[setId][pieceId];

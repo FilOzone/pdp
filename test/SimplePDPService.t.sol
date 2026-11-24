@@ -116,7 +116,7 @@ contract PDPVerifierSimplePDPServiceIntegrationTest is MockFVMTest, PieceHelper 
     function setUp() public override {
         super.setUp();
 
-        PDPVerifier verifierImplementation = new PDPVerifier(1, CHALLENGE_FINALITY);
+        PDPVerifier verifierImplementation = new PDPVerifier(1, CHALLENGE_FINALITY, address(0));
         pdpVerifier = PDPVerifier(
             address(
                 new MyERC1967Proxy(

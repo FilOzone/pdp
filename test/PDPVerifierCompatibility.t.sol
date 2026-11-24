@@ -14,7 +14,7 @@ import {COMPACT_PIECES_SLOT, NEXT_PIECE_ID_SLOT, STORAGE_PROVIDER_SLOT} from "..
 
 contract LegacyModePDPVerifier is PDPVerifier {
     constructor(uint64 initializerVersion, uint256 challengeFinality)
-        PDPVerifier(initializerVersion, challengeFinality)
+        PDPVerifier(initializerVersion, challengeFinality, address(0))
     {}
 
     function useLegacyPieceStorageForTest() external {
@@ -40,7 +40,7 @@ contract PDPVerifierCompatibilityTest is MockFVMTest, PieceHelper, ProofBuilderH
     }
 
     function testFreshDeploymentStartsCompactAtDataSetOne() public {
-        PDPVerifier freshImplementation = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier freshImplementation = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, address(0));
         PDPVerifier fresh = PDPVerifier(
             address(
                 new MyERC1967Proxy(
@@ -304,14 +304,14 @@ contract PDPVerifierCompatibilityTest is MockFVMTest, PieceHelper, ProofBuilderH
     }
 
     function _upgradeAndMigrate(uint64 initializerVersion) private {
-        PDPVerifier nextImplementation = new PDPVerifier(initializerVersion, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier nextImplementation = new PDPVerifier(initializerVersion, CHALLENGE_FINALITY_DELAY, address(0));
         verifier.announceUpgradePlan(address(nextImplementation), 1);
         vm.roll(block.number + 1);
         verifier.upgradeToAndCall(address(nextImplementation), abi.encodeWithSelector(PDPVerifier.migrate.selector));
     }
 
     function _upgradeWithoutMigration(uint64 initializerVersion) private {
-        PDPVerifier nextImplementation = new PDPVerifier(initializerVersion, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier nextImplementation = new PDPVerifier(initializerVersion, CHALLENGE_FINALITY_DELAY, address(0));
         verifier.announceUpgradePlan(address(nextImplementation), 1);
         vm.roll(block.number + 1);
         verifier.upgradeToAndCall(address(nextImplementation), "");

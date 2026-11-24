@@ -10,6 +10,8 @@ A place for all tools related to running and developing the PDP contracts. When 
 | Calibration | 10 epochs         |
 | Devnet      | 10 epochs         |
 
+`SERVICE_PROVIDER_REGISTRY` is the third `PDPVerifier` constructor argument. Leave it unset to deploy with `address(0)`, which authorizes the recorded storage provider. Set it to a registry address to authorize only that registry's current worker. `upgrade-contract.sh` reuses the proxy's current `serviceProviderRegistry()` when the variable is unset and the getter exists.
+
 ### deploy-devnet.sh
 Deploys PDPVerifier to a local filecoin devnet. Assumes lotus binary is in path and local devnet is running with eth API enabled. The keystore will be funded automatically from lotus default address.
 

@@ -138,6 +138,12 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     uint256 public immutable LEGACY_ACTIVITY_EPOCH;
 
+    /// @notice Registry that resolves the current worker from a former worker address.
+    /// @dev address(0) authorizes the recorded storageProvider. A non-zero address authorizes
+    ///      only that registry's current worker. Fixed for the life of this implementation.
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    address public immutable serviceProviderRegistry;
+
     uint256 deprecatedChallengeFinality;
 
     // TODO PERF: https://github.com/FILCAT/pdp/issues/16#issuecomment-2329838769
@@ -202,19 +208,16 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Zero means the compact-storage cutover has not been initialized, so all data sets remain legacy.
     uint64 public legacyPieceStorageIdLimit;
 
-    /// @notice Optional registry used to resolve the current worker from a former worker address.
-    /// @dev When unset, authorization remains `msg.sender == storageProvider[setId]`.
-    address public serviceProviderRegistry;
-
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(uint64 _initializerVersion, uint256 _challengeFinality) {
+    constructor(uint64 _initializerVersion, uint256 _challengeFinality, address _serviceProviderRegistry) {
         require(_challengeFinality < MAX_FINALITY / 10, ExcessiveChallengeDelay(_challengeFinality, MAX_FINALITY / 10));
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
         CHALLENGE_FINALITY = _challengeFinality;
         LEGACY_ACTIVITY_EPOCH = block.number;
+        serviceProviderRegistry = _serviceProviderRegistry;
     }
 
     function initialize() public initializer {
@@ -229,7 +232,6 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     event ContractUpgraded(string version, address implementation);
     event UpgradeAnnounced(PlannedUpgrade plannedUpgrade);
-    event ServiceProviderRegistrySet(address indexed registry);
 
     function migrate() external onlyProxy onlyOwner reinitializer(REINITIALIZER_VERSION) {
         if (legacyPieceStorageIdLimit == 0) {
@@ -238,20 +240,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit ContractUpgraded(VERSION, ERC1967Utils.getImplementation());
     }
 
-    /// @notice Set or clear the registry used to resolve the current worker for existing data sets
-    /// @dev Only the contract owner. Setting address(0) restores snapshotted-address authorization.
-    ///      For worker wallet rotation, set this to the live ServiceProviderRegistry in the same
-    ///      upgrade window that enables `changeServiceProvider`. Until it is set, proving still
-    ///      authorizes the snapshotted `storageProvider` address, so a rotated-away key keeps PDP
-    ///      power. After it is set, only `registry.currentWorker(recorded)` may prove or mutate.
-    function setServiceProviderRegistry(address registry) external onlyOwner {
-        serviceProviderRegistry = registry;
-        emit ServiceProviderRegistrySet(registry);
-    }
-
     /// @notice Whether msg.sender is authorized to operate `setId` as its storage provider
-    /// @dev When the registry is unset, authorization is the recorded storageProvider. When set,
-    ///      only the registry's current worker is authorized, so a former worker is rejected.
+    /// @dev When the registry is address(0), authorization is the recorded storageProvider.
+    ///      Otherwise only the registry's current worker is authorized, so a former worker is rejected.
     ///      Unknown recorded addresses (currentWorker == 0) keep the snapshotted fallback so
     ///      pre-registry data sets remain operable until mapped.
     function _isAuthorizedStorageProvider(uint256 setId) internal view returns (bool) {

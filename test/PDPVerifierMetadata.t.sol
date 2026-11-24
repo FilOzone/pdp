@@ -17,7 +17,7 @@ import {
 } from "../src/PieceMetadata.sol";
 
 contract PDPVerifierMetadataHarness is PDPVerifier {
-    constructor() PDPVerifier(1, 2) {
+    constructor() PDPVerifier(1, 2, address(0)) {
         legacyPieceStorageIdLimit = 1;
     }
 
