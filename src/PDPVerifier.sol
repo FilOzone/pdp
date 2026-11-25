@@ -142,7 +142,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev address(0) authorizes the recorded storageProvider. A non-zero address authorizes
     ///      only that registry's current worker. Fixed for the life of this implementation.
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    address public immutable serviceProviderRegistry;
+    address public immutable SERVICE_PROVIDER_REGISTRY;
 
     uint256 deprecatedChallengeFinality;
 
@@ -217,7 +217,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         REINITIALIZER_VERSION = _initializerVersion;
         CHALLENGE_FINALITY = _challengeFinality;
         LEGACY_ACTIVITY_EPOCH = block.number;
-        serviceProviderRegistry = _serviceProviderRegistry;
+        SERVICE_PROVIDER_REGISTRY = _serviceProviderRegistry;
     }
 
     function initialize() public initializer {
@@ -247,7 +247,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     ///      pre-registry data sets remain operable until mapped.
     function _isAuthorizedStorageProvider(uint256 setId) internal view returns (bool) {
         address recorded = storageProvider[setId];
-        address registry = serviceProviderRegistry;
+        address registry = SERVICE_PROVIDER_REGISTRY;
         if (registry == address(0)) {
             return msg.sender == recorded;
         }

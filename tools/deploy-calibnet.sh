@@ -29,7 +29,7 @@ echo "Deploying PDP verifier from address $ADDR"
 echo "PDPVerifier constructor args:"
 echo "  initializerVersion: $VERIFIER_INIT_COUNTER"
 echo "  challengeFinality: $CHALLENGE_FINALITY"
-echo "  serviceProviderRegistry: $SERVICE_PROVIDER_REGISTRY"
+echo "  SERVICE_PROVIDER_REGISTRY: $SERVICE_PROVIDER_REGISTRY"
 
 NONCE="$(cast nonce --rpc-url "$RPC_URL" "$ADDR")"
 VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314159  src/PDPVerifier.sol:PDPVerifier --constructor-args "$VERIFIER_INIT_COUNTER" "$CHALLENGE_FINALITY" "$SERVICE_PROVIDER_REGISTRY" | grep "Deployed to" | awk '{print $3}')

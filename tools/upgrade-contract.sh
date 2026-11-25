@@ -56,6 +56,9 @@ UPGRADE_INIT_COUNTER=$(expr "$("$SCRIPT_DIR/get-initialized-counter.sh" "$PROXY_
 CHALLENGE_FINALITY=$(cast call --rpc-url "$RPC_URL" "$PROXY_ADDRESS" "getChallengeFinality()(uint256)")
 ZERO_ADDRESS="0x0000000000000000000000000000000000000000"
 if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ]; then
+  SERVICE_PROVIDER_REGISTRY=$(cast call --rpc-url "$RPC_URL" "$PROXY_ADDRESS" "SERVICE_PROVIDER_REGISTRY()(address)" 2>/dev/null || true)
+fi
+if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ]; then
   SERVICE_PROVIDER_REGISTRY=$(cast call --rpc-url "$RPC_URL" "$PROXY_ADDRESS" "serviceProviderRegistry()(address)" 2>/dev/null || true)
 fi
 if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ]; then
@@ -72,7 +75,7 @@ CONSTRUCTOR_ARGS=("$UPGRADE_INIT_COUNTER" "$CHALLENGE_FINALITY" "$SERVICE_PROVID
 echo "Using PDPVerifier constructor args:"
 echo "  initializerVersion: $UPGRADE_INIT_COUNTER"
 echo "  challengeFinality: $CHALLENGE_FINALITY"
-echo "  serviceProviderRegistry: $SERVICE_PROVIDER_REGISTRY"
+echo "  SERVICE_PROVIDER_REGISTRY: $SERVICE_PROVIDER_REGISTRY"
 
 if [ "$DRY_RUN" = "true" ]; then
     echo "🔍 Simulating deployment of new $IMPLEMENTATION_PATH implementation contract"
