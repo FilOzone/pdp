@@ -20,6 +20,10 @@ fi
 # Calibration testnet uses 10 epochs (vs 150 on mainnet)
 CHALLENGE_FINALITY=10
 VERIFIER_INIT_COUNTER=1
+if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ] || [ "$SERVICE_PROVIDER_REGISTRY" = "0x0000000000000000000000000000000000000000" ]; then
+  echo "Error: SERVICE_PROVIDER_REGISTRY must be a non-zero registry address"
+  exit 1
+fi
 
 ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
 echo "Deploying PDP verifier from address $ADDR"
@@ -28,9 +32,10 @@ echo "Deploying PDP verifier from address $ADDR"
 echo "PDPVerifier constructor args:"
 echo "  initializerVersion: $VERIFIER_INIT_COUNTER"
 echo "  challengeFinality: $CHALLENGE_FINALITY"
+echo "  SERVICE_PROVIDER_REGISTRY: $SERVICE_PROVIDER_REGISTRY"
 
 NONCE="$(cast nonce --rpc-url "$RPC_URL" "$ADDR")"
-VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314159  src/PDPVerifier.sol:PDPVerifier --constructor-args "$VERIFIER_INIT_COUNTER" "$CHALLENGE_FINALITY" | grep "Deployed to" | awk '{print $3}')
+VERIFIER_IMPLEMENTATION_ADDRESS=$(forge create --rpc-url "$RPC_URL" --keystore "$KEYSTORE" --password "$PASSWORD" --broadcast  --nonce $NONCE --chain-id 314159  src/PDPVerifier.sol:PDPVerifier --constructor-args "$VERIFIER_INIT_COUNTER" "$CHALLENGE_FINALITY" "$SERVICE_PROVIDER_REGISTRY" | grep "Deployed to" | awk '{print $3}')
 if [ -z "$VERIFIER_IMPLEMENTATION_ADDRESS" ]; then
     echo "Error: Failed to extract PDP verifier contract address"
     exit 1

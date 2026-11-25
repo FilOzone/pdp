@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
+import {UnknownWorkerRegistry} from "./UnknownWorkerRegistry.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {PDPFees} from "../src/Fees.sol";
 import {ProofUtil} from "./ProofUtil.sol";
@@ -14,7 +15,7 @@ import {COMPACT_PIECES_SLOT, NEXT_PIECE_ID_SLOT, STORAGE_PROVIDER_SLOT} from "..
 
 contract LegacyModePDPVerifier is PDPVerifier {
     constructor(uint64 initializerVersion, uint256 challengeFinality)
-        PDPVerifier(initializerVersion, challengeFinality)
+        PDPVerifier(initializerVersion, challengeFinality, new UnknownWorkerRegistry())
     {}
 
     function useLegacyPieceStorageForTest() external {
@@ -40,7 +41,7 @@ contract PDPVerifierCompatibilityTest is MockFVMTest, PieceHelper, ProofBuilderH
     }
 
     function testFreshDeploymentStartsCompactAtDataSetOne() public {
-        PDPVerifier freshImplementation = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier freshImplementation = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, new UnknownWorkerRegistry());
         PDPVerifier fresh = PDPVerifier(
             address(
                 new MyERC1967Proxy(
@@ -304,14 +305,16 @@ contract PDPVerifierCompatibilityTest is MockFVMTest, PieceHelper, ProofBuilderH
     }
 
     function _upgradeAndMigrate(uint64 initializerVersion) private {
-        PDPVerifier nextImplementation = new PDPVerifier(initializerVersion, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier nextImplementation =
+            new PDPVerifier(initializerVersion, CHALLENGE_FINALITY_DELAY, new UnknownWorkerRegistry());
         verifier.announceUpgradePlan(address(nextImplementation), 1);
         vm.roll(block.number + 1);
         verifier.upgradeToAndCall(address(nextImplementation), abi.encodeWithSelector(PDPVerifier.migrate.selector));
     }
 
     function _upgradeWithoutMigration(uint64 initializerVersion) private {
-        PDPVerifier nextImplementation = new PDPVerifier(initializerVersion, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier nextImplementation =
+            new PDPVerifier(initializerVersion, CHALLENGE_FINALITY_DELAY, new UnknownWorkerRegistry());
         verifier.announceUpgradePlan(address(nextImplementation), 1);
         vm.roll(block.number + 1);
         verifier.upgradeToAndCall(address(nextImplementation), "");

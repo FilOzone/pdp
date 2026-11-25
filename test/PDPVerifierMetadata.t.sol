@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
+import {UnknownWorkerRegistry} from "./UnknownWorkerRegistry.sol";
 import {Cids} from "../src/Cids.sol";
 import {COMPACT_PIECES_SLOT} from "../src/PDPVerifierLayout.sol";
 import {IPDPTypes} from "../src/interfaces/IPDPTypes.sol";
@@ -17,7 +18,7 @@ import {
 } from "../src/PieceMetadata.sol";
 
 contract PDPVerifierMetadataHarness is PDPVerifier {
-    constructor() PDPVerifier(1, 2) {
+    constructor() PDPVerifier(1, 2, new UnknownWorkerRegistry()) {
         legacyPieceStorageIdLimit = 1;
     }
 

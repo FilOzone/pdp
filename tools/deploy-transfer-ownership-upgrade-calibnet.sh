@@ -17,6 +17,10 @@ COMPILER_VERSION="${COMPILER_VERSION:-0.8.22}"
 # 1. Create INIT_DATA               #
 #####################################
 CHALLENGE_FINALITY=150
+if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ] || [ "$SERVICE_PROVIDER_REGISTRY" = "0x0000000000000000000000000000000000000000" ]; then
+  echo "Error: SERVICE_PROVIDER_REGISTRY must be a non-zero registry address"
+  exit 1
+fi
 echo "Generating calldata for initialize() ..."
 INIT_DATA=$(cast calldata "initialize()")
 echo "INIT_DATA = $INIT_DATA"
@@ -45,7 +49,7 @@ DEPLOY_OUTPUT_VERIFIER=$(
     --broadcast \
     --nonce $NONCE \
     src/PDPVerifier.sol:PDPVerifier \
-    --constructor-args $VERIFIER_INIT_COUNTER $CHALLENGE_FINALITY
+    --constructor-args $VERIFIER_INIT_COUNTER $CHALLENGE_FINALITY $SERVICE_PROVIDER_REGISTRY
 )
 NONCE=$(expr $NONCE + "1")
 
@@ -123,7 +127,7 @@ echo "Deploying a new PDPVerifier contract ..."
 # For the upgrade, compute next initializer counter from the proxy and pass it
 UPGRADE_INIT_COUNTER=$(expr "$("$SCRIPT_DIR/get-initialized-counter.sh" "$PROXY_ADDRESS")" + 1)
 UPGRADE_CHALLENGE_FINALITY=$(cast call --rpc-url "$FIL_CALIBNET_RPC_URL" "$PROXY_ADDRESS" "getChallengeFinality()(uint256)")
-DEPLOY_OUTPUT_VERIFIER_2=$(forge create --nonce $NONCE --broadcast --rpc-url "$FIL_CALIBNET_RPC_URL" --private-key "$FIL_CALIBNET_PRIVATE_KEY" --chain-id "$CHAIN_ID"  src/PDPVerifier.sol:PDPVerifier --constructor-args $UPGRADE_INIT_COUNTER $UPGRADE_CHALLENGE_FINALITY)
+DEPLOY_OUTPUT_VERIFIER_2=$(forge create --nonce $NONCE --broadcast --rpc-url "$FIL_CALIBNET_RPC_URL" --private-key "$FIL_CALIBNET_PRIVATE_KEY" --chain-id "$CHAIN_ID"  src/PDPVerifier.sol:PDPVerifier --constructor-args $UPGRADE_INIT_COUNTER $UPGRADE_CHALLENGE_FINALITY $SERVICE_PROVIDER_REGISTRY)
 NONCE=$(expr $NONCE + "1")
 PDP_VERIFIER_ADDRESS_2=$(echo "$DEPLOY_OUTPUT_VERIFIER_2" | grep "Deployed to" | awk '{print $3}')
 echo "PDPVerifier deployed at: $PDP_VERIFIER_ADDRESS_2"

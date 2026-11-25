@@ -10,6 +10,8 @@ A place for all tools related to running and developing the PDP contracts. When 
 | Calibration | 10 epochs         |
 | Devnet      | 10 epochs         |
 
+`SERVICE_PROVIDER_REGISTRY` is the third `PDPVerifier` constructor argument. The constructor rejects `address(0)`. Authorization uses that registry's `isAuthorizedWorker` check, which may approve more than one worker for a registration. `upgrade-contract.sh` reuses the proxy's current `SERVICE_PROVIDER_REGISTRY()` when the variable is unset and the getter exists. Implementations deployed before the rename are read through `serviceProviderRegistry()`.
+
 ### deploy-devnet.sh
 Deploys PDPVerifier to a local filecoin devnet. Assumes lotus binary is in path and local devnet is running with eth API enabled. The keystore will be funded automatically from lotus default address.
 

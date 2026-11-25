@@ -5,6 +5,7 @@ import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {BURN_ADDRESS} from "fvm-solidity/FVMActors.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
+import {UnknownWorkerRegistry} from "./UnknownWorkerRegistry.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {ProofUtil} from "./ProofUtil.sol";
 import {PDPFees} from "../src/Fees.sol";
@@ -23,7 +24,7 @@ contract PDPVerifierProofTest is MockFVMTest, ProofBuilderHelper, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY);
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, new UnknownWorkerRegistry());
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));

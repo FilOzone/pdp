@@ -5,6 +5,7 @@ import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
+import {UnknownWorkerRegistry} from "./UnknownWorkerRegistry.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {PDPFees} from "../src/Fees.sol";
 
@@ -21,7 +22,7 @@ contract PDPVerifierStorageTest is MockFVMTest {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier implementation = new PDPVerifier(1, 2);
+        PDPVerifier implementation = new PDPVerifier(1, 2, new UnknownWorkerRegistry());
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         verifier = PDPVerifier(address(new MyERC1967Proxy(address(implementation), initializeData)));
     }
