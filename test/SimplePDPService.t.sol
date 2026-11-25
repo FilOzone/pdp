@@ -7,6 +7,7 @@ import {SimplePDPService} from "../src/SimplePDPService.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier, NEW_DATA_SET_SENTINEL, NO_CHALLENGE_SCHEDULED} from "../src/PDPVerifier.sol";
+import {UnknownWorkerRegistry} from "./UnknownWorkerRegistry.sol";
 import {PDPFees} from "../src/Fees.sol";
 import {PieceHelper} from "./PieceHelper.t.sol";
 
@@ -116,7 +117,7 @@ contract PDPVerifierSimplePDPServiceIntegrationTest is MockFVMTest, PieceHelper 
     function setUp() public override {
         super.setUp();
 
-        PDPVerifier verifierImplementation = new PDPVerifier(1, CHALLENGE_FINALITY, address(0));
+        PDPVerifier verifierImplementation = new PDPVerifier(1, CHALLENGE_FINALITY, new UnknownWorkerRegistry());
         pdpVerifier = PDPVerifier(
             address(
                 new MyERC1967Proxy(

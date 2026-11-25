@@ -20,7 +20,10 @@ fi
 # Calibration testnet uses 10 epochs (vs 150 on mainnet)
 CHALLENGE_FINALITY=10
 VERIFIER_INIT_COUNTER=1
-SERVICE_PROVIDER_REGISTRY="${SERVICE_PROVIDER_REGISTRY:-0x0000000000000000000000000000000000000000}"
+if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ] || [ "$SERVICE_PROVIDER_REGISTRY" = "0x0000000000000000000000000000000000000000" ]; then
+  echo "Error: SERVICE_PROVIDER_REGISTRY must be a non-zero registry address"
+  exit 1
+fi
 
 ADDR=$(cast wallet address --keystore "$KEYSTORE" --password "$PASSWORD")
 echo "Deploying PDP verifier from address $ADDR"

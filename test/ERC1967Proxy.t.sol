@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {PDPVerifier} from "../src/PDPVerifier.sol";
+import {UnknownWorkerRegistry} from "./UnknownWorkerRegistry.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 
@@ -16,8 +17,8 @@ contract ERC1967ProxyTest is Test {
         // Set owner for testing
         vm.startPrank(owner);
         // Deploy implementation contract
-        implementation = new PDPVerifier(1, 150, address(0));
-        newImplementation = new PDPVerifier(2, 150, address(0));
+        implementation = new PDPVerifier(1, 150, new UnknownWorkerRegistry());
+        newImplementation = new PDPVerifier(2, 150, new UnknownWorkerRegistry());
 
         // Deploy proxy pointing to implementation
         bytes memory initData = abi.encodeWithSelector(PDPVerifier.initialize.selector);

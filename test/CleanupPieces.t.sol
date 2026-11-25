@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {MockFVMTest} from "fvm-solidity/mocks/MockFVMTest.sol";
 import {Cids} from "../src/Cids.sol";
 import {PDPVerifier, PDPListener} from "../src/PDPVerifier.sol";
+import {UnknownWorkerRegistry} from "./UnknownWorkerRegistry.sol";
 import {MyERC1967Proxy} from "../src/ERC1967Proxy.sol";
 import {PDPFees} from "../src/Fees.sol";
 import {PDPRecordKeeper} from "../src/SimplePDPService.sol";
@@ -71,7 +72,7 @@ contract PDPVerifierCleanupTest is MockFVMTest, PieceHelper {
 
     function setUp() public override {
         super.setUp();
-        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, address(0));
+        PDPVerifier pdpVerifierImpl = new PDPVerifier(1, CHALLENGE_FINALITY_DELAY, new UnknownWorkerRegistry());
         bytes memory initializeData = abi.encodeWithSelector(PDPVerifier.initialize.selector);
         MyERC1967Proxy proxy = new MyERC1967Proxy(address(pdpVerifierImpl), initializeData);
         pdpVerifier = PDPVerifier(address(proxy));

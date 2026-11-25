@@ -17,7 +17,10 @@ COMPILER_VERSION="${COMPILER_VERSION:-0.8.22}"
 # 1. Create INIT_DATA               #
 #####################################
 CHALLENGE_FINALITY=150
-SERVICE_PROVIDER_REGISTRY="${SERVICE_PROVIDER_REGISTRY:-0x0000000000000000000000000000000000000000}"
+if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ] || [ "$SERVICE_PROVIDER_REGISTRY" = "0x0000000000000000000000000000000000000000" ]; then
+  echo "Error: SERVICE_PROVIDER_REGISTRY must be a non-zero registry address"
+  exit 1
+fi
 echo "Generating calldata for initialize() ..."
 INIT_DATA=$(cast calldata "initialize()")
 echo "INIT_DATA = $INIT_DATA"

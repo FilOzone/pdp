@@ -61,8 +61,9 @@ fi
 if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ]; then
   SERVICE_PROVIDER_REGISTRY=$(cast call --rpc-url "$RPC_URL" "$PROXY_ADDRESS" "serviceProviderRegistry()(address)" 2>/dev/null || true)
 fi
-if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ]; then
-  SERVICE_PROVIDER_REGISTRY="$ZERO_ADDRESS"
+if [ -z "${SERVICE_PROVIDER_REGISTRY:-}" ] || [ "$SERVICE_PROVIDER_REGISTRY" = "$ZERO_ADDRESS" ]; then
+  echo "Error: SERVICE_PROVIDER_REGISTRY must be a non-zero registry address"
+  exit 1
 fi
 
 if [ "$IMPLEMENTATION_PATH" != "$PDP_VERIFIER_IMPLEMENTATION_PATH" ]; then

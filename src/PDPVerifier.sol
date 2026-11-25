@@ -138,11 +138,10 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
     uint256 public immutable LEGACY_ACTIVITY_EPOCH;
 
-    /// @notice Registry that resolves the current worker from a former worker address.
-    /// @dev address(0) authorizes the recorded storageProvider. A non-zero address authorizes
-    ///      only that registry's current worker. Fixed for the life of this implementation.
+    /// @notice Registry that authorizes workers for a recorded provider address.
+    /// @dev Fixed for the life of this implementation. A registration may approve more than one worker.
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
-    address public immutable SERVICE_PROVIDER_REGISTRY;
+    IServiceProviderWorkerRegistry public immutable SERVICE_PROVIDER_REGISTRY;
 
     uint256 deprecatedChallengeFinality;
 
@@ -211,8 +210,13 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Methods
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(uint64 _initializerVersion, uint256 _challengeFinality, address _serviceProviderRegistry) {
+    constructor(
+        uint64 _initializerVersion,
+        uint256 _challengeFinality,
+        IServiceProviderWorkerRegistry _serviceProviderRegistry
+    ) {
         require(_challengeFinality < MAX_FINALITY / 10, ExcessiveChallengeDelay(_challengeFinality, MAX_FINALITY / 10));
+        require(address(_serviceProviderRegistry) != address(0), ZeroServiceProviderRegistry());
         _disableInitializers();
         REINITIALIZER_VERSION = _initializerVersion;
         CHALLENGE_FINALITY = _challengeFinality;
@@ -241,21 +245,9 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /// @notice Whether msg.sender is authorized to operate `setId` as its storage provider
-    /// @dev When the registry is address(0), authorization is the recorded storageProvider.
-    ///      Otherwise only the registry's current worker is authorized, so a former worker is rejected.
-    ///      Unknown recorded addresses (currentWorker == 0) keep the snapshotted fallback so
-    ///      pre-registry data sets remain operable until mapped.
+    /// @dev The registry may approve multiple workers for the snapshotted provider address.
     function _isAuthorizedStorageProvider(uint256 setId) internal view returns (bool) {
-        address recorded = storageProvider[setId];
-        address registry = SERVICE_PROVIDER_REGISTRY;
-        if (registry == address(0)) {
-            return msg.sender == recorded;
-        }
-        address current = IServiceProviderWorkerRegistry(registry).currentWorker(recorded);
-        if (current == address(0)) {
-            return msg.sender == recorded;
-        }
-        return msg.sender == current;
+        return SERVICE_PROVIDER_REGISTRY.isAuthorizedWorker(storageProvider[setId], msg.sender);
     }
 
     /// @notice Announce a planned upgrade
@@ -970,6 +962,7 @@ contract PDPVerifier is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error InsufficientChallengeDelay(uint256 epochs, uint256 minDelay);
     error ExcessiveChallengeDelay(uint256 epochs, uint256 maxDelay);
     error InvalidImplementation(address implementation);
+    error ZeroServiceProviderRegistry();
 
     function _pieceCid(bytes32 root, PieceMetadata metadata) internal pure returns (Cids.Cid memory) {
         return Cids.CommPv2FromDigest(metadata.padding(), uint8(metadata.height()), root);
