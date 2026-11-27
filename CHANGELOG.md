@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [3.6.0] - TBD
+
+This release makes storage-provider authorization follow the ServiceProviderRegistry, so a provider that rotates its worker keeps proving and managing its data sets.
+
+### Breaking Changes
+- Every storage-provider-only call (`proposeDataSetStorageProvider`, `deleteDataSet`, `cleanupPieces`, `addPieces`, `schedulePieceDeletions`, `processPieceDeletions`, `provePossession` and `nextProvingPeriod`) now asks the ServiceProviderRegistry whether the caller is an authorized worker for the data set's registered provider, instead of comparing it with the address stored when the data set was created. The registry is an immutable constructor argument (`SERVICE_PROVIDER_REGISTRY`) and must implement `isAuthorizedWorker(address,address)`, so the registry must be upgraded before this PDPVerifier ([#318](https://github.com/FilOzone/pdp/pull/318)).
+
 ### Changed
 - Removed the 2,000-piece pending-removal limit from `schedulePieceDeletions()`. Storage providers can queue larger batches or accumulate removals across calls, then drain the queue with `processPieceDeletions()` before starting the next proving period ([#310](https://github.com/FilOzone/pdp/issues/310)). The obsolete `MAX_ENQUEUED_REMOVALS()` getter has been removed from the ABI; contract storage layout is unchanged.
 - `addPieces()` now applies the FRC-0069 PieceCIDv2 sizing rules: a piece must be at least height 2 (a 128 byte piece) and use the smallest tree that holds its data, and its padding uvarint is limited to 9 bytes. Each piece now has a single valid CID on chain. Curio and the FOC SDKs already produce only these forms, and pieces already added are unaffected ([#314](https://github.com/FilOzone/pdp/issues/314)).
